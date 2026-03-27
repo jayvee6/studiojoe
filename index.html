@@ -62,23 +62,6 @@
       transition: background 0.4s, color 0.4s;
     }
 
-    /* ── Decorative emoji row ──────────────────────────── */
-    .emoji-row {
-      display: flex; align-items: center; justify-content: center;
-      gap: clamp(14px, 2.8vw, 36px);
-      margin-top: clamp(44px, 7vh, 80px);
-      opacity: 0;
-    }
-    .emoji-row span {
-      font-size: clamp(42px, 5.5vw, 74px);
-      display: inline-block;
-      cursor: default;
-      transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-      filter: drop-shadow(0 4px 20px rgba(0,0,0,0.35));
-      user-select: none;
-    }
-    .emoji-row span:hover { transform: scale(1.4) rotate(-8deg); }
-
     /* ── Gobo lights ───────────────────────────────────── */
     #gobo {
       position: fixed; inset: 0; z-index: 6;
@@ -106,19 +89,6 @@
       pointer-events: none;
       background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
       opacity: 0.035; mix-blend-mode: overlay;
-    }
-
-    /* ── Fog ───────────────────────────────────────────── */
-    #fog {
-      position: fixed; inset: 0; z-index: 10;
-      pointer-events: none; overflow: hidden;
-      transition: opacity 0.4s;
-    }
-    [data-theme="light"] #fog { opacity: 0.35; }
-    .fog-p {
-      position: absolute; pointer-events: none;
-      user-select: none; line-height: 1;
-      will-change: transform, opacity;
     }
 
     /* ── Orbs ──────────────────────────────────────────── */
@@ -256,7 +226,6 @@
 
 <div class="grain" aria-hidden="true"></div>
 <div id="gobo"  aria-hidden="true"></div>
-<div id="fog"   aria-hidden="true"></div>
 
 <!-- Header -->
 <header>
@@ -278,7 +247,7 @@
 
   <!-- Ambient deco emojis — off-axis, angled toward the hero text -->
   <span aria-hidden="true" style="position:absolute;font-size:clamp(100px,14vw,180px);top:6%;right:5%;opacity:0.09;filter:blur(8px);pointer-events:none;user-select:none;line-height:1;transform:rotate(-18deg)">🪐</span>
-  <span aria-hidden="true" style="position:absolute;font-size:clamp(80px,11vw,140px);bottom:8%;left:3%;opacity:0.08;filter:blur(6px);pointer-events:none;user-select:none;line-height:1;transform:rotate(22deg)">🧙‍♂️</span>
+  <span aria-hidden="true" style="position:absolute;font-size:clamp(80px,11vw,140px);bottom:8%;left:3%;opacity:0.08;filter:blur(6px);pointer-events:none;user-select:none;line-height:1;transform:rotate(22deg)">🔮</span>
   <span aria-hidden="true" style="position:absolute;font-size:clamp(60px,9vw,110px);top:52%;right:1%;opacity:0.06;filter:blur(14px);pointer-events:none;user-select:none;line-height:1;transform:rotate(-25deg)">🤔</span>
 
   <h1 class="hero-hl" id="hh">
@@ -289,17 +258,6 @@
     Quality Engineering · Software Dev · Video Production · Game Development · Consulting
   </p>
 
-  <!-- Personality row -->
-  <div class="emoji-row" id="er" aria-hidden="true">
-    <span title="QA &amp; investigation">🕵️‍♂️</span>
-    <span title="Testing &amp; experimentation">🧪</span>
-    <span title="Software engineering">👨🏽‍💻</span>
-    <span title="Video production">🎥</span>
-    <span title="Game development">🎮</span>
-    <span title="Deep inspection">🔬</span>
-    <span title="Making magic">🧙‍♂️</span>
-    <span title="Game culture">👾</span>
-  </div>
 
 </main>
 
@@ -325,26 +283,6 @@
     .fromTo('#hh', { y: 28 }, { y: 0, duration: 0.75 },          0.1)
     .to('#hd', { opacity: 1, duration: 0.5 },                     0.38)
     .fromTo('#hd', { y: 12 }, { y: 0, duration: 0.5 },           0.38)
-    .to('#er',  { opacity: 1, duration: 0.5 },                    0.65)
-    .fromTo('#er', { y: 14 }, { y: 0, duration: 0.5 },           0.65);
-
-  // Staggered entrance for each emoji in the row
-  gsap.fromTo('.emoji-row span',
-    { opacity: 0, y: 18, scale: 0.7 },
-    { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: 'back.out(1.4)',
-      stagger: 0.07, delay: 0.75 }
-  );
-
-  // Continuous gentle float — each emoji on its own rhythm
-  document.querySelectorAll('.emoji-row span').forEach((span, i) => {
-    gsap.to(span, {
-      y: (i % 2 === 0 ? -1 : 1) * 7,
-      duration: 1.8 + i * 0.35,
-      ease: 'sine.inOut',
-      repeat: -1, yoyo: true,
-      delay: i * 0.28,
-    });
-  });
 
   // ── Dark / Light toggle ────────────────────────────────
   const btn    = document.getElementById('theme-btn');
@@ -372,8 +310,8 @@
     { cls: 'gobo-heart', e: '💚',  x: 88, y: 12, sz: 310, bl: 82,  op: 0.20, dx: -90, dy: 110, dur: 38, delay: 2    },
     { cls: 'gobo-heart', e: '💙',  x: 18, y: 68, sz: 270, bl: 74,  op: 0.26, dx:  80, dy: -100,dur: 32, delay: 7    },
     { cls: 'gobo-heart', e: '💜',  x: 58, y: 32, sz: 380, bl: 96,  op: 0.22, dx: -110,dy:  80, dur: 48, delay: 12   },
-    { cls: 'gobo-heart', e: '🩷',  x: 35, y: 50, sz: 230, bl: 62,  op: 0.18, dx:  60, dy:  60, dur: 40, delay: 6    },
-    { cls: 'gobo-heart', e: '🩵',  x: 80, y: 38, sz: 250, bl: 66,  op: 0.20, dx: -50, dy: -80, dur: 34, delay: 10   },
+    { cls: 'gobo-heart', e: '💗',  x: 35, y: 50, sz: 230, bl: 62,  op: 0.18, dx:  60, dy:  60, dur: 40, delay: 6    },
+    { cls: 'gobo-heart', e: '💙',  x: 80, y: 38, sz: 250, bl: 66,  op: 0.20, dx: -50, dy: -80, dur: 34, delay: 10   },
     // Sparkles — small, crisp, floaty
     { cls: 'gobo-spark', e: '✨',  x: 28, y: 42, sz: 52,  bl: 3,   op: 0.55, dx:  35, dy: -45, dur: 16, delay: 0    },
     { cls: 'gobo-spark', e: '💫',  x: 68, y: 72, sz: 44,  bl: 2,   op: 0.50, dx: -28, dy:  38, dur: 13, delay: 3    },
@@ -432,50 +370,6 @@
     });
   })();
 
-  // ── Karl the Fog ───────────────────────────────────────
-  const FOG_LAYERS = [
-    { min: 220, max: 520, blur: 32, opMin: 0.05, opMax: 0.09, durMin: 90,  durMax: 150, weight: 6 },
-    { min: 130, max: 280, blur: 16, opMin: 0.07, opMax: 0.12, durMin: 55,  durMax: 90,  weight: 3 },
-    { min: 80,  max: 160, blur:  6, opMin: 0.10, opMax: 0.18, durMin: 35,  durMax: 60,  weight: 1 },
-  ];
-  function pickLayer() {
-    const total = FOG_LAYERS.reduce((s, l) => s + l.weight, 0);
-    let r = Math.random() * total;
-    for (const l of FOG_LAYERS) { r -= l.weight; if (r <= 0) return l; }
-    return FOG_LAYERS[0];
-  }
-
-  function spawnCloud() {
-    const fog = document.getElementById('fog');
-    const el  = document.createElement('span');
-    el.className = 'fog-p';
-
-    const l    = pickLayer();
-    const sz   = l.min + Math.random() * (l.max - l.min);
-    const op   = l.opMin + Math.random() * (l.opMax - l.opMin);
-    const dur  = l.durMin + Math.random() * (l.durMax - l.durMin);
-    const blurPx = l.blur;
-    el.textContent = '☁️';
-    Object.assign(el.style, { fontSize: sz + 'px' });
-
-    const rgt = Math.random() > 0.2;
-    const y   = Math.random() * 100;
-    const dy  = (Math.random() - 0.5) * 60;
-
-    Object.assign(el.style, {
-      top: y + 'vh', left: rgt ? '110vw' : '-30vw',
-      filter: `blur(${blurPx}px)`, opacity: 0,
-    });
-    fog.appendChild(el);
-
-    gsap.timeline({ onComplete: () => el.remove() })
-      .to(el, { opacity: op, duration: dur * 0.12, ease: 'power1.in' })
-      .to(el, { left: rgt ? '-30vw' : '110vw', y: dy, duration: dur, ease: 'none' }, 0)
-      .to(el, { opacity: 0, duration: dur * 0.12, ease: 'power1.out' }, `-=${dur * 0.12}`);
-  }
-
-  for (let i = 0; i < 5; i++) setTimeout(spawnCloud, i * 1200);
-  setInterval(spawnCloud, 6000);
 
 })();
 </script>
