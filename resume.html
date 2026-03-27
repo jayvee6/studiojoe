@@ -644,38 +644,18 @@
     return FOG_LAYERS[0];
   }
 
-  // ~20% of particles are ghostly "JOEY" name drifts
-  const NAME_SIZES = [320, 480, 640, 800];
-
   function spawnCloud() {
-    const fog    = document.getElementById('fog');
-    const isName = Math.random() < 0.20;
-    const el     = document.createElement('span');
+    const fog = document.getElementById('fog');
+    const el  = document.createElement('span');
     el.className = 'fog-p';
 
-    let sz, op, dur, blurPx;
-
-    if (isName) {
-      sz     = NAME_SIZES[Math.floor(Math.random() * NAME_SIZES.length)];
-      op     = 0.03 + Math.random() * 0.03;   // very ghostly: 3–6%
-      dur    = 110 + Math.random() * 80;       // slow like deep fog
-      blurPx = 28 + Math.random() * 20;
-      el.textContent = 'JOEY';
-      Object.assign(el.style, {
-        fontFamily: 'var(--font)', fontWeight: 800,
-        letterSpacing: '-0.05em', lineHeight: 1,
-        whiteSpace: 'nowrap', color: '#fff',
-        fontSize: sz + 'px',
-      });
-    } else {
-      const l = pickLayer();
-      sz     = l.min + Math.random() * (l.max - l.min);
-      op     = l.opMin + Math.random() * (l.opMax - l.opMin);
-      dur    = l.durMin + Math.random() * (l.durMax - l.durMin);
-      blurPx = l.blur;
-      el.textContent = '☁️';
-      Object.assign(el.style, { fontSize: sz + 'px' });
-    }
+    const l    = pickLayer();
+    const sz   = l.min + Math.random() * (l.max - l.min);
+    const op   = l.opMin + Math.random() * (l.opMax - l.opMin);
+    const dur  = l.durMin + Math.random() * (l.durMax - l.durMin);
+    const blurPx = l.blur;
+    el.textContent = '☁️';
+    Object.assign(el.style, { fontSize: sz + 'px' });
 
     const rgt = Math.random() > 0.2;
     const y   = Math.random() * 100;
