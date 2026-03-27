@@ -152,6 +152,7 @@
       /* top pad clears header (52px), bottom pad clears footer (44px) */
       padding: clamp(80px, 12vh, 140px) clamp(24px, 5vw, 80px) 44px;
       position: relative;
+      z-index: 11; /* above gobo (6) — text always frontmost */
       min-height: clamp(560px, 100svh, 960px);
     }
 
