@@ -6,6 +6,7 @@
   <title>Joey Villarreal — Studio Joe</title>
   <meta name="description" content="Senior Software Quality Engineer. 10+ years shipping high-visibility releases across mobile, desktop, TV, wearable, and AR.">
 
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/locomotive-scroll@5/dist/locomotive-scroll.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
 
@@ -48,7 +49,6 @@
     }
 
     html {
-      scroll-behavior: smooth;
       background: var(--bg);
       min-height: 100svh;
       transition: background 0.4s;
@@ -100,12 +100,6 @@
       position: absolute; pointer-events: none;
       user-select: none; line-height: 1;
       will-change: transform;
-    }
-
-    /* ── Ambient orbs ──────────────────────────────────────── */
-    .orb {
-      position: absolute; border-radius: 50%;
-      pointer-events: none; filter: blur(110px);
     }
 
     /* ── Header ────────────────────────────────────────────── */
@@ -447,13 +441,9 @@
 <section id="hero">
 
   <!-- Big character emojis — off-axis, angled inward toward the content -->
-  <span class="deco-e" style="font-size:clamp(120px,18vw,260px);top:8%;right:3%;opacity:0.09;filter:blur(8px);transform:rotate(-20deg)">🔮</span>
-  <span class="deco-e" style="font-size:clamp(80px,11vw,160px);bottom:12%;right:16%;opacity:0.07;filter:blur(10px);transform:rotate(-10deg)">💻</span>
-  <span class="deco-e" style="font-size:clamp(60px,8vw,120px);top:58%;left:2%;opacity:0.07;filter:blur(7px);transform:rotate(18deg)">🧠</span>
-
-  <!-- Ambient orbs -->
-  <div class="orb" style="width:65vw;height:65vw;top:-15%;left:-18%;background:radial-gradient(circle,rgba(10,132,255,0.16),transparent 70%);opacity:1"></div>
-  <div class="orb" style="width:45vw;height:45vw;bottom:5%;right:-12%;background:radial-gradient(circle,rgba(88,86,214,0.13),transparent 70%);opacity:1"></div>
+  <span class="deco-e" data-scroll data-scroll-speed="0.4"   style="font-size:clamp(120px,18vw,260px);top:8%;right:3%;opacity:0.09;filter:blur(8px);rotate:-20deg">🔮</span>
+  <span class="deco-e" data-scroll data-scroll-speed="-0.15" style="font-size:clamp(80px,11vw,160px);bottom:12%;right:16%;opacity:0.07;filter:blur(10px);rotate:-10deg">💻</span>
+  <span class="deco-e" data-scroll data-scroll-speed="0.25"  style="font-size:clamp(60px,8vw,120px);top:58%;left:2%;opacity:0.07;filter:blur(7px);rotate:18deg">🧠</span>
 
   <div class="container">
     <p  class="hero-tag"  data-sr>Senior Software Quality Engineer</p>
@@ -472,9 +462,9 @@
 
 <!-- ═══════════════════════════════════ EXPERTISE ═══ -->
 <section id="expertise">
-  <span class="deco-e" style="font-size:200px;top:2%;right:-1%;opacity:0.06;filter:blur(10px);transform:rotate(-22deg)">🧠</span>
-  <span class="deco-e" style="font-size:140px;bottom:4%;left:-1%;opacity:0.05;filter:blur(7px);transform:rotate(28deg)">🔬</span>
-  <span class="deco-e" style="font-size:100px;top:44%;left:47%;opacity:0.06;filter:blur(5px);transform:rotate(-15deg)">🤔</span>
+  <span class="deco-e" data-scroll data-scroll-speed="0.35"  style="font-size:200px;top:2%;right:-1%;opacity:0.06;filter:blur(10px);rotate:-22deg">🧠</span>
+  <span class="deco-e" data-scroll data-scroll-speed="-0.2"  style="font-size:140px;bottom:4%;left:-1%;opacity:0.05;filter:blur(7px);rotate:28deg">🔬</span>
+  <span class="deco-e" data-scroll data-scroll-speed="0.2"   style="font-size:100px;top:44%;left:47%;opacity:0.06;filter:blur(5px);rotate:-15deg">🤔</span>
   <div class="container">
     <p  class="eyebrow"          data-sr>Full-spectrum quality engineering</p>
     <h2 class="section-heading"  data-sr>Expertise</h2>
@@ -491,8 +481,8 @@
 
 <!-- ═══════════════════════════════════ KNOWN FOR ═══ -->
 <section id="known">
-  <span class="deco-e" style="font-size:220px;top:4%;right:-3%;opacity:0.07;filter:blur(12px);transform:rotate(-18deg)">🔍</span>
-  <span class="deco-e" style="font-size:120px;bottom:6%;left:1%;opacity:0.07;filter:blur(6px);transform:rotate(20deg)">🔍</span>
+  <span class="deco-e" data-scroll data-scroll-speed="0.45"  style="font-size:220px;top:4%;right:-3%;opacity:0.07;filter:blur(12px);rotate:-18deg">🔍</span>
+  <span class="deco-e" data-scroll data-scroll-speed="-0.25" style="font-size:120px;bottom:6%;left:1%;opacity:0.07;filter:blur(6px);rotate:20deg">🔍</span>
   <div class="container">
     <p  class="eyebrow"          data-sr>Where I move the needle</p>
     <h2 class="section-heading"  data-sr>Known for</h2>
@@ -530,13 +520,13 @@
 <section id="work">
 
   <!-- Robot + testing emoji depth layer — all angled inward -->
-  <span class="robot" style="font-size:180px;top:6%;left:2%;opacity:0.07;filter:blur(4px);transform:rotate(18deg)">🤖</span>
-  <span class="robot" style="font-size:100px;top:62%;left:14%;opacity:0.05;filter:blur(6px);transform:rotate(-12deg)">🤖</span>
-  <span class="robot" style="font-size:240px;top:20%;right:0%;opacity:0.04;filter:blur(10px);transform:rotate(-22deg)">🤖</span>
-  <span class="robot" style="font-size:76px;bottom:12%;right:20%;opacity:0.09;filter:blur(2px);transform:rotate(8deg)">🤖</span>
-  <span class="robot" style="font-size:140px;bottom:4%;left:42%;opacity:0.06;filter:blur(7px);transform:rotate(-15deg)">🤖</span>
-  <span class="robot" style="font-size:120px;top:35%;right:3%;opacity:0.07;filter:blur(5px);transform:rotate(-20deg)">🧪</span>
-  <span class="robot" style="font-size:90px;top:8%;right:24%;opacity:0.06;filter:blur(4px);transform:rotate(16deg)">🔬</span>
+  <span class="robot" style="font-size:180px;top:6%;left:2%;opacity:0.07;filter:blur(4px);rotate:18deg">🤖</span>
+  <span class="robot" style="font-size:100px;top:62%;left:14%;opacity:0.05;filter:blur(6px);rotate:-12deg">🤖</span>
+  <span class="robot" style="font-size:240px;top:20%;right:0%;opacity:0.04;filter:blur(10px);rotate:-22deg">🤖</span>
+  <span class="robot" style="font-size:76px;bottom:12%;right:20%;opacity:0.09;filter:blur(2px);rotate:8deg">🤖</span>
+  <span class="robot" style="font-size:140px;bottom:4%;left:42%;opacity:0.06;filter:blur(7px);rotate:-15deg">🤖</span>
+  <span class="robot" style="font-size:120px;top:35%;right:3%;opacity:0.07;filter:blur(5px);rotate:-20deg">🧪</span>
+  <span class="robot" style="font-size:90px;top:8%;right:24%;opacity:0.06;filter:blur(4px);rotate:16deg">🔬</span>
 
   <div class="container">
     <p class="eyebrow"          data-sr>Agentic QA</p>
@@ -592,10 +582,10 @@
 
 <!-- ═══════════════════════════════════ NOW ════ -->
 <section id="now">
-  <span class="deco-e" style="font-size:240px;top:-2%;right:-3%;opacity:0.07;filter:blur(14px);transform:rotate(-20deg)">🪐</span>
-  <span class="deco-e" style="font-size:130px;bottom:4%;left:2%;opacity:0.07;filter:blur(8px);transform:rotate(25deg)">🎮</span>
-  <span class="deco-e" style="font-size:110px;top:42%;left:51%;opacity:0.06;filter:blur(6px);transform:rotate(-30deg)">🎥</span>
-  <span class="deco-e" style="font-size:90px;top:8%;left:28%;opacity:0.07;filter:blur(5px);transform:rotate(15deg)">👾</span>
+  <span class="deco-e" data-scroll data-scroll-speed="0.45"  style="font-size:240px;top:-2%;right:-3%;opacity:0.07;filter:blur(14px);rotate:-20deg">🪐</span>
+  <span class="deco-e" data-scroll data-scroll-speed="-0.2"  style="font-size:130px;bottom:4%;left:2%;opacity:0.07;filter:blur(8px);rotate:25deg">🎮</span>
+  <span class="deco-e" data-scroll data-scroll-speed="0.3"   style="font-size:110px;top:42%;left:51%;opacity:0.06;filter:blur(6px);rotate:-30deg">🎥</span>
+  <span class="deco-e" data-scroll data-scroll-speed="-0.1"  style="font-size:90px;top:8%;left:28%;opacity:0.07;filter:blur(5px);rotate:15deg">👾</span>
   <div class="container">
     <p  class="eyebrow"          data-sr>What I&apos;m building toward</p>
     <h2 class="section-heading"  data-sr>Now</h2>
@@ -814,6 +804,19 @@
   applySize(tsActive);
 
 })();
+</script>
+
+<!-- Locomotive Scroll v5 — smooth inertia + parallax, synced with GSAP -->
+<script type="module">
+  import LocomotiveScroll from 'https://cdn.jsdelivr.net/npm/locomotive-scroll@5/+esm';
+  const scroll = new LocomotiveScroll({ lenisOptions: { lerp: 0.08, smoothWheel: true } });
+
+  // Keep GSAP ScrollTrigger and Lenis on the same RAF tick
+  const lenis = scroll.lenisInstance;
+  if (lenis && window.gsap) {
+    gsap.ticker.add(t => lenis.raf(t * 1000));
+    gsap.ticker.lagSmoothing(0);
+  }
 </script>
 </body>
 </html>
