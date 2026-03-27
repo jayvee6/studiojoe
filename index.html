@@ -67,14 +67,14 @@
       position: fixed; inset: 0; z-index: 6;
       pointer-events: none; overflow: hidden;
     }
-    /* Hearts: additive glow on dark, watercolor wash on light */
-    .gobo-heart {
-      position: absolute; line-height: 1;
+    /* Color blobs: additive glow on dark, watercolor wash on light */
+    .gobo-blob {
+      position: absolute; border-radius: 50%;
       pointer-events: none; user-select: none;
       will-change: transform, opacity;
       mix-blend-mode: screen;
     }
-    [data-theme="light"] .gobo-heart { mix-blend-mode: multiply; }
+    [data-theme="light"] .gobo-blob { mix-blend-mode: multiply; }
 
 
     /* ── Grain ─────────────────────────────────────────── */
@@ -323,35 +323,35 @@
     );
   }
 
-  // ── Gobo lights ───────────────────────────────────────────
-  const _HEARTS = [
-    { e: '❤️', sz: 340, bl: 88, op: 0.30 },
-    { e: '🧡', sz: 290, bl: 76, op: 0.24 },
-    { e: '💛', sz: 260, bl: 70, op: 0.22 },
-    { e: '💚', sz: 310, bl: 82, op: 0.20 },
-    { e: '💙', sz: 270, bl: 74, op: 0.26 },
-    { e: '💜', sz: 380, bl: 96, op: 0.22 },
-    { e: '💗', sz: 230, bl: 62, op: 0.18 },
-    { e: '💙', sz: 250, bl: 66, op: 0.20 },
+  // ── Gobo lights — Apple system palette ───────────────────
+  // Colors match the presentation skill swatches
+  const _BLOBS = [
+    { color: '#0A84FF', sz: 420, bl: 110, op: 0.55 }, // Blue      (accent)
+    { color: '#BF5AF2', sz: 360, bl:  95, op: 0.48 }, // Purple
+    { color: '#FF375F', sz: 300, bl:  80, op: 0.45 }, // Pink/Red
+    { color: '#30D158', sz: 340, bl:  90, op: 0.42 }, // Green
+    { color: '#FF9F0A', sz: 310, bl:  82, op: 0.50 }, // Orange
+    { color: '#5E5CE6', sz: 390, bl: 100, op: 0.45 }, // Indigo
+    { color: '#64D2FF', sz: 280, bl:  74, op: 0.52 }, // Cyan
+    { color: '#FFD60A', sz: 260, bl:  70, op: 0.38 }, // Yellow
   ];
 
   (function initGobos() {
     const container = document.getElementById('gobo');
-    // Distribute across a 4×2 grid with jitter — eliminates random clumping
     const COLS = 4, ROWS = 2, CW = 100 / COLS, CH = 100 / ROWS;
     const active = [];
 
-    _HEARTS.forEach((g, i) => {
+    _BLOBS.forEach((g, i) => {
       const col = i % COLS, row = Math.floor(i / COLS);
       const x = col * CW + CW * 0.1 + Math.random() * CW * 0.8;
       const y = row * CH + CH * 0.1 + Math.random() * CH * 0.8;
 
       const el = document.createElement('span');
-      el.className   = 'gobo-heart';
-      el.textContent = g.e;
+      el.className = 'gobo-blob';
       Object.assign(el.style, {
-        fontSize: g.sz + 'px',
-        left: x + '%', top: y + '%',
+        width:  g.sz + 'px', height: g.sz + 'px',
+        background: g.color,
+        left: x + '%',  top: y + '%',
         filter: `blur(${g.bl}px)`,
         opacity: 0,
       });
@@ -359,21 +359,17 @@
 
       gsap.to(el, { opacity: g.op, duration: 3, delay: i * 0.55, ease: 'power1.inOut' });
 
-      // Unique phase offsets so each heart samples a different region of the noise field
       active.push({ el, g, ox: Math.random() * 100, oy: Math.random() * 100,
-                    range: 75 + Math.random() * 65 });
+                    range: 80 + Math.random() * 60 });
     });
 
-    // Single ticker drives all gobos — organic, non-repeating paths via noise
     gsap.ticker.add(time => {
-      const t = time * 0.07; // time scale — slower = lazier drift
+      const t = time * 0.07;
       active.forEach(({ el, g, ox, oy, range }) => {
-        const px  = pnoise(t + ox,          oy         ) * range;
-        const py  = pnoise(ox,              t + oy      ) * range;
-        const rot = pnoise(t * 0.3 + ox * 2, oy * 2    ) * 28;
-        const no  = (pnoise(t * 0.5 + ox * 3, oy * 3) + 1) * 0.5; // 0→1
-        gsap.set(el, { x: px, y: py, rotation: rot,
-                       opacity: g.op * (0.60 + no * 0.65) });
+        const px = pnoise(t + ox,           oy         ) * range;
+        const py = pnoise(ox,               t + oy     ) * range;
+        const no = (pnoise(t * 0.5 + ox * 3, oy * 3) + 1) * 0.5;
+        gsap.set(el, { x: px, y: py, opacity: g.op * (0.55 + no * 0.70) });
       });
     });
   })();
