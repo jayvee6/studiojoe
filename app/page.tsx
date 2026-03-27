@@ -1,8 +1,23 @@
+import Header from "@/components/Header";
+import Hero from "@/components/Hero";
+import WorkSection from "@/components/WorkSection";
+import KnownForSection from "@/components/KnownForSection";
+import ExpertiseSection from "@/components/ExpertiseSection";
+import NowSection from "@/components/NowSection";
+import Footer from "@/components/Footer";
+
 export default function Home() {
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center bg-black text-white">
-      <h1 className="text-5xl font-bold tracking-tight">Studio Joe</h1>
-      <p className="mt-4 text-lg text-gray-400">Building things. Shipping stuff.</p>
-    </main>
-  )
+    <>
+      <Header />
+      <main className="pt-14">
+        <Hero />
+        <WorkSection />
+        <KnownForSection />
+        <ExpertiseSection />
+        <NowSection />
+      </main>
+      <Footer />
+    </>
+  );
 }
