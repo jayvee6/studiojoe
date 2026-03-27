@@ -77,6 +77,20 @@
       position: fixed; inset: 0; z-index: 6;
       pointer-events: none; overflow: hidden;
     }
+
+    /* ── Edge vignette ─────────────────────────────────────── */
+    #vignette {
+      position: fixed; inset: 0; z-index: 9;
+      pointer-events: none;
+      background:
+        linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, transparent 12%, transparent 82%, rgba(0,0,0,0.55) 100%),
+        linear-gradient(to right,  rgba(0,0,0,0.20) 0%, transparent 10%, transparent 90%, rgba(0,0,0,0.20) 100%);
+    }
+    [data-theme="light"] #vignette {
+      background:
+        linear-gradient(to bottom, rgba(245,245,247,0.4) 0%, transparent 12%, transparent 82%, rgba(245,245,247,0.5) 100%),
+        linear-gradient(to right,  rgba(245,245,247,0.15) 0%, transparent 10%, transparent 90%, rgba(245,245,247,0.15) 100%);
+    }
     .gobo-blob {
       position: absolute; border-radius: 50%;
       pointer-events: none; user-select: none;
@@ -416,8 +430,9 @@
 </head>
 <body>
 
-<div class="grain"  aria-hidden="true"></div>
+<div class="grain"    aria-hidden="true"></div>
 <div id="gobo"      aria-hidden="true"></div>
+<div id="vignette"  aria-hidden="true"></div>
 
 <!-- ═══════════════════════════════════ HEADER ═══ -->
 <header>
