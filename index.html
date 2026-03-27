@@ -76,12 +76,6 @@
     }
     [data-theme="light"] .gobo-heart { mix-blend-mode: multiply; }
 
-    /* Sparkles: stay crisp, just float */
-    .gobo-spark {
-      position: absolute; line-height: 1;
-      pointer-events: none; user-select: none;
-      will-change: transform, opacity;
-    }
 
     /* ── Grain ─────────────────────────────────────────── */
     .grain {
@@ -313,12 +307,6 @@
     { cls: 'gobo-heart', e: '💗',  x: 35, y: 50, sz: 230, bl: 62,  op: 0.18, dx:  60, dy:  60, dur: 40, delay: 6    },
     { cls: 'gobo-heart', e: '💙',  x: 80, y: 38, sz: 250, bl: 66,  op: 0.20, dx: -50, dy: -80, dur: 34, delay: 10   },
     // Sparkles — small, crisp, floaty
-    { cls: 'gobo-spark', e: '✨',  x: 28, y: 42, sz: 52,  bl: 3,   op: 0.55, dx:  35, dy: -45, dur: 16, delay: 0    },
-    { cls: 'gobo-spark', e: '💫',  x: 68, y: 72, sz: 44,  bl: 2,   op: 0.50, dx: -28, dy:  38, dur: 13, delay: 3    },
-    { cls: 'gobo-spark', e: '✨',  x: 52, y: 18, sz: 60,  bl: 4,   op: 0.45, dx:  42, dy:  28, dur: 20, delay: 7    },
-    { cls: 'gobo-spark', e: '⭐',  x: 15, y: 85, sz: 38,  bl: 2,   op: 0.40, dx:  25, dy: -35, dur: 18, delay: 5    },
-    { cls: 'gobo-spark', e: '💫',  x: 90, y: 55, sz: 48,  bl: 3,   op: 0.45, dx: -40, dy: -25, dur: 15, delay: 9    },
-    { cls: 'gobo-spark', e: '✨',  x: 45, y: 65, sz: 56,  bl: 3,   op: 0.50, dx: -30, dy:  42, dur: 22, delay: 11   },
   ];
 
   (function initGobos() {
@@ -370,6 +358,33 @@
     });
   })();
 
+  // ── Starfield ──────────────────────────────────────────────
+  (function initStarfield() {
+    const container = document.getElementById('gobo');
+    const COUNT = 70;
+    for (let i = 0; i < COUNT; i++) {
+      const s   = document.createElement('span');
+      const dim = Math.random() < 0.65 ? 1 : Math.random() < 0.6 ? 2 : 3;
+      const x   = Math.random() * 100;
+      const y   = Math.random() * 100;
+      const baseOp = 0.15 + Math.random() * 0.55;
+      Object.assign(s.style, {
+        position: 'absolute', borderRadius: '50%',
+        width: dim + 'px', height: dim + 'px',
+        left: x + '%', top: y + '%',
+        background: 'rgba(255,255,255,1)',
+        opacity: 0, pointerEvents: 'none',
+        willChange: 'opacity',
+      });
+      container.appendChild(s);
+
+      gsap.to(s, { opacity: baseOp, duration: 2 + Math.random() * 3,
+                   delay: Math.random() * 6, ease: 'power1.inOut' });
+      gsap.to(s, { opacity: baseOp * 0.12, duration: 1.2 + Math.random() * 4,
+                   delay: Math.random() * 10, ease: 'sine.inOut',
+                   repeat: -1, yoyo: true });
+    }
+  })();
 
 })();
 </script>

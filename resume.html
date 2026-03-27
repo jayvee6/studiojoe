@@ -23,12 +23,12 @@
       --label-3:    rgba(255,255,255,0.25);
       --accent:     #0A84FF;
       --accent-bg:  rgba(10,132,255,0.12);
-      --fill-1:     rgba(255,255,255,0.04);
-      --fill-2:     rgba(255,255,255,0.08);
-      --sep:        rgba(255,255,255,0.09);
-      --glass-bg:   rgba(255,255,255,0.05);
-      --glass-bdr:  rgba(255,255,255,0.10);
-      --glass-shd:  0 8px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08);
+      --fill-1:     rgba(255,255,255,0.06);
+      --fill-2:     rgba(255,255,255,0.11);
+      --sep:        rgba(255,255,255,0.12);
+      --glass-bg:   rgba(255,255,255,0.10);
+      --glass-bdr:  rgba(255,255,255,0.16);
+      --glass-shd:  0 8px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.12);
     }
 
     [data-theme="light"] {
@@ -42,9 +42,9 @@
       --fill-1:     rgba(0,0,0,0.03);
       --fill-2:     rgba(0,0,0,0.06);
       --sep:        rgba(0,0,0,0.09);
-      --glass-bg:   rgba(255,255,255,0.78);
-      --glass-bdr:  rgba(0,0,0,0.07);
-      --glass-shd:  0 8px 40px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.9);
+      --glass-bg:   rgba(255,255,255,0.88);
+      --glass-bdr:  rgba(0,0,0,0.10);
+      --glass-shd:  0 8px 40px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.95);
     }
 
     html {
@@ -97,11 +97,6 @@
       mix-blend-mode: screen;
     }
     [data-theme="light"] .gobo-heart { mix-blend-mode: multiply; }
-    .gobo-spark {
-      position: absolute; line-height: 1;
-      pointer-events: none; user-select: none;
-      will-change: transform, opacity;
-    }
 
     /* ── Section deco emojis ───────────────────────────────── */
     .deco-e {
@@ -167,6 +162,19 @@
       position: relative;
       padding: 120px clamp(24px, 5vw, 80px);
       overflow: hidden;
+    }
+
+    /* Content sections sit above the gobo (z-index 6) and fog (10) layers.
+       A solid-ish background ensures text is never washed out by the color blobs. */
+    #expertise, #known, #work, #now {
+      z-index: 12;
+      background: rgba(3, 3, 14, 0.84);
+    }
+    [data-theme="light"] #expertise,
+    [data-theme="light"] #known,
+    [data-theme="light"] #work,
+    [data-theme="light"] #now {
+      background: rgba(245, 245, 247, 0.92);
     }
 
     /* ── Section labels ────────────────────────────────────── */
@@ -682,12 +690,6 @@
     { cls: 'gobo-heart', e: '💜',  x: 58, y: 32, sz: 380, bl: 96,  op: 0.22, dx: -110,dy:  80, dur: 48, delay: 12   },
     { cls: 'gobo-heart', e: '💗',  x: 35, y: 50, sz: 230, bl: 62,  op: 0.18, dx:  60, dy:  60, dur: 40, delay: 6    },
     { cls: 'gobo-heart', e: '💙',  x: 80, y: 38, sz: 250, bl: 66,  op: 0.20, dx: -50, dy: -80, dur: 34, delay: 10   },
-    { cls: 'gobo-spark', e: '✨',  x: 28, y: 42, sz: 52,  bl: 3,   op: 0.55, dx:  35, dy: -45, dur: 16, delay: 0    },
-    { cls: 'gobo-spark', e: '💫',  x: 68, y: 72, sz: 44,  bl: 2,   op: 0.50, dx: -28, dy:  38, dur: 13, delay: 3    },
-    { cls: 'gobo-spark', e: '✨',  x: 52, y: 18, sz: 60,  bl: 4,   op: 0.45, dx:  42, dy:  28, dur: 20, delay: 7    },
-    { cls: 'gobo-spark', e: '⭐',  x: 15, y: 85, sz: 38,  bl: 2,   op: 0.40, dx:  25, dy: -35, dur: 18, delay: 5    },
-    { cls: 'gobo-spark', e: '💫',  x: 90, y: 55, sz: 48,  bl: 3,   op: 0.45, dx: -40, dy: -25, dur: 15, delay: 9    },
-    { cls: 'gobo-spark', e: '✨',  x: 45, y: 65, sz: 56,  bl: 3,   op: 0.50, dx: -30, dy:  42, dur: 22, delay: 11   },
   ];
 
   (function initGobos() {
@@ -728,6 +730,36 @@
         });
       }
     });
+  })();
+
+  // ── Starfield ──────────────────────────────────────────────
+  (function initStarfield() {
+    const container = document.getElementById('gobo');
+    const COUNT = 70;
+    for (let i = 0; i < COUNT; i++) {
+      const s   = document.createElement('span');
+      const dim = Math.random() < 0.65 ? 1 : Math.random() < 0.6 ? 2 : 3;
+      const x   = Math.random() * 100;
+      const y   = Math.random() * 100;
+      const baseOp = 0.15 + Math.random() * 0.55;
+      Object.assign(s.style, {
+        position: 'absolute', borderRadius: '50%',
+        width: dim + 'px', height: dim + 'px',
+        left: x + '%', top: y + '%',
+        background: 'rgba(255,255,255,1)',
+        opacity: 0, pointerEvents: 'none',
+        willChange: 'opacity',
+      });
+      container.appendChild(s);
+
+      // Fade in staggered
+      gsap.to(s, { opacity: baseOp, duration: 2 + Math.random() * 3,
+                   delay: Math.random() * 6, ease: 'power1.inOut' });
+      // Slow twinkle — each star on its own clock
+      gsap.to(s, { opacity: baseOp * 0.12, duration: 1.2 + Math.random() * 4,
+                   delay: Math.random() * 10, ease: 'sine.inOut',
+                   repeat: -1, yoyo: true });
+    }
   })();
 
   // ── Karl the Fog ───────────────────────────────────────────
