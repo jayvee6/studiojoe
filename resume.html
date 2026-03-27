@@ -85,6 +85,31 @@
       will-change: transform, opacity;
     }
 
+    /* ── Gobo lights ───────────────────────────────────────── */
+    #gobo {
+      position: fixed; inset: 0; z-index: 6;
+      pointer-events: none; overflow: hidden;
+    }
+    .gobo-heart {
+      position: absolute; line-height: 1;
+      pointer-events: none; user-select: none;
+      will-change: transform, opacity;
+      mix-blend-mode: screen;
+    }
+    [data-theme="light"] .gobo-heart { mix-blend-mode: multiply; }
+    .gobo-spark {
+      position: absolute; line-height: 1;
+      pointer-events: none; user-select: none;
+      will-change: transform, opacity;
+    }
+
+    /* ── Section deco emojis ───────────────────────────────── */
+    .deco-e {
+      position: absolute; pointer-events: none;
+      user-select: none; line-height: 1;
+      will-change: transform;
+    }
+
     /* ── Ambient orbs ──────────────────────────────────────── */
     .orb {
       position: absolute; border-radius: 50%;
@@ -397,6 +422,7 @@
 <body>
 
 <div class="grain"  aria-hidden="true"></div>
+<div id="gobo"      aria-hidden="true"></div>
 <div id="fog"       aria-hidden="true"></div>
 
 <!-- ═══════════════════════════════════ HEADER ═══ -->
@@ -414,6 +440,11 @@
 
 <!-- ═══════════════════════════════════ HERO ════ -->
 <section id="hero">
+
+  <!-- Big character emojis — off-axis, angled inward toward the content -->
+  <span class="deco-e" style="font-size:clamp(120px,18vw,260px);top:8%;right:3%;opacity:0.09;filter:blur(8px);transform:rotate(-20deg)">🧙‍♂️</span>
+  <span class="deco-e" style="font-size:clamp(80px,11vw,160px);bottom:12%;right:16%;opacity:0.07;filter:blur(10px);transform:rotate(-10deg)">👨🏽‍💻</span>
+  <span class="deco-e" style="font-size:clamp(60px,8vw,120px);top:58%;left:2%;opacity:0.07;filter:blur(7px);transform:rotate(18deg)">🧠</span>
 
   <!-- Ambient orbs -->
   <div class="orb" style="width:65vw;height:65vw;top:-15%;left:-18%;background:radial-gradient(circle,rgba(10,132,255,0.16),transparent 70%);opacity:1"></div>
@@ -436,6 +467,9 @@
 
 <!-- ═══════════════════════════════════ EXPERTISE ═══ -->
 <section id="expertise">
+  <span class="deco-e" style="font-size:200px;top:2%;right:-1%;opacity:0.06;filter:blur(10px);transform:rotate(-22deg)">🧠</span>
+  <span class="deco-e" style="font-size:140px;bottom:4%;left:-1%;opacity:0.05;filter:blur(7px);transform:rotate(28deg)">🔬</span>
+  <span class="deco-e" style="font-size:100px;top:44%;left:47%;opacity:0.06;filter:blur(5px);transform:rotate(-15deg)">🤔</span>
   <div class="container">
     <p  class="eyebrow"          data-sr>Full-spectrum quality engineering</p>
     <h2 class="section-heading"  data-sr>Expertise</h2>
@@ -452,6 +486,8 @@
 
 <!-- ═══════════════════════════════════ KNOWN FOR ═══ -->
 <section id="known">
+  <span class="deco-e" style="font-size:220px;top:4%;right:-3%;opacity:0.07;filter:blur(12px);transform:rotate(-18deg)">🕵️‍♂️</span>
+  <span class="deco-e" style="font-size:120px;bottom:6%;left:1%;opacity:0.07;filter:blur(6px);transform:rotate(20deg)">🔍</span>
   <div class="container">
     <p  class="eyebrow"          data-sr>Where I move the needle</p>
     <h2 class="section-heading"  data-sr>Known for</h2>
@@ -488,12 +524,14 @@
 <!-- ═══════════════════════════════════ WORK ════ -->
 <section id="work">
 
-  <!-- Robot depth layer -->
-  <span class="robot" style="font-size:180px;top:6%;left:2%;opacity:0.07;filter:blur(4px)"   >🤖</span>
-  <span class="robot" style="font-size:100px;top:62%;left:14%;opacity:0.05;filter:blur(6px)" >🤖</span>
-  <span class="robot" style="font-size:240px;top:20%;right:0%;opacity:0.04;filter:blur(10px)">🤖</span>
-  <span class="robot" style="font-size:76px;bottom:12%;right:20%;opacity:0.09;filter:blur(2px)">🤖</span>
-  <span class="robot" style="font-size:140px;bottom:4%;left:42%;opacity:0.06;filter:blur(7px)">🤖</span>
+  <!-- Robot + testing emoji depth layer — all angled inward -->
+  <span class="robot" style="font-size:180px;top:6%;left:2%;opacity:0.07;filter:blur(4px);transform:rotate(18deg)">🤖</span>
+  <span class="robot" style="font-size:100px;top:62%;left:14%;opacity:0.05;filter:blur(6px);transform:rotate(-12deg)">🤖</span>
+  <span class="robot" style="font-size:240px;top:20%;right:0%;opacity:0.04;filter:blur(10px);transform:rotate(-22deg)">🤖</span>
+  <span class="robot" style="font-size:76px;bottom:12%;right:20%;opacity:0.09;filter:blur(2px);transform:rotate(8deg)">🤖</span>
+  <span class="robot" style="font-size:140px;bottom:4%;left:42%;opacity:0.06;filter:blur(7px);transform:rotate(-15deg)">🤖</span>
+  <span class="robot" style="font-size:120px;top:35%;right:3%;opacity:0.07;filter:blur(5px);transform:rotate(-20deg)">🧪</span>
+  <span class="robot" style="font-size:90px;top:8%;right:24%;opacity:0.06;filter:blur(4px);transform:rotate(16deg)">🔬</span>
 
   <div class="container">
     <p class="eyebrow"          data-sr>Agentic QA</p>
@@ -549,6 +587,10 @@
 
 <!-- ═══════════════════════════════════ NOW ════ -->
 <section id="now">
+  <span class="deco-e" style="font-size:240px;top:-2%;right:-3%;opacity:0.07;filter:blur(14px);transform:rotate(-20deg)">🪐</span>
+  <span class="deco-e" style="font-size:130px;bottom:4%;left:2%;opacity:0.07;filter:blur(8px);transform:rotate(25deg)">🎮</span>
+  <span class="deco-e" style="font-size:110px;top:42%;left:51%;opacity:0.06;filter:blur(6px);transform:rotate(-30deg)">🎥</span>
+  <span class="deco-e" style="font-size:90px;top:8%;left:28%;opacity:0.07;filter:blur(5px);transform:rotate(15deg)">👾</span>
   <div class="container">
     <p  class="eyebrow"          data-sr>What I&apos;m building toward</p>
     <h2 class="section-heading"  data-sr>Now</h2>
@@ -629,6 +671,64 @@
   });
 
   applyTheme();
+
+  // ── Gobo lights ────────────────────────────────────────────
+  const GOBOS = [
+    { cls: 'gobo-heart', e: '❤️',  x: 8,  y: 18, sz: 340, bl: 88,  op: 0.30, dx:  90, dy: 130, dur: 28, delay: 0    },
+    { cls: 'gobo-heart', e: '🧡',  x: 72, y: 58, sz: 290, bl: 76,  op: 0.24, dx: -70, dy:  90, dur: 36, delay: 4.5  },
+    { cls: 'gobo-heart', e: '💛',  x: 42, y: 82, sz: 260, bl: 70,  op: 0.22, dx: 110, dy: -70, dur: 44, delay: 9    },
+    { cls: 'gobo-heart', e: '💚',  x: 88, y: 12, sz: 310, bl: 82,  op: 0.20, dx: -90, dy: 110, dur: 38, delay: 2    },
+    { cls: 'gobo-heart', e: '💙',  x: 18, y: 68, sz: 270, bl: 74,  op: 0.26, dx:  80, dy: -100,dur: 32, delay: 7    },
+    { cls: 'gobo-heart', e: '💜',  x: 58, y: 32, sz: 380, bl: 96,  op: 0.22, dx: -110,dy:  80, dur: 48, delay: 12   },
+    { cls: 'gobo-heart', e: '🩷',  x: 35, y: 50, sz: 230, bl: 62,  op: 0.18, dx:  60, dy:  60, dur: 40, delay: 6    },
+    { cls: 'gobo-heart', e: '🩵',  x: 80, y: 38, sz: 250, bl: 66,  op: 0.20, dx: -50, dy: -80, dur: 34, delay: 10   },
+    { cls: 'gobo-spark', e: '✨',  x: 28, y: 42, sz: 52,  bl: 3,   op: 0.55, dx:  35, dy: -45, dur: 16, delay: 0    },
+    { cls: 'gobo-spark', e: '💫',  x: 68, y: 72, sz: 44,  bl: 2,   op: 0.50, dx: -28, dy:  38, dur: 13, delay: 3    },
+    { cls: 'gobo-spark', e: '✨',  x: 52, y: 18, sz: 60,  bl: 4,   op: 0.45, dx:  42, dy:  28, dur: 20, delay: 7    },
+    { cls: 'gobo-spark', e: '⭐',  x: 15, y: 85, sz: 38,  bl: 2,   op: 0.40, dx:  25, dy: -35, dur: 18, delay: 5    },
+    { cls: 'gobo-spark', e: '💫',  x: 90, y: 55, sz: 48,  bl: 3,   op: 0.45, dx: -40, dy: -25, dur: 15, delay: 9    },
+    { cls: 'gobo-spark', e: '✨',  x: 45, y: 65, sz: 56,  bl: 3,   op: 0.50, dx: -30, dy:  42, dur: 22, delay: 11   },
+  ];
+
+  (function initGobos() {
+    const container = document.getElementById('gobo');
+    GOBOS.forEach(g => {
+      const el = document.createElement('span');
+      el.className   = g.cls;
+      el.textContent = g.e;
+      Object.assign(el.style, {
+        fontSize: g.sz + 'px',
+        left:     g.x + '%',
+        top:      g.y + '%',
+        filter:   `blur(${g.bl}px)`,
+        opacity:  0,
+      });
+      container.appendChild(el);
+
+      gsap.to(el, { opacity: g.op, duration: 3, delay: g.delay * 0.4, ease: 'power1.inOut' });
+
+      gsap.to(el, {
+        x: g.dx, y: g.dy,
+        duration: g.dur, delay: g.delay,
+        ease: 'sine.inOut', repeat: -1, yoyo: true,
+      });
+
+      gsap.to(el, {
+        opacity: g.op * 1.55,
+        duration: g.dur * 0.55,
+        delay: g.delay + g.dur * 0.2,
+        ease: 'sine.inOut', repeat: -1, yoyo: true,
+      });
+
+      if (g.cls === 'gobo-heart') {
+        gsap.to(el, {
+          rotation: (Math.random() > 0.5 ? 1 : -1) * 30,
+          duration: g.dur * 1.4, delay: g.delay,
+          ease: 'sine.inOut', repeat: -1, yoyo: true,
+        });
+      }
+    });
+  })();
 
   // ── Karl the Fog ───────────────────────────────────────────
   const FOG_LAYERS = [
