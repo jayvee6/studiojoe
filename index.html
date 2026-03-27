@@ -7,6 +7,7 @@
   <meta name="description" content="Code, camera, and everything in between. Built with intention.">
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -282,11 +283,28 @@
   const EASE = 'cubic-bezier(0.16, 1, 0.3, 1)';
 
   // ── Entrance animations ────────────────────────────────
+  gsap.registerPlugin(ScrollTrigger);
+
   const tl = gsap.timeline({ defaults: { ease: EASE } });
   tl.to('#hh', { opacity: 1, duration: 0.75 },                    0.1)
     .fromTo('#hh', { y: 28 }, { y: 0, duration: 0.75 },          0.1)
     .to('#hd', { opacity: 1, duration: 0.5 },                     0.38)
     .fromTo('#hd', { y: 12 }, { y: 0, duration: 0.5 },           0.38)
+
+  // ── Deco emoji parallax (data-scroll-speed) ─────────────────
+  document.querySelectorAll('[data-scroll-speed]').forEach(el => {
+    const speed = parseFloat(el.dataset.scrollSpeed);
+    gsap.to(el, {
+      y: () => speed * window.innerHeight * 0.6,
+      ease: 'none',
+      scrollTrigger: {
+        trigger: document.body,
+        start: 'top top',
+        end: 'bottom top',
+        scrub: 2,
+      },
+    });
+  });
 
   // ── Dark / Light toggle ────────────────────────────────
   const btn    = document.getElementById('theme-btn');

@@ -782,6 +782,22 @@
     });
   });
 
+  // ── Deco emoji parallax (data-scroll-speed) ─────────────────
+  document.querySelectorAll('[data-scroll-speed]').forEach(el => {
+    const speed  = parseFloat(el.dataset.scrollSpeed);
+    const section = el.closest('section') || el.parentElement;
+    gsap.to(el, {
+      y: () => speed * section.offsetHeight * 0.5,
+      ease: 'none',
+      scrollTrigger: {
+        trigger: section,
+        start: 'top bottom',
+        end: 'bottom top',
+        scrub: 2,
+      },
+    });
+  });
+
   // ── Font sizer ──────────────────────────────────────────────
   const TS_SIZES = ['sm', 'md', 'lg', 'xl'];
   const html = document.documentElement;
