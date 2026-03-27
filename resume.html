@@ -6,7 +6,6 @@
   <title>Joey Villarreal — Studio Joe</title>
   <meta name="description" content="Senior Software Quality Engineer. 10+ years shipping high-visibility releases across mobile, desktop, TV, wearable, and AR.">
 
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/locomotive-scroll@5/dist/locomotive-scroll.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
 
@@ -49,6 +48,7 @@
     }
 
     html {
+      scroll-behavior: smooth;
       background: var(--bg);
       min-height: 100svh;
       transition: background 0.4s;
@@ -806,17 +806,5 @@
 })();
 </script>
 
-<!-- Locomotive Scroll v5 — smooth inertia + parallax, synced with GSAP -->
-<script type="module">
-  import LocomotiveScroll from 'https://cdn.jsdelivr.net/npm/locomotive-scroll@5/+esm';
-  const scroll = new LocomotiveScroll({ lenisOptions: { lerp: 0.08, smoothWheel: true } });
-
-  // Keep GSAP ScrollTrigger and Lenis on the same RAF tick
-  const lenis = scroll.lenisInstance;
-  if (lenis && window.gsap) {
-    gsap.ticker.add(t => lenis.raf(t * 1000));
-    gsap.ticker.lagSmoothing(0);
-  }
-</script>
 </body>
 </html>
