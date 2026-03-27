@@ -166,10 +166,12 @@
 
     /* ── Hero ──────────────────────────────────────────────── */
     #hero {
-      min-height: 100vh;
+      /* Cap at ~900px so 4K displays don't get a sea of empty space above */
+      min-height: clamp(560px, 100svh, 900px);
       display: flex; flex-direction: column;
-      justify-content: flex-end;
-      padding-top: 52px; padding-bottom: 96px;
+      justify-content: center;
+      padding-top: clamp(80px, 12vh, 160px);
+      padding-bottom: clamp(60px, 8vh, 120px);
     }
 
     .hero-tag {
