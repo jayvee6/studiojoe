@@ -71,19 +71,6 @@
       mix-blend-mode: overlay;
     }
 
-    /* ── Fog ───────────────────────────────────────────────── */
-    #fog {
-      position: fixed; inset: 0; z-index: 10;
-      pointer-events: none; overflow: hidden;
-      transition: opacity 0.4s;
-    }
-    [data-theme="light"] #fog { opacity: 0.35; }
-
-    .fog-p {
-      position: absolute; pointer-events: none;
-      user-select: none; line-height: 1;
-      will-change: transform, opacity;
-    }
 
     /* ── Gobo lights ───────────────────────────────────────── */
     #gobo {
@@ -164,7 +151,7 @@
       overflow: hidden;
     }
 
-    /* Content sections sit above the gobo (z-index 6) and fog (10) layers.
+    /* Content sections sit above the gobo layer (z-index 6).
        A solid-ish background ensures text is never washed out by the color blobs. */
     #expertise, #known, #work, #now {
       z-index: 12;
@@ -431,7 +418,6 @@
 
 <div class="grain"  aria-hidden="true"></div>
 <div id="gobo"      aria-hidden="true"></div>
-<div id="fog"       aria-hidden="true"></div>
 
 <!-- ═══════════════════════════════════ HEADER ═══ -->
 <header>
@@ -785,52 +771,6 @@
                    repeat: -1, yoyo: true });
     }
   })();
-
-  // ── Karl the Fog ───────────────────────────────────────────
-  const FOG_LAYERS = [
-    { min: 220, max: 520, blur: 32, opMin: 0.05, opMax: 0.09, durMin: 90,  durMax: 150, weight: 6 },
-    { min: 130, max: 280, blur: 16, opMin: 0.07, opMax: 0.12, durMin: 55,  durMax: 90,  weight: 3 },
-    { min: 80,  max: 160, blur:  6, opMin: 0.10, opMax: 0.18, durMin: 35,  durMax: 60,  weight: 1 },
-  ];
-
-  function pickLayer() {
-    const total = FOG_LAYERS.reduce((s, l) => s + l.weight, 0);
-    let r = Math.random() * total;
-    for (const l of FOG_LAYERS) { r -= l.weight; if (r <= 0) return l; }
-    return FOG_LAYERS[0];
-  }
-
-  function spawnCloud() {
-    const fog = document.getElementById('fog');
-    const el  = document.createElement('span');
-    el.className = 'fog-p';
-
-    const l    = pickLayer();
-    const sz   = l.min + Math.random() * (l.max - l.min);
-    const op   = l.opMin + Math.random() * (l.opMax - l.opMin);
-    const dur  = l.durMin + Math.random() * (l.durMax - l.durMin);
-    const blurPx = l.blur;
-    el.textContent = '☁️';
-    Object.assign(el.style, { fontSize: sz + 'px' });
-
-    const rgt = Math.random() > 0.2;
-    const y   = Math.random() * 100;
-    const dy  = (Math.random() - 0.5) * 60;
-
-    Object.assign(el.style, {
-      top: y + 'vh', left: rgt ? '110vw' : '-30vw',
-      filter: `blur(${blurPx}px)`, opacity: 0,
-    });
-    fog.appendChild(el);
-
-    gsap.timeline({ onComplete: () => el.remove() })
-      .to(el, { opacity: op, duration: dur * 0.12, ease: 'power1.in' })
-      .to(el, { left: rgt ? '-30vw' : '110vw', y: dy, duration: dur, ease: 'none' }, 0)
-      .to(el, { opacity: 0, duration: dur * 0.12, ease: 'power1.out' }, `-=${dur * 0.12}`);
-  }
-
-  for (let i = 0; i < 5; i++) setTimeout(spawnCloud, i * 1200);
-  setInterval(spawnCloud, 6000);
 
   // ── Robot parallax ─────────────────────────────────────────
   document.querySelectorAll('#work .robot').forEach((r, i) => {
