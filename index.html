@@ -168,43 +168,31 @@
       opacity: 0;
     }
 
-    /* Disciplines pill row */
+    /* Disciplines — plain dot-separated text */
     .disciplines {
-      display: flex; flex-wrap: wrap;
-      align-items: center; justify-content: center;
-      gap: 8px; margin-bottom: clamp(40px, 6vh, 64px);
+      font-size: clamp(11px, 1.1vw, 13px);
+      font-weight: 500; letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--label-3);
+      margin-bottom: clamp(40px, 6vh, 64px);
       opacity: 0;
-    }
-    .disc {
-      font-size: 11px; font-weight: 600;
-      letter-spacing: 0.08em; text-transform: uppercase;
-      color: var(--label-3);
-      padding: 5px 12px; border-radius: 980px;
-      border: 1px solid var(--sep);
-      background: var(--fill-1);
     }
 
-    /* CTAs */
+    /* CTAs — text links only */
     .ctas {
       display: flex; align-items: center;
-      justify-content: center; gap: 10px;
-      flex-wrap: wrap;
-      opacity: 0;
+      justify-content: center; gap: 28px;
+      flex-wrap: wrap; opacity: 0;
     }
-    .btn {
-      display: inline-flex; align-items: center; gap: 5px;
-      padding: 11px 22px; border-radius: 980px;
+    .cta-link {
       font-size: 14px; font-weight: 500;
-      text-decoration: none; transition: all 0.2s;
+      color: var(--label-2); text-decoration: none;
       letter-spacing: -0.01em;
+      transition: color 0.2s;
+      display: flex; align-items: center; gap: 4px;
     }
-    .btn-solid { background: var(--accent); color: #fff; }
-    .btn-solid:hover { filter: brightness(1.12); }
-    .btn-ghost {
-      background: var(--fill-2); color: var(--label-1);
-      border: 1px solid var(--glass-bdr);
-    }
-    .btn-ghost:hover { background: var(--fill-1); }
+    .cta-link:first-child { color: var(--accent); }
+    .cta-link:hover { color: var(--label-1); }
+    .cta-link:first-child:hover { filter: brightness(1.15); }
 
     /* ── Footer ────────────────────────────────────────── */
     footer {
@@ -255,18 +243,14 @@
 
   <p class="hero-sub" id="hs">Built with intention.</p>
 
-  <div class="disciplines" id="hd">
-    <span class="disc">Quality Engineering</span>
-    <span class="disc">Software Dev</span>
-    <span class="disc">Video Production</span>
-    <span class="disc">Game Development</span>
-    <span class="disc">Consulting</span>
-  </div>
+  <p class="disciplines" id="hd">
+    Quality Engineering · Software Dev · Video Production · Game Development · Consulting
+  </p>
 
   <div class="ctas" id="hc">
-    <a class="btn btn-solid" href="/resume.html">View Resume</a>
-    <a class="btn btn-ghost" href="https://www.linkedin.com/in/joey-v-287ba5394" target="_blank" rel="noopener">LinkedIn ↗</a>
-    <a class="btn btn-ghost" href="https://github.com/jayvee6" target="_blank" rel="noopener">GitHub ↗</a>
+    <a class="cta-link" href="/resume.html">Resume ↗</a>
+    <a class="cta-link" href="https://www.linkedin.com/in/joey-v-287ba5394" target="_blank" rel="noopener">LinkedIn ↗</a>
+    <a class="cta-link" href="https://github.com/jayvee6" target="_blank" rel="noopener">GitHub ↗</a>
   </div>
 
 </main>
