@@ -249,8 +249,6 @@
   <div class="orb" style="width:70vw;height:70vw;top:-20%;left:-20%;background:radial-gradient(circle,rgba(10,132,255,0.14),transparent 70%)"></div>
   <div class="orb" style="width:50vw;height:50vw;bottom:-15%;right:-15%;background:radial-gradient(circle,rgba(88,86,214,0.11),transparent 70%)"></div>
 
-  <p class="hero-wordmark" id="hw">Joey Villarreal</p>
-
   <h1 class="hero-hl" id="hh">
     Code, camera,<br>and everything<br>in between<span class="accent">.</span>
   </h1>
@@ -275,7 +273,7 @@
 
 <!-- Footer -->
 <footer>
-  <p class="footer-sub">© 2026 Studio Joe · Joey Villarreal</p>
+  <p class="footer-sub">© 2026 Studio Joe</p>
   <div class="footer-links">
     <a class="footer-link" href="/resume.html">Resume</a>
     <a class="footer-link" href="https://www.linkedin.com/in/joey-v-287ba5394" target="_blank" rel="noopener">LinkedIn ↗</a>
@@ -291,16 +289,14 @@
 
   // ── Entrance animations ────────────────────────────────
   const tl = gsap.timeline({ defaults: { ease: EASE } });
-  tl.to('#hw', { opacity: 1, y: 0,  duration: 0.6 },             0.1)
-    .fromTo('#hw', { y: 16 }, { y: 0, duration: 0.6 },           0.1)
-    .to('#hh', { opacity: 1, duration: 0.75 },                    0.25)
-    .fromTo('#hh', { y: 28 }, { y: 0, duration: 0.75 },          0.25)
-    .to('#hs', { opacity: 1, duration: 0.6 },                     0.45)
-    .fromTo('#hs', { y: 16 }, { y: 0, duration: 0.6 },           0.45)
-    .to('#hd', { opacity: 1, duration: 0.5 },                     0.6)
-    .fromTo('#hd', { y: 12 }, { y: 0, duration: 0.5 },           0.6)
-    .to('#hc', { opacity: 1, duration: 0.5 },                     0.72)
-    .fromTo('#hc', { y: 12 }, { y: 0, duration: 0.5 },           0.72);
+  tl.to('#hh', { opacity: 1, duration: 0.75 },                    0.1)
+    .fromTo('#hh', { y: 28 }, { y: 0, duration: 0.75 },          0.1)
+    .to('#hs', { opacity: 1, duration: 0.6 },                     0.3)
+    .fromTo('#hs', { y: 16 }, { y: 0, duration: 0.6 },           0.3)
+    .to('#hd', { opacity: 1, duration: 0.5 },                     0.48)
+    .fromTo('#hd', { y: 12 }, { y: 0, duration: 0.5 },           0.48)
+    .to('#hc', { opacity: 1, duration: 0.5 },                     0.6)
+    .fromTo('#hc', { y: 12 }, { y: 0, duration: 0.5 },           0.6);
 
   // ── Dark / Light toggle ────────────────────────────────
   const btn    = document.getElementById('theme-btn');
