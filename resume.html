@@ -299,7 +299,23 @@
         0 1px 4px rgba(0,0,0,0.12);
       transition: transform 0.45s cubic-bezier(0.34,1.56,0.64,1),
                   box-shadow 0.4s ease;
+      position: relative; isolation: isolate;
     }
+    .e-card::before {
+      content: '';
+      position: absolute; inset: 0;
+      border-radius: inherit;
+      background: radial-gradient(
+        circle at calc(var(--mx, 50) * 1%) calc(var(--my, 50) * 1%),
+        rgba(255,255,255,0.28) 0%,
+        rgba(255,255,255,0.08) 35%,
+        transparent 65%
+      );
+      pointer-events: none; z-index: 0;
+      opacity: 0; transition: opacity 0.25s ease;
+    }
+    .e-card:hover::before { opacity: 1; }
+    .e-card > * { position: relative; z-index: 1; }
     .e-card:hover {
       transform: translateY(-3px) scale(1.01);
       box-shadow:
@@ -817,6 +833,19 @@
   });
 
   applySize(tsActive);
+
+  // ── Liquid glass: interactive specular highlight follows cursor ──
+  document.querySelectorAll('.e-card').forEach(card => {
+    card.addEventListener('mousemove', e => {
+      const r = card.getBoundingClientRect();
+      card.style.setProperty('--mx', ((e.clientX - r.left) / r.width  * 100).toFixed(1));
+      card.style.setProperty('--my', ((e.clientY - r.top)  / r.height * 100).toFixed(1));
+    });
+    card.addEventListener('mouseleave', () => {
+      card.style.setProperty('--mx', '50');
+      card.style.setProperty('--my', '50');
+    });
+  });
 
   // ── Liquid glass hover — animate backdrop displacement scale ──
   const lgDM = document.querySelector('#lg-refract feDisplacementMap');
