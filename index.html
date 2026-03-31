@@ -284,10 +284,19 @@
     btn.textContent = isDark ? '☀️' : '🌙';
   }
 
+  let _activeGobos = [];
+
   btn.addEventListener('click', () => {
     isDark = !isDark;
     try { localStorage.setItem('theme', isDark ? 'dark' : 'light'); } catch(e) {}
     applyTheme();
+    const palette = isDark ? _BLOBS_DARK : _BLOBS_LIGHT;
+    _activeGobos.forEach(({ el, g }, i) => {
+      if (!palette[i]) return;
+      Object.assign(g, palette[i]);
+      el.style.background = g.color;
+      el.style.filter = `blur(${g.bl}px)`;
+    });
   });
 
   applyTheme();
@@ -369,6 +378,8 @@
       active.push({ el, g, ox: Math.random() * 100, oy: Math.random() * 100,
                     range: 60 + Math.random() * 50 });
     });
+
+    _activeGobos = active;
 
     gsap.ticker.add(time => {
       const t = time * 0.07;
