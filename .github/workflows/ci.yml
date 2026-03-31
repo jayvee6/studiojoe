@@ -24,11 +24,11 @@ jobs:
           args: >-
             --verbose
             --no-progress
-            --base https://studiojoe.dev
-            --accept 999
+            --base-url https://studiojoe.dev
             --exclude "https://cdnjs.cloudflare.com"
             --exclude "https://fonts.googleapis.com"
             --exclude "https://fonts.gstatic.com"
+            --exclude "https://www.linkedin.com"
             '*.html'
           fail: true
 
@@ -42,6 +42,6 @@ jobs:
       - name: Wait for server
         run: npx --yes wait-on http://localhost:3000
       - name: Run pa11y on homepage
-        run: npx --yes pa11y --chromium-arg=--no-sandbox http://localhost:3000
+        run: npx --yes pa11y --chromium-arg "--no-sandbox" http://localhost:3000
       - name: Run pa11y on resume
-        run: npx --yes pa11y --chromium-arg=--no-sandbox http://localhost:3000/resume.html
+        run: npx --yes pa11y --chromium-arg "--no-sandbox" http://localhost:3000/resume.html
