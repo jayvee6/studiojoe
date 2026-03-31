@@ -301,29 +301,6 @@
                   box-shadow 0.4s ease;
       position: relative; isolation: isolate;
     }
-    /* Perimeter specular — bright arc sweeps around the border edge */
-    .e-card::before {
-      content: '';
-      position: absolute; inset: -1px;
-      border-radius: 19px;
-      padding: 1px;
-      background: conic-gradient(
-        from calc(var(--angle, -135) * 1deg - 40deg),
-        transparent 0deg,
-        rgba(255,255,255,calc(0.06 * var(--si, 0))) 20deg,
-        rgba(255,255,255,calc(0.60 * var(--si, 0))) 50deg,
-        rgba(255,255,255,calc(0.06 * var(--si, 0))) 80deg,
-        transparent 120deg,
-        transparent 360deg
-      );
-      -webkit-mask:
-        linear-gradient(#fff 0 0) content-box,
-        linear-gradient(#fff 0 0);
-      -webkit-mask-composite: xor;
-      mask-composite: exclude;
-      pointer-events: none; z-index: 0;
-    }
-    .e-card > * { position: relative; z-index: 1; }
     .e-card:hover {
       transform: translateY(-3px) scale(1.01);
       box-shadow:
@@ -842,29 +819,6 @@
 
   applySize(tsActive);
 
-  // ── Liquid glass: perimeter specular — only active on the card under the cursor ──
-  const eCards = document.querySelectorAll('.e-card');
-  document.addEventListener('mousemove', e => {
-    eCards.forEach(card => {
-      const r = card.getBoundingClientRect();
-      const inside = e.clientX >= r.left && e.clientX <= r.right &&
-                     e.clientY >= r.top  && e.clientY <= r.bottom;
-      if (!inside) {
-        card.style.setProperty('--si', '0');
-        return;
-      }
-      // Angle from card center toward the mouse (= direction of nearest edge)
-      const cx  = r.left + r.width  / 2;
-      const cy  = r.top  + r.height / 2;
-      const deg = Math.atan2(e.clientY - cy, e.clientX - cx) * (180 / Math.PI);
-      card.style.setProperty('--angle', deg.toFixed(1));
-      // Intensity: 1 at the edge, fades toward the card center
-      const distToEdge = Math.min(e.clientX - r.left, r.right - e.clientX,
-                                  e.clientY - r.top,  r.bottom - e.clientY);
-      const reach = Math.min(r.width, r.height) * 0.45;
-      card.style.setProperty('--si', Math.max(0, 1 - distToEdge / reach).toFixed(3));
-    });
-  });
 
   // ── Liquid glass hover — animate backdrop displacement scale ──
   const lgDM = document.querySelector('#lg-refract feDisplacementMap');
