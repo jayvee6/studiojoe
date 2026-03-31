@@ -842,17 +842,15 @@
 
   applySize(tsActive);
 
-  // ── Liquid glass: perimeter specular sweeps around edge by mouse angle ──
-  document.querySelectorAll('.e-card').forEach(card => {
-    card.addEventListener('mousemove', e => {
+  // ── Liquid glass: perimeter specular — global mouse drives all cards at once ──
+  const eCards = document.querySelectorAll('.e-card');
+  document.addEventListener('mousemove', e => {
+    eCards.forEach(card => {
       const r   = card.getBoundingClientRect();
       const cx  = r.left + r.width  / 2;
       const cy  = r.top  + r.height / 2;
       const deg = Math.atan2(e.clientY - cy, e.clientX - cx) * (180 / Math.PI);
       card.style.setProperty('--angle', deg.toFixed(1));
-    });
-    card.addEventListener('mouseleave', () => {
-      card.style.setProperty('--angle', '-135'); // reset to top-left
     });
   });
 
