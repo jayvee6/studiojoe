@@ -310,9 +310,9 @@
       background: conic-gradient(
         from calc(var(--angle, -135) * 1deg - 40deg),
         transparent 0deg,
-        rgba(255,255,255,0.06) 20deg,
-        rgba(255,255,255,0.55) 50deg,
-        rgba(255,255,255,0.06) 80deg,
+        rgba(255,255,255,calc(0.06 * var(--si, 0))) 20deg,
+        rgba(255,255,255,calc(0.60 * var(--si, 0))) 50deg,
+        rgba(255,255,255,calc(0.06 * var(--si, 0))) 80deg,
         transparent 120deg,
         transparent 360deg
       );
@@ -842,15 +842,23 @@
 
   applySize(tsActive);
 
-  // ── Liquid glass: perimeter specular — global mouse drives all cards at once ──
+  // ── Liquid glass: perimeter specular — lights up the edge closest to the mouse ──
   const eCards = document.querySelectorAll('.e-card');
   document.addEventListener('mousemove', e => {
     eCards.forEach(card => {
-      const r   = card.getBoundingClientRect();
+      const r  = card.getBoundingClientRect();
+      // Closest point on card border to the mouse
+      const bx = Math.max(r.left, Math.min(e.clientX, r.right));
+      const by = Math.max(r.top,  Math.min(e.clientY, r.bottom));
+      // Angle from card center to that closest border point
       const cx  = r.left + r.width  / 2;
       const cy  = r.top  + r.height / 2;
-      const deg = Math.atan2(e.clientY - cy, e.clientX - cx) * (180 / Math.PI);
+      const deg = Math.atan2(by - cy, bx - cx) * (180 / Math.PI);
       card.style.setProperty('--angle', deg.toFixed(1));
+      // Intensity: brightest when mouse is on/inside card, fades at ~180px out
+      const dist = Math.sqrt((e.clientX - bx) ** 2 + (e.clientY - by) ** 2);
+      const intensity = Math.max(0, 1 - dist / 180).toFixed(3);
+      card.style.setProperty('--si', intensity);
     });
   });
 
