@@ -75,7 +75,7 @@
       will-change: transform, opacity;
       mix-blend-mode: screen;
     }
-    [data-theme="light"] .gobo-blob { mix-blend-mode: screen; }
+    [data-theme="light"] .gobo-blob { mix-blend-mode: soft-light; }
 
 
     /* ── Grain ─────────────────────────────────────────── */
@@ -332,14 +332,14 @@
     { color: '#7B2FBF', w:  840, h: 230, bl:  96, op: 0.46, rot:  24 }, // Indigo-violet depth
   ];
   const _BLOBS_LIGHT = [
-    { color: '#FFEA00', w: 1100, h: 360, bl: 100, op: 0.62, rot:  -8 }, // Noon yellow sweep
-    { color: '#FFD600', w:  920, h: 300, bl:  88, op: 0.58, rot:  20 }, // Golden yellow
-    { color: '#FFFFF0', w:  760, h: 280, bl: 110, op: 0.50, rot: -12 }, // Direct sunlight
-    { color: '#FFF176', w:  680, h: 240, bl:  72, op: 0.55, rot: -28 }, // Pale noon yellow
-    { color: '#FFE57F', w:  960, h: 280, bl: 115, op: 0.60, rot:  -6 }, // Warm pale gold
-    { color: '#FFFFFF', w:  580, h: 190, bl:  65, op: 0.35, rot:  40 }, // Sun glare
-    { color: '#FFD740', w:  760, h: 270, bl:  82, op: 0.48, rot: -44 }, // Warm gold
-    { color: '#FFF9C4', w:  840, h: 230, bl:  96, op: 0.45, rot:  24 }, // Cream highlight
+    { color: '#FFC107', w: 1100, h: 360, bl: 100, op: 0.62, rot:  -8 }, // Deep warm amber
+    { color: '#80DEEA', w:  920, h: 300, bl:  88, op: 0.55, rot:  20 }, // Bay turquoise
+    { color: '#FFCCBC', w:  760, h: 280, bl: 110, op: 0.52, rot: -12 }, // Warm sand coral
+    { color: '#FFD740', w:  680, h: 240, bl:  72, op: 0.60, rot: -28 }, // Warm golden yellow
+    { color: '#B2EBF2', w:  960, h: 280, bl: 115, op: 0.50, rot:  -6 }, // Cool bay mist
+    { color: '#FFB300', w:  580, h: 190, bl:  65, op: 0.58, rot:  40 }, // Rich amber sunlight
+    { color: '#80CBC4', w:  760, h: 270, bl:  82, op: 0.45, rot: -44 }, // Teal water
+    { color: '#FFAB91', w:  840, h: 230, bl:  96, op: 0.48, rot:  24 }, // Warm peach glow
   ];
 
   (function initGobos() {
