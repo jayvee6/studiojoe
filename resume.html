@@ -74,18 +74,11 @@
     }
 
 
-    /* ── Gobo lights ───────────────────────────────────────── */
+    /* ── Starfield container ───────────────────────────────── */
     #gobo {
       position: fixed; inset: 0; z-index: 6;
       pointer-events: none; overflow: hidden;
     }
-    .gobo-blob {
-      position: absolute; border-radius: 50%;
-      pointer-events: none; user-select: none;
-      will-change: transform, opacity;
-      mix-blend-mode: screen;
-    }
-    [data-theme="light"] .gobo-blob { mix-blend-mode: multiply; }
 
     /* ── Section deco emojis ───────────────────────────────── */
     .deco-e {
@@ -147,17 +140,8 @@
       overflow: hidden;
     }
 
-    /* Content sections sit above the gobo layer (z-index 6).
-       A solid-ish background ensures text is never washed out by the color blobs. */
     #expertise, #known, #work, #now {
       z-index: 12;
-      background: rgba(3, 3, 14, 0.84);
-    }
-    [data-theme="light"] #expertise,
-    [data-theme="light"] #known,
-    [data-theme="light"] #work,
-    [data-theme="light"] #now {
-      background: rgba(245, 245, 247, 0.92);
     }
 
     /* ── Section labels ────────────────────────────────────── */
@@ -295,17 +279,53 @@
       font-size: 13px; line-height: 1.65; color: var(--label-2);
     }
 
-    /* ── Expertise grid ────────────────────────────────────── */
+    /* ── Expertise grid — Liquid Glass ────────────────────── */
     .expertise-grid {
       display: grid; grid-template-columns: repeat(3, 1fr);
-      gap: 1px; background: var(--sep);
-      border: 1px solid var(--sep);
-      border-radius: 18px; overflow: hidden;
+      gap: 14px;
     }
     .e-card {
-      background: var(--glass-bg);
-      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      background: rgba(255,255,255,0.07);
+      backdrop-filter: url(#lg-refract) blur(16px) saturate(180%);
+      -webkit-backdrop-filter: blur(16px) saturate(180%);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 18px;
       padding: 32px 28px;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.42),
+        inset 1px 0 0 rgba(255,255,255,0.12),
+        inset 0 -1px 0 rgba(0,0,0,0.18),
+        0 8px 32px rgba(0,0,0,0.28),
+        0 1px 4px rgba(0,0,0,0.12);
+      transition: transform 0.45s cubic-bezier(0.34,1.56,0.64,1),
+                  box-shadow 0.4s ease;
+    }
+    .e-card:hover {
+      transform: translateY(-3px) scale(1.01);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.60),
+        inset 1px 0 0 rgba(255,255,255,0.20),
+        inset 0 -1px 0 rgba(0,0,0,0.18),
+        0 20px 52px rgba(0,0,0,0.38),
+        0 4px 10px rgba(0,0,0,0.16);
+    }
+    [data-theme="light"] .e-card {
+      background: rgba(255,255,255,0.52);
+      border: 1px solid rgba(255,255,255,0.72);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.90),
+        inset 1px 0 0 rgba(255,255,255,0.60),
+        inset 0 -1px 0 rgba(0,50,120,0.08),
+        0 8px 32px rgba(0,30,80,0.14),
+        0 1px 4px rgba(0,30,80,0.08);
+    }
+    [data-theme="light"] .e-card:hover {
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,1),
+        inset 1px 0 0 rgba(255,255,255,0.80),
+        inset 0 -1px 0 rgba(0,50,120,0.08),
+        0 20px 52px rgba(0,30,80,0.20),
+        0 4px 10px rgba(0,30,80,0.10);
     }
     .e-bar {
       width: 22px; height: 2px; background: var(--accent);
@@ -412,6 +432,17 @@
 
 <div class="grain" aria-hidden="true"></div>
 <div id="gobo"    aria-hidden="true"></div>
+
+<!-- Liquid glass: SVG displacement applied via backdrop-filter -->
+<svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+  <defs>
+    <filter id="lg-refract" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.012 0.008" numOctaves="3" seed="5" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="18" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </defs>
+</svg>
+
 
 <!-- ═══════════════════════════════════ HEADER ═══ -->
 <header>
@@ -660,56 +691,6 @@
     );
   }
 
-  // ── Gobo lights — Apple system palette ─────────────────────
-  const _BLOBS = [
-    { color: '#0A84FF', sz: 420, bl: 110, op: 0.55 }, // Blue      (accent)
-    { color: '#BF5AF2', sz: 360, bl:  95, op: 0.48 }, // Purple
-    { color: '#FF375F', sz: 300, bl:  80, op: 0.45 }, // Pink/Red
-    { color: '#30D158', sz: 340, bl:  90, op: 0.42 }, // Green
-    { color: '#FF9F0A', sz: 310, bl:  82, op: 0.50 }, // Orange
-    { color: '#5E5CE6', sz: 390, bl: 100, op: 0.45 }, // Indigo
-    { color: '#64D2FF', sz: 280, bl:  74, op: 0.52 }, // Cyan
-    { color: '#FFD60A', sz: 260, bl:  70, op: 0.38 }, // Yellow
-  ];
-
-  (function initGobos() {
-    const container = document.getElementById('gobo');
-    const COLS = 4, ROWS = 2, CW = 100 / COLS, CH = 100 / ROWS;
-    const active = [];
-
-    _BLOBS.forEach((g, i) => {
-      const col = i % COLS, row = Math.floor(i / COLS);
-      const x = col * CW + CW * 0.1 + Math.random() * CW * 0.8;
-      const y = row * CH + CH * 0.1 + Math.random() * CH * 0.8;
-
-      const el = document.createElement('span');
-      el.className = 'gobo-blob';
-      Object.assign(el.style, {
-        width:  g.sz + 'px', height: g.sz + 'px',
-        background: g.color,
-        left: x + '%',  top: y + '%',
-        filter: `blur(${g.bl}px)`,
-        opacity: 0,
-      });
-      container.appendChild(el);
-
-      gsap.to(el, { opacity: g.op, duration: 3, delay: i * 0.55, ease: 'power1.inOut' });
-
-      active.push({ el, g, ox: Math.random() * 100, oy: Math.random() * 100,
-                    range: 80 + Math.random() * 60 });
-    });
-
-    gsap.ticker.add(time => {
-      const t = time * 0.07;
-      active.forEach(({ el, g, ox, oy, range }) => {
-        const px = pnoise(t + ox,             oy         ) * range;
-        const py = pnoise(ox,                 t + oy     ) * range;
-        const no = (pnoise(t * 0.5 + ox * 3, oy * 3) + 1) * 0.5;
-        gsap.set(el, { x: px, y: py, opacity: g.op * (0.55 + no * 0.70) });
-      });
-    });
-  })();
-
   // ── Deco emojis — randomised per section, Perlin XY + rotation ──
   (function initDecoEmojis() {
     // Per-section themed pools
@@ -836,6 +817,21 @@
   });
 
   applySize(tsActive);
+
+  // ── Liquid glass hover — animate backdrop displacement scale ──
+  const lgDM = document.querySelector('#lg-refract feDisplacementMap');
+  if (lgDM) {
+    let raf, current = 18, target = 18;
+    function lgTick() {
+      current += (target - current) * 0.12;
+      lgDM.setAttribute('scale', current.toFixed(2));
+      if (Math.abs(target - current) > 0.1) raf = requestAnimationFrame(lgTick);
+    }
+    document.querySelectorAll('.e-card').forEach(card => {
+      card.addEventListener('mouseenter', () => { target = 36; cancelAnimationFrame(raf); raf = requestAnimationFrame(lgTick); });
+      card.addEventListener('mouseleave', () => { target = 18; cancelAnimationFrame(raf); raf = requestAnimationFrame(lgTick); });
+    });
+  }
 
 })();
 </script>
