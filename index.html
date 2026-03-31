@@ -15,7 +15,7 @@
       --font:      -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
                    "Helvetica Neue", Arial, sans-serif;
       --bg:        #000000;
-      --bg-g:      radial-gradient(ellipse at 25% 25%, #0c0c22 0%, #060610 45%, #000 100%);
+      --bg-g:      radial-gradient(ellipse at 35% 15%, #1A237E 0%, #191970 28%, #0d0d3a 58%, #050510 100%);
       --label-1:   rgba(255,255,255,0.92);
       --label-2:   rgba(255,255,255,0.55);
       --label-3:   rgba(255,255,255,0.25);
@@ -30,19 +30,19 @@
     }
 
     [data-theme="light"] {
-      --bg:        #f5f5f7;
-      --bg-g:      linear-gradient(160deg, #f5f5f7 0%, #e8e8ed 100%);
-      --label-1:   rgba(0,0,0,0.88);
-      --label-2:   rgba(0,0,0,0.55);
-      --label-3:   rgba(0,0,0,0.28);
-      --accent:    #0071E3;
-      --accent-bg: rgba(0,113,227,0.08);
-      --fill-1:    rgba(0,0,0,0.03);
-      --fill-2:    rgba(0,0,0,0.06);
-      --sep:       rgba(0,0,0,0.09);
-      --glass-bg:  rgba(255,255,255,0.78);
-      --glass-bdr: rgba(0,0,0,0.07);
-      --glass-shd: 0 8px 40px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.9);
+      --bg:        #E8F4FF;
+      --bg-g:      linear-gradient(175deg, #0096FF 0%, #1E90FF 28%, #5BB8FF 52%, #C8E8FF 72%, #EEF7FF 100%);
+      --label-1:   #001E3C;
+      --label-2:   rgba(0,30,60,0.55);
+      --label-3:   rgba(0,30,60,0.28);
+      --accent:    #E8450A;
+      --accent-bg: rgba(232,69,10,0.28);
+      --fill-1:    rgba(0,100,200,0.05);
+      --fill-2:    rgba(0,100,200,0.09);
+      --sep:       rgba(0,80,180,0.12);
+      --glass-bg:  rgba(200,230,255,0.68);
+      --glass-bdr: rgba(0,100,200,0.14);
+      --glass-shd: 0 8px 40px rgba(0,50,120,0.12), inset 0 1px 0 rgba(255,255,255,0.85);
     }
 
     html {
@@ -67,16 +67,6 @@
     #gobo {
       position: fixed; inset: 0; z-index: 6;
       pointer-events: none; overflow: hidden;
-      /* Fade the entire layer to transparent at all four edges —
-         no hard clip line in either dark or light mode */
-      -webkit-mask-image:
-        linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%),
-        linear-gradient(to right,  transparent 0%, black  8%, black 92%, transparent 100%);
-      -webkit-mask-composite: destination-in;
-      mask-image:
-        linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%),
-        linear-gradient(to right,  transparent 0%, black  8%, black 92%, transparent 100%);
-      mask-composite: intersect;
     }
     /* Color blobs: additive glow on dark, watercolor wash on light */
     .gobo-blob {
@@ -110,7 +100,7 @@
       -webkit-backdrop-filter: saturate(180%) blur(20px);
       transition: background 0.3s, border-color 0.3s;
     }
-    [data-theme="light"] header { background: rgba(245,245,247,0.75); }
+    [data-theme="light"] header { background: rgba(0,100,200,0.35); }
 
     .wordmark {
       font-size: 15px; font-weight: 700;
@@ -285,7 +275,7 @@
 
   // ── Dark / Light toggle ────────────────────────────────
   const btn    = document.getElementById('theme-btn');
-  let   isDark = localStorage.getItem('theme') !== 'light';
+  let   isDark = (() => { try { return localStorage.getItem('theme') !== 'light'; } catch(e) { return true; } })();
 
   function applyTheme() {
     document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
@@ -294,7 +284,7 @@
 
   btn.addEventListener('click', () => {
     isDark = !isDark;
-    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    try { localStorage.setItem('theme', isDark ? 'dark' : 'light'); } catch(e) {}
     applyTheme();
   });
 
