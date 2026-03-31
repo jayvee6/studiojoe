@@ -140,17 +140,8 @@
       overflow: hidden;
     }
 
-    /* Content sections sit above the gobo layer (z-index 6).
-       A solid-ish background ensures text is never washed out by the color blobs. */
     #expertise, #known, #work, #now {
       z-index: 12;
-      background: rgba(3, 3, 14, 0.84);
-    }
-    [data-theme="light"] #expertise,
-    [data-theme="light"] #known,
-    [data-theme="light"] #work,
-    [data-theme="light"] #now {
-      background: rgba(245, 245, 247, 0.92);
     }
 
     /* ── Section labels ────────────────────────────────────── */
@@ -295,7 +286,7 @@
     }
     .e-card {
       background: rgba(255,255,255,0.07);
-      backdrop-filter: blur(16px) saturate(180%);
+      backdrop-filter: url(#lg-refract) blur(16px) saturate(180%);
       -webkit-backdrop-filter: blur(16px) saturate(180%);
       border: 1px solid rgba(255,255,255,0.18);
       border-radius: 18px;
@@ -442,29 +433,16 @@
 <div class="grain" aria-hidden="true"></div>
 <div id="gobo"    aria-hidden="true"></div>
 
-<!-- Liquid glass displacement filters — one per expertise card -->
+<!-- Liquid glass: SVG displacement applied via backdrop-filter -->
 <svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
   <defs>
-    <filter id="lg-0" x="-4%" y="-4%" width="108%" height="108%" color-interpolation-filters="sRGB">
-      <feTurbulence type="fractalNoise" baseFrequency="0.85 0.65" numOctaves="3" seed="2"  result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="4" xChannelSelector="R" yChannelSelector="G"/>
-    </filter>
-    <filter id="lg-1" x="-4%" y="-4%" width="108%" height="108%" color-interpolation-filters="sRGB">
-      <feTurbulence type="fractalNoise" baseFrequency="0.85 0.65" numOctaves="3" seed="7"  result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="4" xChannelSelector="R" yChannelSelector="G"/>
-    </filter>
-    <filter id="lg-2" x="-4%" y="-4%" width="108%" height="108%" color-interpolation-filters="sRGB">
-      <feTurbulence type="fractalNoise" baseFrequency="0.85 0.65" numOctaves="3" seed="13" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="4" xChannelSelector="R" yChannelSelector="G"/>
-    </filter>
-    <filter id="lg-3" x="-4%" y="-4%" width="108%" height="108%" color-interpolation-filters="sRGB">
-      <feTurbulence type="fractalNoise" baseFrequency="0.85 0.65" numOctaves="3" seed="19" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="4" xChannelSelector="R" yChannelSelector="G"/>
-    </filter>
-    <filter id="lg-4" x="-4%" y="-4%" width="108%" height="108%" color-interpolation-filters="sRGB">
-      <feTurbulence type="fractalNoise" baseFrequency="0.85 0.65" numOctaves="3" seed="29" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="4" xChannelSelector="R" yChannelSelector="G"/>
-    </filter>
-    <filter id="lg-5" x="-4%" y="-4%" width="108%" height="108%" color-interpolation-filters="sRGB">
-      <feTurbulence type="fractalNoise" baseFrequency="0.85 0.65" numOctaves="3" seed="37" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="4" xChannelSelector="R" yChannelSelector="G"/>
+    <filter id="lg-refract" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.012 0.008" numOctaves="3" seed="5" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="18" xChannelSelector="R" yChannelSelector="G"/>
     </filter>
   </defs>
 </svg>
+
 
 <!-- ═══════════════════════════════════ HEADER ═══ -->
 <header>
@@ -840,20 +818,20 @@
 
   applySize(tsActive);
 
-  // ── Liquid glass hover — animate feDisplacementMap scale per card ──
-  document.querySelectorAll('.e-card').forEach((card, i) => {
-    card.style.filter = `url(#lg-${i})`;
-    const dm = document.querySelector(`#lg-${i} feDisplacementMap`);
-    if (!dm) return;
-    let raf, current = 4, target = 4;
-    function tick() {
-      current += (target - current) * 0.14;
-      dm.setAttribute('scale', current.toFixed(2));
-      if (Math.abs(target - current) > 0.08) raf = requestAnimationFrame(tick);
+  // ── Liquid glass hover — animate backdrop displacement scale ──
+  const lgDM = document.querySelector('#lg-refract feDisplacementMap');
+  if (lgDM) {
+    let raf, current = 18, target = 18;
+    function lgTick() {
+      current += (target - current) * 0.12;
+      lgDM.setAttribute('scale', current.toFixed(2));
+      if (Math.abs(target - current) > 0.1) raf = requestAnimationFrame(lgTick);
     }
-    card.addEventListener('mouseenter', () => { target = 11; cancelAnimationFrame(raf); raf = requestAnimationFrame(tick); });
-    card.addEventListener('mouseleave', () => { target = 4;  cancelAnimationFrame(raf); raf = requestAnimationFrame(tick); });
-  });
+    document.querySelectorAll('.e-card').forEach(card => {
+      card.addEventListener('mouseenter', () => { target = 36; cancelAnimationFrame(raf); raf = requestAnimationFrame(lgTick); });
+      card.addEventListener('mouseleave', () => { target = 18; cancelAnimationFrame(raf); raf = requestAnimationFrame(lgTick); });
+    });
+  }
 
 })();
 </script>
