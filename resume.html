@@ -842,23 +842,27 @@
 
   applySize(tsActive);
 
-  // ── Liquid glass: perimeter specular — lights up the edge closest to the mouse ──
+  // ── Liquid glass: perimeter specular — only active on the card under the cursor ──
   const eCards = document.querySelectorAll('.e-card');
   document.addEventListener('mousemove', e => {
     eCards.forEach(card => {
-      const r  = card.getBoundingClientRect();
-      // Closest point on card border to the mouse
-      const bx = Math.max(r.left, Math.min(e.clientX, r.right));
-      const by = Math.max(r.top,  Math.min(e.clientY, r.bottom));
-      // Angle from card center to that closest border point
+      const r = card.getBoundingClientRect();
+      const inside = e.clientX >= r.left && e.clientX <= r.right &&
+                     e.clientY >= r.top  && e.clientY <= r.bottom;
+      if (!inside) {
+        card.style.setProperty('--si', '0');
+        return;
+      }
+      // Angle from card center toward the mouse (= direction of nearest edge)
       const cx  = r.left + r.width  / 2;
       const cy  = r.top  + r.height / 2;
-      const deg = Math.atan2(by - cy, bx - cx) * (180 / Math.PI);
+      const deg = Math.atan2(e.clientY - cy, e.clientX - cx) * (180 / Math.PI);
       card.style.setProperty('--angle', deg.toFixed(1));
-      // Intensity: brightest when mouse is on/inside card, fades at ~180px out
-      const dist = Math.sqrt((e.clientX - bx) ** 2 + (e.clientY - by) ** 2);
-      const intensity = Math.max(0, 1 - dist / 180).toFixed(3);
-      card.style.setProperty('--si', intensity);
+      // Intensity: 1 at the edge, fades toward the card center
+      const distToEdge = Math.min(e.clientX - r.left, r.right - e.clientX,
+                                  e.clientY - r.top,  r.bottom - e.clientY);
+      const reach = Math.min(r.width, r.height) * 0.45;
+      card.style.setProperty('--si', Math.max(0, 1 - distToEdge / reach).toFixed(3));
     });
   });
 
