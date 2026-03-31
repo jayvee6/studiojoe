@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  html-lint:
+    name: HTML Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run HTMLHint
+        run: npx --yes htmlhint "*.html"
+
+  link-check:
+    name: Link Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --verbose
+            --no-progress
+            --base https://studiojoe.dev
+            --accept 999
+            --exclude "https://cdnjs.cloudflare.com"
+            --exclude "https://fonts.googleapis.com"
+            --exclude "https://fonts.gstatic.com"
+            '*.html'
+          fail: true
+
+  accessibility:
+    name: Accessibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Serve site locally
+        run: npx --yes serve . -p 3000 &
+      - name: Wait for server
+        run: npx --yes wait-on http://localhost:3000
+      - name: Run pa11y on homepage
+        run: npx --yes pa11y --chromium-arg=--no-sandbox http://localhost:3000
+      - name: Run pa11y on resume
+        run: npx --yes pa11y --chromium-arg=--no-sandbox http://localhost:3000/resume.html
