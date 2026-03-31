@@ -318,17 +318,16 @@
     );
   }
 
-  // ── Gobo lights — Apple system palette ───────────────────
-  // Colors match the presentation skill swatches
+  // ── Gobo lights — galaxy/nebula palette ──────────────────
   const _BLOBS = [
-    { color: '#0A84FF', sz: 420, bl: 110, op: 0.55 }, // Blue      (accent)
-    { color: '#BF5AF2', sz: 360, bl:  95, op: 0.48 }, // Purple
-    { color: '#FF375F', sz: 300, bl:  80, op: 0.45 }, // Pink/Red
-    { color: '#30D158', sz: 340, bl:  90, op: 0.42 }, // Green
-    { color: '#FF9F0A', sz: 310, bl:  82, op: 0.50 }, // Orange
-    { color: '#5E5CE6', sz: 390, bl: 100, op: 0.45 }, // Indigo
-    { color: '#64D2FF', sz: 280, bl:  74, op: 0.52 }, // Cyan
-    { color: '#FFD60A', sz: 260, bl:  70, op: 0.38 }, // Yellow
+    { color: '#1a3aff', w: 900, h: 280, bl: 340, op: 0.55, rot: -15 }, // Deep blue galactic band
+    { color: '#7B2FFF', w: 780, h: 240, bl: 310, op: 0.50, rot:  25 }, // Violet arm
+    { color: '#FF2D9B', w: 480, h: 260, bl: 270, op: 0.42, rot: -42 }, // Magenta nebula
+    { color: '#0A84FF', w: 620, h: 210, bl: 290, op: 0.52, rot:  12 }, // Blue nebula
+    { color: '#64D2FF', w: 440, h: 140, bl: 250, op: 0.46, rot:  52 }, // Cyan wisp
+    { color: '#BF5AF2', w: 680, h: 200, bl: 300, op: 0.45, rot: -28 }, // Purple haze
+    { color: '#FF9F0A', w: 300, h: 170, bl: 220, op: 0.38, rot:  68 }, // Warm star cluster
+    { color: '#FF375F', w: 360, h: 150, bl: 240, op: 0.34, rot: -55 }, // Red giant region
   ];
 
   (function initGobos() {
@@ -344,7 +343,7 @@
       const el = document.createElement('span');
       el.className = 'gobo-blob';
       Object.assign(el.style, {
-        width:  g.sz + 'px', height: g.sz + 'px',
+        width:  g.w + 'px', height: g.h + 'px',
         background: g.color,
         left: x + '%',  top: y + '%',
         filter: `blur(${g.bl}px)`,
@@ -355,16 +354,17 @@
       gsap.to(el, { opacity: g.op, duration: 3, delay: i * 0.55, ease: 'power1.inOut' });
 
       active.push({ el, g, ox: Math.random() * 100, oy: Math.random() * 100,
-                    range: 80 + Math.random() * 60 });
+                    range: 60 + Math.random() * 50 });
     });
 
     gsap.ticker.add(time => {
       const t = time * 0.07;
       active.forEach(({ el, g, ox, oy, range }) => {
-        const px = pnoise(t + ox,           oy         ) * range;
-        const py = pnoise(ox,               t + oy     ) * range;
-        const no = (pnoise(t * 0.5 + ox * 3, oy * 3) + 1) * 0.5;
-        gsap.set(el, { x: px, y: py, opacity: g.op * (0.55 + no * 0.70) });
+        const px  = pnoise(t + ox,             oy           ) * range;
+        const py  = pnoise(ox,                 t + oy       ) * range;
+        const no  = (pnoise(t * 0.5 + ox * 3, oy * 3) + 1) * 0.5;
+        const rot = g.rot + pnoise(t * 0.015 + ox, oy * 2) * 22;
+        gsap.set(el, { x: px, y: py, rotate: rot, opacity: g.op * (0.55 + no * 0.70) });
       });
     });
   })();
