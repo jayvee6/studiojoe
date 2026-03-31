@@ -301,20 +301,28 @@
                   box-shadow 0.4s ease;
       position: relative; isolation: isolate;
     }
+    /* Perimeter specular — bright arc sweeps around the border edge */
     .e-card::before {
       content: '';
-      position: absolute; inset: 0;
-      border-radius: inherit;
-      background: radial-gradient(
-        circle at calc(var(--mx, 50) * 1%) calc(var(--my, 50) * 1%),
-        rgba(255,255,255,0.28) 0%,
-        rgba(255,255,255,0.08) 35%,
-        transparent 65%
+      position: absolute; inset: -1px;
+      border-radius: 19px;
+      padding: 1px;
+      background: conic-gradient(
+        from calc(var(--angle, -135) * 1deg - 40deg),
+        transparent 0deg,
+        rgba(255,255,255,0.06) 20deg,
+        rgba(255,255,255,0.55) 50deg,
+        rgba(255,255,255,0.06) 80deg,
+        transparent 120deg,
+        transparent 360deg
       );
+      -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
       pointer-events: none; z-index: 0;
-      opacity: 0; transition: opacity 0.25s ease;
     }
-    .e-card:hover::before { opacity: 1; }
     .e-card > * { position: relative; z-index: 1; }
     .e-card:hover {
       transform: translateY(-3px) scale(1.01);
@@ -834,16 +842,17 @@
 
   applySize(tsActive);
 
-  // ── Liquid glass: interactive specular highlight follows cursor ──
+  // ── Liquid glass: perimeter specular sweeps around edge by mouse angle ──
   document.querySelectorAll('.e-card').forEach(card => {
     card.addEventListener('mousemove', e => {
-      const r = card.getBoundingClientRect();
-      card.style.setProperty('--mx', ((e.clientX - r.left) / r.width  * 100).toFixed(1));
-      card.style.setProperty('--my', ((e.clientY - r.top)  / r.height * 100).toFixed(1));
+      const r   = card.getBoundingClientRect();
+      const cx  = r.left + r.width  / 2;
+      const cy  = r.top  + r.height / 2;
+      const deg = Math.atan2(e.clientY - cy, e.clientX - cx) * (180 / Math.PI);
+      card.style.setProperty('--angle', deg.toFixed(1));
     });
     card.addEventListener('mouseleave', () => {
-      card.style.setProperty('--mx', '50');
-      card.style.setProperty('--my', '50');
+      card.style.setProperty('--angle', '-135'); // reset to top-left
     });
   });
 
