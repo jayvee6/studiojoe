@@ -33,16 +33,16 @@
       --bg:        #E8F4FF;
       --bg-g:      linear-gradient(175deg, #0096FF 0%, #1E90FF 28%, #5BB8FF 52%, #C8E8FF 72%, #EEF7FF 100%);
       --label-1:   #001E3C;
-      --label-2:   rgba(0,30,60,0.55);
-      --label-3:   rgba(0,30,60,0.28);
+      --label-2:   rgba(0,30,60,0.60);
+      --label-3:   rgba(0,30,60,0.32);
       --accent:    #E8450A;
-      --accent-bg: rgba(232,69,10,0.28);
-      --fill-1:    rgba(0,100,200,0.05);
-      --fill-2:    rgba(0,100,200,0.09);
-      --sep:       rgba(0,80,180,0.12);
-      --glass-bg:  rgba(200,230,255,0.68);
-      --glass-bdr: rgba(0,100,200,0.14);
-      --glass-shd: 0 8px 40px rgba(0,50,120,0.12), inset 0 1px 0 rgba(255,255,255,0.85);
+      --accent-bg: rgba(232,69,10,0.15);
+      --fill-1:    rgba(0,30,60,0.04);
+      --fill-2:    rgba(0,30,60,0.08);
+      --sep:       rgba(0,30,60,0.10);
+      --glass-bg:  rgba(200,230,255,0.65);
+      --glass-bdr: rgba(0,80,180,0.14);
+      --glass-shd: 0 8px 40px rgba(0,30,80,0.12), inset 0 1px 0 rgba(255,255,255,0.85);
     }
 
     html {
@@ -75,7 +75,7 @@
       will-change: transform, opacity;
       mix-blend-mode: screen;
     }
-    [data-theme="light"] .gobo-blob { mix-blend-mode: multiply; }
+    [data-theme="light"] .gobo-blob { mix-blend-mode: screen; }
 
 
     /* ── Grain ─────────────────────────────────────────── */
@@ -100,7 +100,7 @@
       -webkit-backdrop-filter: saturate(180%) blur(20px);
       transition: background 0.3s, border-color 0.3s;
     }
-    [data-theme="light"] header { background: rgba(0,100,200,0.35); }
+    [data-theme="light"] header { background: rgba(0,60,140,0.30); }
 
     .wordmark {
       font-size: 15px; font-weight: 700;
@@ -205,8 +205,10 @@
       justify-content: space-between; gap: 12px;
     }
     [data-theme="light"] footer {
-      background: linear-gradient(to top, rgba(0,20,80,0.28) 0%, transparent 100%);
+      background: linear-gradient(to top, rgba(0,20,80,0.35) 0%, transparent 100%);
     }
+    [data-theme="light"] .footer-sub,
+    [data-theme="light"] .footer-link { color: var(--label-2); }
     .footer-sub {
       font-size: 11px; color: var(--label-3);
       letter-spacing: 0.04em;
@@ -318,8 +320,8 @@
     );
   }
 
-  // ── Gobo lights — warm nebula palette (Orion / Carina / Rosette) ─
-  const _BLOBS = [
+  // ── Gobo lights ───────────────────────────────────────────────
+  const _BLOBS_DARK = [
     { color: '#C44A00', w: 1100, h: 360, bl: 100, op: 0.62, rot:  -8 }, // Rust orange sweep
     { color: '#8B3200', w:  920, h: 300, bl:  88, op: 0.55, rot:  20 }, // Deep amber band
     { color: '#FF8C2A', w:  680, h: 240, bl:  72, op: 0.48, rot: -28 }, // Bright orange core
@@ -329,11 +331,22 @@
     { color: '#6B1A00', w:  760, h: 270, bl:  82, op: 0.50, rot: -44 }, // Deep rust shadow
     { color: '#7B2FBF', w:  840, h: 230, bl:  96, op: 0.46, rot:  24 }, // Indigo-violet depth
   ];
+  const _BLOBS_LIGHT = [
+    { color: '#FFEA00', w: 1100, h: 360, bl: 100, op: 0.62, rot:  -8 }, // Noon yellow sweep
+    { color: '#FFD600', w:  920, h: 300, bl:  88, op: 0.58, rot:  20 }, // Golden yellow
+    { color: '#FFFFF0', w:  760, h: 280, bl: 110, op: 0.50, rot: -12 }, // Direct sunlight
+    { color: '#FFF176', w:  680, h: 240, bl:  72, op: 0.55, rot: -28 }, // Pale noon yellow
+    { color: '#FFE57F', w:  960, h: 280, bl: 115, op: 0.60, rot:  -6 }, // Warm pale gold
+    { color: '#FFFFFF', w:  580, h: 190, bl:  65, op: 0.35, rot:  40 }, // Sun glare
+    { color: '#FFD740', w:  760, h: 270, bl:  82, op: 0.48, rot: -44 }, // Warm gold
+    { color: '#FFF9C4', w:  840, h: 230, bl:  96, op: 0.45, rot:  24 }, // Cream highlight
+  ];
 
   (function initGobos() {
     const container = document.getElementById('gobo');
     const COLS = 4, ROWS = 2, CW = 100 / COLS, CH = 100 / ROWS;
     const active = [];
+    const _BLOBS = isDark ? _BLOBS_DARK : _BLOBS_LIGHT;
 
     _BLOBS.forEach((g, i) => {
       const col = i % COLS, row = Math.floor(i / COLS);
