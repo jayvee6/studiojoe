@@ -205,33 +205,63 @@
       text-decoration: none; transition: all 0.2s;
       letter-spacing: -0.01em;
     }
-    .btn-solid { background: var(--accent); color: #fff; }
-    .btn-solid:hover { filter: brightness(1.12); }
-    .btn-ghost {
-      background: var(--fill-2); color: var(--label-1);
-      border: 1px solid var(--glass-bdr);
+    .btn-solid {
+      background: var(--accent); color: #fff;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.28),
+        inset 0 -1px 0 rgba(0,0,0,0.22),
+        0 2px 10px rgba(10,132,255,0.38);
     }
-    .btn-ghost:hover { background: var(--fill-1); }
+    .btn-solid:hover {
+      filter: brightness(1.12);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.28),
+        inset 0 -1px 0 rgba(0,0,0,0.22),
+        0 4px 18px rgba(10,132,255,0.52);
+    }
+    .btn-ghost {
+      background: rgba(255,255,255,0.09);
+      color: var(--label-1);
+      border: 1px solid rgba(255,255,255,0.16);
+      backdrop-filter: blur(12px) saturate(180%);
+      -webkit-backdrop-filter: blur(12px) saturate(180%);
+      box-shadow:
+        inset 0 1.5px 0 rgba(255,255,255,0.42),
+        inset 0 -1px 0 rgba(0,0,0,0.18),
+        0 2px 8px rgba(0,0,0,0.24);
+    }
+    .btn-ghost:hover {
+      background: rgba(255,255,255,0.14);
+      box-shadow:
+        inset 0 1.5px 0 rgba(255,255,255,0.55),
+        inset 0 -1px 0 rgba(0,0,0,0.18),
+        0 4px 14px rgba(0,0,0,0.32);
+    }
+    [data-theme="light"] .btn-ghost {
+      background: rgba(255,255,255,0.60);
+      border: 1px solid rgba(255,255,255,0.82);
+      box-shadow:
+        inset 0 1.5px 0 rgba(255,255,255,0.92),
+        inset 0 -1px 0 rgba(0,60,140,0.08),
+        0 2px 8px rgba(0,30,80,0.10);
+    }
+    [data-theme="light"] .btn-ghost:hover {
+      background: rgba(255,255,255,0.78);
+    }
 
     /* ── Work cards ────────────────────────────────────────── */
     .card-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 1px; background: var(--sep);
-      border: 1px solid var(--sep);
-      border-radius: 18px; overflow: hidden;
+      gap: 14px;
     }
-
     .card {
-      background: var(--glass-bg);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
       padding: 28px 26px;
       display: flex; flex-direction: column; gap: 10px;
       min-height: 196px;
-      transition: background 0.2s;
+      transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.35s ease;
     }
-    .card:hover { background: var(--fill-2); }
+    .card:hover { transform: translateY(-2px) scale(1.01); }
 
     .card-top {
       display: flex; align-items: center;
@@ -279,55 +309,65 @@
       font-size: 13px; line-height: 1.65; color: var(--label-2);
     }
 
-    /* ── Expertise grid — Liquid Glass ────────────────────── */
+    /* ── Shared liquid glass mixin ─────────────────────────── */
+    .e-card, .now-card, .card {
+      background: rgba(255,255,255,0.065);
+      backdrop-filter: url(#lg-refract) blur(12px) saturate(200%);
+      -webkit-backdrop-filter: blur(12px) saturate(200%);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 18px;
+      box-shadow:
+        inset 0 1.5px 0 rgba(255,255,255,0.48),
+        inset 1px 0 0 rgba(255,255,255,0.10),
+        inset -1px 0 0 rgba(255,255,255,0.06),
+        inset 0 -1.5px 0 rgba(0,0,0,0.22),
+        0 8px 32px rgba(0,0,0,0.38),
+        0 1px 2px rgba(0,0,0,0.18);
+    }
+    .e-card:hover, .now-card:hover, .card:hover {
+      box-shadow:
+        inset 0 1.5px 0 rgba(255,255,255,0.62),
+        inset 1px 0 0 rgba(255,255,255,0.18),
+        inset -1px 0 0 rgba(255,255,255,0.10),
+        inset 0 -1.5px 0 rgba(0,0,0,0.22),
+        0 20px 52px rgba(0,0,0,0.44),
+        0 4px 10px rgba(0,0,0,0.18);
+    }
+    [data-theme="light"] .e-card,
+    [data-theme="light"] .now-card,
+    [data-theme="light"] .card {
+      background: rgba(255,255,255,0.55);
+      border: 1px solid rgba(255,255,255,0.78);
+      box-shadow:
+        inset 0 1.5px 0 rgba(255,255,255,0.92),
+        inset 1px 0 0 rgba(255,255,255,0.60),
+        inset -1px 0 0 rgba(255,255,255,0.40),
+        inset 0 -1.5px 0 rgba(0,60,140,0.08),
+        0 6px 24px rgba(0,30,80,0.12),
+        0 1px 2px rgba(0,30,80,0.06);
+    }
+    [data-theme="light"] .e-card:hover,
+    [data-theme="light"] .now-card:hover,
+    [data-theme="light"] .card:hover {
+      box-shadow:
+        inset 0 1.5px 0 rgba(255,255,255,1),
+        inset 1px 0 0 rgba(255,255,255,0.80),
+        inset -1px 0 0 rgba(255,255,255,0.60),
+        inset 0 -1.5px 0 rgba(0,60,140,0.08),
+        0 18px 44px rgba(0,30,80,0.18),
+        0 4px 8px rgba(0,30,80,0.08);
+    }
+
+    /* ── Expertise grid ────────────────────────────────────── */
     .expertise-grid {
       display: grid; grid-template-columns: repeat(3, 1fr);
       gap: 14px;
     }
     .e-card {
-      background: rgba(255,255,255,0.07);
-      backdrop-filter: url(#lg-refract) blur(16px) saturate(180%);
-      -webkit-backdrop-filter: blur(16px) saturate(180%);
-      border: 1px solid rgba(255,255,255,0.18);
-      border-radius: 18px;
       padding: 32px 28px;
-      box-shadow:
-        inset 0 1px 0 rgba(255,255,255,0.42),
-        inset 1px 0 0 rgba(255,255,255,0.12),
-        inset 0 -1px 0 rgba(0,0,0,0.18),
-        0 8px 32px rgba(0,0,0,0.28),
-        0 1px 4px rgba(0,0,0,0.12);
-      transition: transform 0.45s cubic-bezier(0.34,1.56,0.64,1),
-                  box-shadow 0.4s ease;
-      position: relative; isolation: isolate;
+      transition: transform 0.45s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.4s ease;
     }
-    .e-card:hover {
-      transform: translateY(-3px) scale(1.01);
-      box-shadow:
-        inset 0 1px 0 rgba(255,255,255,0.60),
-        inset 1px 0 0 rgba(255,255,255,0.20),
-        inset 0 -1px 0 rgba(0,0,0,0.18),
-        0 20px 52px rgba(0,0,0,0.38),
-        0 4px 10px rgba(0,0,0,0.16);
-    }
-    [data-theme="light"] .e-card {
-      background: rgba(255,255,255,0.52);
-      border: 1px solid rgba(255,255,255,0.72);
-      box-shadow:
-        inset 0 1px 0 rgba(255,255,255,0.90),
-        inset 1px 0 0 rgba(255,255,255,0.60),
-        inset 0 -1px 0 rgba(0,50,120,0.08),
-        0 8px 32px rgba(0,30,80,0.14),
-        0 1px 4px rgba(0,30,80,0.08);
-    }
-    [data-theme="light"] .e-card:hover {
-      box-shadow:
-        inset 0 1px 0 rgba(255,255,255,1),
-        inset 1px 0 0 rgba(255,255,255,0.80),
-        inset 0 -1px 0 rgba(0,50,120,0.08),
-        0 20px 52px rgba(0,30,80,0.20),
-        0 4px 10px rgba(0,30,80,0.10);
-    }
+    .e-card:hover { transform: translateY(-3px) scale(1.01); }
     .e-bar {
       width: 22px; height: 2px; background: var(--accent);
       border-radius: 1px; margin-bottom: 20px;
@@ -340,14 +380,13 @@
 
     /* ── Now cards ─────────────────────────────────────────── */
     .now-grid {
-      display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
     }
     .now-card {
-      background: var(--glass-bg); border: 1px solid var(--glass-bdr);
-      border-radius: 18px; padding: 28px;
-      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-      box-shadow: var(--glass-shd);
+      padding: 28px;
+      transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.35s ease;
     }
+    .now-card:hover { transform: translateY(-2px) scale(1.01); }
     .now-tag {
       font-size: 10px; font-weight: 600;
       letter-spacing: 0.1em; text-transform: uppercase;
@@ -434,12 +473,12 @@
 <div class="grain" aria-hidden="true"></div>
 <div id="gobo"    aria-hidden="true"></div>
 
-<!-- Liquid glass: SVG displacement applied via backdrop-filter -->
+<!-- Liquid glass: physics-based SVG displacement (Snell's Law lip refraction) -->
 <svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
   <defs>
-    <filter id="lg-refract" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
-      <feTurbulence type="fractalNoise" baseFrequency="0.012 0.008" numOctaves="3" seed="5" result="n"/>
-      <feDisplacementMap in="SourceGraphic" in2="n" scale="18" xChannelSelector="R" yChannelSelector="G"/>
+    <filter id="lg-refract" x="-6%" y="-6%" width="112%" height="112%" color-interpolation-filters="sRGB">
+      <feImage id="lg-dm" result="dm" preserveAspectRatio="none"/>
+      <feDisplacementMap id="lg-disp" in="SourceGraphic" in2="dm" scale="22" xChannelSelector="R" yChannelSelector="G"/>
     </filter>
   </defs>
 </svg>
@@ -820,20 +859,61 @@
   applySize(tsActive);
 
 
-  // ── Liquid glass hover — animate backdrop displacement scale ──
-  const lgDM = document.querySelector('#lg-refract feDisplacementMap');
-  if (lgDM) {
-    let raf, current = 18, target = 18;
-    function lgTick() {
-      current += (target - current) * 0.12;
-      lgDM.setAttribute('scale', current.toFixed(2));
-      if (Math.abs(target - current) > 0.1) raf = requestAnimationFrame(lgTick);
+  // ── Liquid glass: generate physics-based displacement map (Snell's Law lip profile) ──
+  (function () {
+    const SIZE = 256, EDGE = 0.20; // 20% of each side is the refraction zone
+
+    function smootherstep(x) {
+      x = Math.max(0, Math.min(1, x));
+      return x * x * x * (x * (6 * x - 15) + 10);
     }
-    document.querySelectorAll('.e-card').forEach(card => {
-      card.addEventListener('mouseenter', () => { target = 36; cancelAnimationFrame(raf); raf = requestAnimationFrame(lgTick); });
-      card.addEventListener('mouseleave', () => { target = 18; cancelAnimationFrame(raf); raf = requestAnimationFrame(lgTick); });
-    });
-  }
+    function lip(x) {
+      x = Math.max(0, Math.min(1, x));
+      const s  = smootherstep(x);
+      const cv = Math.sqrt(Math.max(0, 1 - (1 - x) ** 2)); // convex quarter-circle
+      return cv * (1 - s) + (1 - cv) * s;                  // mix toward concave at center
+    }
+    function lipDeriv(x) {
+      const h = 0.0005;
+      return (lip(Math.min(1, x + h)) - lip(Math.max(0, x - h))) / (2 * h);
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = SIZE;
+    const ctx = canvas.getContext('2d');
+    const img = ctx.createImageData(SIZE, SIZE);
+    const d   = img.data;
+
+    for (let py = 0; py < SIZE; py++) {
+      for (let px = 0; px < SIZE; px++) {
+        // Normalized distance from each edge (0 = on edge, 1 = edge-zone boundary)
+        const tl = Math.min(1, (px / (SIZE - 1))           / EDGE);
+        const tr = Math.min(1, ((SIZE - 1 - px) / (SIZE - 1)) / EDGE);
+        const tt = Math.min(1, (py / (SIZE - 1))           / EDGE);
+        const tb = Math.min(1, ((SIZE - 1 - py) / (SIZE - 1)) / EDGE);
+
+        let vx = 0, vy = 0;
+        if (tl < 1) vx += lipDeriv(tl); // left edge  → push right
+        if (tr < 1) vx -= lipDeriv(tr); // right edge → push left
+        if (tt < 1) vy += lipDeriv(tt); // top edge   → push down
+        if (tb < 1) vy -= lipDeriv(tb); // bottom     → push up
+
+        // Clamp to unit circle so corners don't over-saturate
+        const mag = Math.sqrt(vx * vx + vy * vy);
+        if (mag > 1) { vx /= mag; vy /= mag; }
+
+        const i = (py * SIZE + px) * 4;
+        d[i]     = Math.round(128 + vx * 127); // R = horizontal displacement
+        d[i + 1] = Math.round(128 + vy * 127); // G = vertical displacement
+        d[i + 2] = 0;
+        d[i + 3] = 255;
+      }
+    }
+
+    ctx.putImageData(img, 0, 0);
+    const feImg = document.getElementById('lg-dm');
+    if (feImg) feImg.setAttribute('href', canvas.toDataURL());
+  })();
 
 })();
 </script>
