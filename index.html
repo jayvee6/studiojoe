@@ -63,20 +63,11 @@
       transition: background 0.4s, color 0.4s;
     }
 
-    /* ── Gobo lights ───────────────────────────────────── */
+    /* ── Starfield container ───────────────────────────── */
     #gobo {
       position: fixed; inset: 0; z-index: 6;
       pointer-events: none; overflow: hidden;
     }
-    /* Color blobs: additive glow on dark, watercolor wash on light */
-    .gobo-blob {
-      position: absolute; border-radius: 50%;
-      pointer-events: none; user-select: none;
-      will-change: transform, opacity;
-      mix-blend-mode: screen;
-    }
-    [data-theme="light"] .gobo-blob { mix-blend-mode: soft-light; }
-
 
     /* ── Grain ─────────────────────────────────────────── */
     .grain {
@@ -284,21 +275,10 @@
     btn.textContent = isDark ? '☀️' : '🌙';
   }
 
-  let _activeGobos = [];
-
   btn.addEventListener('click', () => {
     isDark = !isDark;
     try { localStorage.setItem('theme', isDark ? 'dark' : 'light'); } catch(e) {}
     applyTheme();
-    const palette = isDark ? _BLOBS_DARK : _BLOBS_LIGHT;
-    const blendMode = isDark ? 'screen' : 'soft-light';
-    _activeGobos.forEach(({ el, g }, i) => {
-      if (!palette[i]) return;
-      Object.assign(g, palette[i]);
-      el.style.background = g.color;
-      el.style.filter = `blur(${g.bl}px)`;
-      el.style.mixBlendMode = blendMode;
-    });
   });
 
   applyTheme();
@@ -330,70 +310,6 @@
       lerp(u, grad(ab, xf, yf - 1),  grad(bb, xf - 1, yf - 1))
     );
   }
-
-  // ── Gobo lights ───────────────────────────────────────────────
-  const _BLOBS_DARK = [
-    { color: '#C44A00', w: 1100, h: 360, bl: 100, op: 0.62, rot:  -8 }, // Rust orange sweep
-    { color: '#8B3200', w:  920, h: 300, bl:  88, op: 0.55, rot:  20 }, // Deep amber band
-    { color: '#FF8C2A', w:  680, h: 240, bl:  72, op: 0.48, rot: -28 }, // Bright orange core
-    { color: '#4B1080', w:  820, h: 340, bl: 110, op: 0.52, rot:  14 }, // Purple void
-    { color: '#1A2A8A', w:  960, h: 280, bl: 115, op: 0.58, rot:  -6 }, // Deep blue space
-    { color: '#D4820A', w:  580, h: 190, bl:  65, op: 0.44, rot:  40 }, // Golden highlight
-    { color: '#6B1A00', w:  760, h: 270, bl:  82, op: 0.50, rot: -44 }, // Deep rust shadow
-    { color: '#7B2FBF', w:  840, h: 230, bl:  96, op: 0.46, rot:  24 }, // Indigo-violet depth
-  ];
-  const _BLOBS_LIGHT = [
-    { color: '#FFC107', w: 1100, h: 360, bl: 100, op: 0.62, rot:  -8 }, // Deep warm amber
-    { color: '#80DEEA', w:  920, h: 300, bl:  88, op: 0.55, rot:  20 }, // Bay turquoise
-    { color: '#FFCCBC', w:  760, h: 280, bl: 110, op: 0.52, rot: -12 }, // Warm sand coral
-    { color: '#FFD740', w:  680, h: 240, bl:  72, op: 0.60, rot: -28 }, // Warm golden yellow
-    { color: '#B2EBF2', w:  960, h: 280, bl: 115, op: 0.50, rot:  -6 }, // Cool bay mist
-    { color: '#FFB300', w:  580, h: 190, bl:  65, op: 0.58, rot:  40 }, // Rich amber sunlight
-    { color: '#80CBC4', w:  760, h: 270, bl:  82, op: 0.45, rot: -44 }, // Teal water
-    { color: '#FFAB91', w:  840, h: 230, bl:  96, op: 0.48, rot:  24 }, // Warm peach glow
-  ];
-
-  (function initGobos() {
-    const container = document.getElementById('gobo');
-    const COLS = 4, ROWS = 2, CW = 100 / COLS, CH = 100 / ROWS;
-    const active = [];
-    const _BLOBS = isDark ? _BLOBS_DARK : _BLOBS_LIGHT;
-
-    _BLOBS.forEach((g, i) => {
-      const col = i % COLS, row = Math.floor(i / COLS);
-      const x = col * CW + CW * 0.1 + Math.random() * CW * 0.8;
-      const y = row * CH + CH * 0.1 + Math.random() * CH * 0.8;
-
-      const el = document.createElement('span');
-      el.className = 'gobo-blob';
-      Object.assign(el.style, {
-        width:  g.w + 'px', height: g.h + 'px',
-        background: g.color,
-        left: x + '%',  top: y + '%',
-        filter: `blur(${g.bl}px)`,
-        opacity: 0,
-      });
-      container.appendChild(el);
-
-      gsap.to(el, { opacity: g.op, duration: 3, delay: i * 0.55, ease: 'power1.inOut' });
-
-      active.push({ el, g, ox: Math.random() * 100, oy: Math.random() * 100,
-                    range: 60 + Math.random() * 50 });
-    });
-
-    _activeGobos = active;
-
-    gsap.ticker.add(time => {
-      const t = time * 0.07;
-      active.forEach(({ el, g, ox, oy, range }) => {
-        const px  = pnoise(t + ox,             oy           ) * range;
-        const py  = pnoise(ox,                 t + oy       ) * range;
-        const no  = (pnoise(t * 0.5 + ox * 3, oy * 3) + 1) * 0.5;
-        const rot = g.rot + pnoise(t * 0.015 + ox, oy * 2) * 22;
-        gsap.set(el, { x: px, y: py, rotate: rot, opacity: g.op * (0.55 + no * 0.70) });
-      });
-    });
-  })();
 
   // ── Deco emojis — randomised pool, Perlin XY + rotation ──────
   (function initDecoEmojis() {
