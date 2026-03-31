@@ -291,11 +291,13 @@
     try { localStorage.setItem('theme', isDark ? 'dark' : 'light'); } catch(e) {}
     applyTheme();
     const palette = isDark ? _BLOBS_DARK : _BLOBS_LIGHT;
+    const blendMode = isDark ? 'screen' : 'soft-light';
     _activeGobos.forEach(({ el, g }, i) => {
       if (!palette[i]) return;
       Object.assign(g, palette[i]);
       el.style.background = g.color;
       el.style.filter = `blur(${g.bl}px)`;
+      el.style.mixBlendMode = blendMode;
     });
   });
 
