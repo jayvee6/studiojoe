@@ -739,7 +739,7 @@
       { id: 'expertise', pool: ['🧠','🔬','🤔','🧪','🔍','💡'],      count: 3 },
       { id: 'known',     pool: ['🔍','🧪','🔬','🤔','🎯'],            count: 2 },
       { id: 'work',      pool: ['🤖','🤖','🤖','🤖','🧪','🔬'],       count: 5 },
-      { id: 'now',       pool: ['🪐','🎮','🎥','👾','🚀'],             count: 4 },
+      { id: 'now',       pool: ['🪐','🎮','🎥','👾','🚀'],             count: 1, zones: [{ bottom: '14%', right: '3%' }] },
     ];
     // Peripheral zones — edges of each section away from the centred .container
     const ZONES = [
@@ -753,17 +753,18 @@
 
     const allActive = [];
 
-    SECTIONS.forEach(({ id, pool, count }) => {
+    SECTIONS.forEach(({ id, pool, count, zones: sectionZones }) => {
       const section = document.getElementById(id);
       if (!section) return;
       const isWork  = id === 'work';
       const picked  = pool.slice().sort(() => Math.random() - 0.5).slice(0, count);
+      const zoneSet = sectionZones || ZONES;
 
       picked.forEach((emoji, i) => {
         const sz      = 80  + Math.floor(Math.random() * 160);
         const baseOp  = 0.11 + Math.random() * 0.09;
         const baseRot = (Math.random() - 0.5) * 55;
-        const zone    = ZONES[i % ZONES.length];
+        const zone    = zoneSet[i % zoneSet.length];
 
         const el = document.createElement('span');
         el.setAttribute('aria-hidden', 'true');
