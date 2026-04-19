@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Music Player — StudioJoe</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/color-thief/2.3.0/color-thief.umd.js"></script>
+</head>
+<body>
+
+  <!-- Background visualizer -->
+  <div class="visualizer">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+    <div class="blob blob-4"></div>
+  </div>
+
+  <!-- iPod shell -->
+  <div class="ipod">
+
+    <!-- Screen -->
+    <div class="ipod-screen-bezel">
+      <div class="ipod-screen">
+
+        <!-- Service picker view (default) -->
+        <div class="screen-view" id="view-picker">
+          <div class="screen-titlebar">StudioJoe</div>
+          <ul class="screen-menu">
+            <li class="menu-item" id="item-spotify" data-service="spotify">
+              <span class="service-dot spotify-dot"></span>
+              Spotify
+              <span class="menu-arrow">›</span>
+            </li>
+            <li class="menu-item" id="item-apple" data-service="apple">
+              <span class="service-dot apple-dot"></span>
+              Apple Music
+              <span class="menu-arrow">›</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Now playing view (shown after auth) -->
+        <div class="screen-view hidden" id="view-nowplaying">
+          <div class="screen-titlebar">Now Playing</div>
+          <div class="now-playing">
+            <img id="album-art" src="https://picsum.photos/seed/album7/300/300" crossorigin="anonymous" alt="Album Art">
+            <p class="np-title">Song Title</p>
+            <p class="np-artist">Artist Name</p>
+            <div class="np-progress">
+              <div class="np-bar"><div class="np-fill" id="np-fill"></div></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Click wheel -->
+    <div class="wheel" id="wheel">
+      <div class="wheel-label wheel-menu">MENU</div>
+      <div class="wheel-label wheel-back">⏮</div>
+      <div class="wheel-label wheel-forward">⏭</div>
+      <div class="wheel-label wheel-play">▶︎</div>
+      <div class="wheel-center" id="wheel-center"></div>
+    </div>
+
+  </div>
+
+  <!-- Hidden img for color extraction from any loaded art -->
+  <script src="app.js"></script>
+</body>
+</html>

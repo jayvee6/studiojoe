@@ -34,3 +34,18 @@ Edit `index.html` or `resume.html` directly. Preview by opening the file in a br
 Direct pushes to `main` are blocked — go through a PR.
 
 See README.md for full project context.
+
+## Working with local models (Gemma, Qwen, etc.)
+
+This project is intentionally simple. Do not apply multi-agent patterns, orchestration frameworks, or complex auditor roles. There is no pipeline. There are two HTML files.
+
+**Default behavior:**
+- Read files first, then respond. Do not ask clarifying questions before reading.
+- Be concise. One issue per bullet. No preamble.
+- Do not summarize what you just did.
+
+**Code review — do this:**
+1. Read `index.html`
+2. Read `resume.html`
+3. List issues found: broken markup, accessibility gaps, inline style inconsistencies, JS errors, missing alt text, dead links
+4. Stop. Do not propose rewrites unless asked.

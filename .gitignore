@@ -10,3 +10,8 @@ Thumbs.db
 *.log
 *.tmp
 *.bak
+
+# Secrets
+.env
+.env.*
+!.env.example
