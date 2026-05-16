@@ -582,6 +582,19 @@
 
   const EASE = 'cubic-bezier(0.16, 1, 0.3, 1)';
 
+  // ── Canvas sizing — track the ELEMENT's real box, not the window and
+  // not a one-shot parse-time read. ResizeObserver fires after every
+  // layout (incl. the post-parse aspect-ratio / flex resolution and font
+  // load), rAF-debounced. This is what keeps every canvas locked to its
+  // container instead of drifting off it. ───────────────────────────────
+  function fitObserve(el, cb) {
+    let raf = 0;
+    const run = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(cb); };
+    if (window.ResizeObserver) { new ResizeObserver(run).observe(el); }
+    else { window.addEventListener('resize', run); }
+    run();
+  }
+
   // ── Entrance ───────────────────────────────────────────────────────────
   gsap.set('#hh', { opacity: 0, y: 28 });
   gsap.set('#hd', { opacity: 0, y: 12 });
@@ -887,14 +900,20 @@ fn getCamPos() -> vec3<f32> {
       // Backing store only (CSS keeps the canvas at 100% of #showroom).
       // maxDPR 1 × renderScale 0.66 — raymarch is fragment-bound; softness
       // hidden by the wireframe + fog + motion (sj-design perf lesson).
+      // Size to the canvas's OWN box (#showroom, via inset:0) — NOT the
+      // window. The zone is taller than the viewport (min-height:100svh +
+      // padding); sizing to the window stretched the terrain. Backing-store
+      // aspect now matches the displayed box, so the WGSL camera aspect
+      // (u.resolution) is correct.
       const SCALE = 0.66;
+      const host = canvas.parentElement;
       function size() {
+        const r = host.getBoundingClientRect();
         const dpr = Math.min(window.devicePixelRatio || 1, 1) * SCALE;
-        canvas.width  = Math.max(1, Math.round(window.innerWidth  * dpr));
-        canvas.height = Math.max(1, Math.round(window.innerHeight * dpr));
+        canvas.width  = Math.max(1, Math.round(r.width  * dpr));
+        canvas.height = Math.max(1, Math.round(r.height * dpr));
       }
-      size();
-      window.addEventListener('resize', size);
+      fitObserve(host, size);
 
       const context = canvas.getContext('webgpu');
       const format  = navigator.gpu.getPreferredCanvasFormat();
@@ -1187,8 +1206,7 @@ fn getCamPos() -> vec3<f32> {
       cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
-    fit();
-    window.addEventListener('resize', fit);
+    fitObserve(stage, fit);
 
     const RAIN = ['✨','🪐','🔮','🎮','🧠','🤖','🌀','💫'];
     let pick = RAIN[0];
@@ -1342,8 +1360,7 @@ fn getCamPos() -> vec3<f32> {
       cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
-    fit();
-    window.addEventListener('resize', fit);
+    fitObserve(stage, () => { fit(); if (REDUCED) { readAccent(); draw(null); } });
 
     let accent = '#2DD4BF', accentT = 0;
     function readAccent() {
@@ -1399,7 +1416,7 @@ fn getCamPos() -> vec3<f32> {
       }
     }
 
-    if (REDUCED) { readAccent(); draw(null); return; }
+    if (REDUCED) return;   // static draw handled by the fitObserve callback
 
     function frame(ts) {
       requestAnimationFrame(frame);
