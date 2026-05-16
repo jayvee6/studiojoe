@@ -535,12 +535,20 @@
   <!-- ── WORKBENCH — living core. Blog / video land in v2. ─────────────── -->
   <section id="workbench" class="zone">
     <p class="eyebrow">Workbench</p>
-    <h2>What I am building, in the open.</h2>
+    <h2>How this ships.</h2>
     <p class="lede">
-      Notes on the music I love, videos I have cut, and the machine that
-      ships all of this. The living log opens here.
+      Not just what gets built — the machine that builds it. Brainstorm →
+      plan → approve → small verified chunks → ship → handoff, on a loop.
+      The operating system behind everything on the Shelf.
     </p>
-    <span class="soon">Build log — coming</span>
+    <div class="sandbox-stage" id="mxStage">
+      <canvas id="mxCanvas"></canvas>
+      <span class="sandbox-hint">the pipeline, always running</span>
+    </div>
+    <div class="sandbox-controls">
+      <span class="soon">Blog &amp; video — coming</span>
+      <button type="button" class="crack-link" data-crack-open="machine">⟨ &nbsp;how the machine runs&nbsp; ⟩</button>
+    </div>
   </section>
 
 </main>
@@ -1021,6 +1029,29 @@ fn getCamPos() -> vec3<f32> {
 '// Helpers vendored at /lib/: synthetic-pulse.js, envelopes.js',
         take: 'https://github.com/jayvee6/sj-design',
       },
+      'machine': {
+        title: 'The machine that ships this',
+        what: 'Every project on the Shelf is built the same way: a tight ' +
+              'loop, not a marathon. Brainstorm the real job, plan it, ' +
+              'get approval, then ship in small independently-verified ' +
+              'chunks — each htmlhint/lint-clean and pushed live before ' +
+              'the next starts — with a handoff log so any interruption ' +
+              'resumes cleanly. This diagram is itself one of those ' +
+              'chunks, drawn with the same Canvas the Sandbox uses.',
+        code:
+'// The loop, every chunk:\n' +
+'brainstorm()                 // find the real job, not the asked one\n' +
+'  .then(plan)                // phased, ≤1-2h chunks — never a mega-PR\n' +
+'  .then(approve)             // gate before code\n' +
+'  .then(() => chunks.forEach(c => {\n' +
+'    build(c); verify(c);     // htmlhint + syntax + eyeball\n' +
+'    commit(c); push(c);      // each chunk ships live on its own\n' +
+'    handoff.append(c);       // resumable across any interruption\n' +
+'  }));\n' +
+'\n' +
+'// Same discipline behind StudioJoeMusic, sj-design, the savers.',
+        take: 'https://github.com/jayvee6',
+      },
     };
 
     const panel    = document.getElementById('crack');
@@ -1286,6 +1317,99 @@ fn getCamPos() -> vec3<f32> {
       }
     }
     setMode('rain');
+    requestAnimationFrame(frame);
+  })();
+
+  // ── Workbench — "how the machine ships" pipeline diagram ───────────────
+  // A node loop (Brainstorm → … → Handoff → repeat) with a pulse
+  // travelling the edges. Uses the live zone --accent so it stays in the
+  // atmosphere. Same Canvas + off-screen-pause discipline as the Sandbox.
+  (function Machine() {
+    const stage = document.getElementById('mxStage');
+    const cv    = document.getElementById('mxCanvas');
+    if (!cv || !stage) return;
+    const ctx = cv.getContext('2d');
+    const STEPS = ['Brainstorm','Plan','Approve','Chunk','Verify','Ship','Handoff'];
+    const N = STEPS.length;
+    const REDUCED = window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    let W = 0, H = 0;
+    function fit() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const r = stage.getBoundingClientRect();
+      W = Math.max(1, r.width); H = Math.max(1, r.height);
+      cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    fit();
+    window.addEventListener('resize', fit);
+
+    let accent = '#2DD4BF', accentT = 0;
+    function readAccent() {
+      const c = getComputedStyle(document.body).getPropertyValue('--accent').trim();
+      if (c) accent = c;
+    }
+    readAccent();
+
+    function nodePos(i) {
+      const a = (i / N) * Math.PI * 2 - Math.PI / 2;
+      const rx = Math.min(W, H * 1.6) * 0.34;
+      const ry = Math.min(H * 0.34, rx * 0.62);
+      return [W / 2 + Math.cos(a) * rx, H / 2 + Math.sin(a) * ry];
+    }
+    function offscreen() {
+      const r = stage.getBoundingClientRect();
+      return r.bottom < 0 || r.top > window.innerHeight;
+    }
+
+    let t0, tp, prog = 0;
+    function draw(activeF) {
+      ctx.clearRect(0, 0, W, H);
+      // edges
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < N; i++) {
+        const p = nodePos(i), q = nodePos((i + 1) % N);
+        ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+        ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+      }
+      // travelling pulse along the active edge
+      if (activeF != null) {
+        const seg = Math.floor(activeF), f = activeF - seg;
+        const p = nodePos(seg % N), q = nodePos((seg + 1) % N);
+        const px = p[0] + (q[0] - p[0]) * f, py = p[1] + (q[1] - p[1]) * f;
+        const g = ctx.createRadialGradient(px, py, 0, px, py, 26);
+        g.addColorStop(0, accent); g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(px, py, 26, 0, Math.PI * 2); ctx.fill();
+      }
+      // nodes
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = '600 12px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif';
+      for (let i = 0; i < N; i++) {
+        const p = nodePos(i);
+        const isActive = activeF != null &&
+          (Math.floor(activeF) % N === i || (Math.floor(activeF) + 1) % N === i);
+        ctx.beginPath(); ctx.arc(p[0], p[1], 6, 0, Math.PI * 2);
+        ctx.fillStyle = isActive ? accent : 'rgba(255,255,255,0.35)';
+        ctx.fill();
+        ctx.fillStyle = isActive ? accent : 'rgba(255,255,255,0.55)';
+        const lift = p[1] < H / 2 ? -18 : 20;
+        ctx.fillText(STEPS[i], p[0], p[1] + lift);
+      }
+    }
+
+    if (REDUCED) { readAccent(); draw(null); return; }
+
+    function frame(ts) {
+      requestAnimationFrame(frame);
+      if (offscreen()) { tp = ts; return; }
+      if (t0 === undefined) { t0 = ts; tp = ts; }
+      const dt = Math.min(0.05, (ts - tp) / 1000); tp = ts;
+      accentT += dt; if (accentT > 0.5) { accentT = 0; readAccent(); }
+      prog = (prog + dt * 0.6) % N;   // ~12s per full loop
+      draw(prog);
+    }
     requestAnimationFrame(frame);
   })();
 
