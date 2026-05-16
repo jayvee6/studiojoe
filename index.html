@@ -1483,11 +1483,13 @@ fn getCamPos() -> vec3<f32> {
     requestAnimationFrame(frame);
   })();
 
-  // ── Workbench pillars — four static schematics + their crack-it-open
-  // contracts. Spec-driven: each pillar is nodes + edges in normalized
-  // coords; one generic renderer scales to the card's real box (fitObserve)
-  // and re-tints with the live zone --accent. Static by design here —
-  // animation is a later chunk; this is already correct for reduced-motion.
+  // ── Workbench pillars — four schematics + their crack-it-open contracts.
+  // Spec-driven: each pillar is nodes + edges in normalized coords; one
+  // generic renderer scales to the card's real box (fitObserve) and re-tints
+  // with the live zone --accent. A single shared rAF sends a slow, calm
+  // accent pulse travelling each diagram's edges (same visual language as
+  // Machine()'s pulse). Reduced-motion stays the exact static drawing — no
+  // rAF; the static frame is the phase==null default of the same draw().
   (function MachinePillars() {
     const SPEC = {
       audit: {
@@ -1507,6 +1509,9 @@ fn getCamPos() -> vec3<f32> {
         e: [[0,1],[1,2],[2,3],[2,4],[2,1]],
       },
     };
+
+    const REDUCED = window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     let accent = '#E8B450';
     function readAccent() {
@@ -1529,42 +1534,103 @@ fn getCamPos() -> vec3<f32> {
         const padX = Math.min(W * 0.16, 42), padY = 26;
         return [padX + nx * (W - 2 * padX), padY + ny * (H - 2 * padY)];
       }
-      function draw() {
+      function offscreen() {
+        const r = stage.getBoundingClientRect();
+        return r.bottom < 0 || r.top > window.innerHeight;
+      }
+      // phase == null -> the original static drawing (unchanged). A non-null
+      // phase additively layers a travelling accent pulse over that exact
+      // base; the edges/nodes/labels render identically either way.
+      function draw(phase) {
         ctx.clearRect(0, 0, W, H);
+        // Which edge the pulse is on, and how far along it (loop the list).
+        const nE = spec.e.length;
+        let actE = -1, actF = 0, aNode = -1, bNode = -1;
+        if (phase != null && nE > 0) {
+          const pe = ((phase % nE) + nE) % nE;
+          actE = Math.floor(pe); actF = pe - actE;
+          aNode = spec.e[actE][0]; bNode = spec.e[actE][1];
+        }
         ctx.lineWidth = 1.5;
-        spec.e.forEach(([a, b]) => {
+        spec.e.forEach(([a, b], ei) => {
           const p = pt(spec.n[a][1], spec.n[a][2]);
           const q = pt(spec.n[b][1], spec.n[b][2]);
           const key = spec.n[a][3] || spec.n[b][3];
           ctx.strokeStyle = key ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.10)';
           ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+          // Travelling pulse on the active edge — same radial-gradient blob
+          // as Machine()'s pulse, sized/dimmed by a calm SJPulse breath.
+          if (ei === actE) {
+            const px = p[0] + (q[0] - p[0]) * actF;
+            const py = p[1] + (q[1] - p[1]) * actF;
+            const breath = window.SJPulse
+              ? 0.78 + 0.22 * window.SJPulse.wave(phase, { rate: 1.6, mid: 0.5, amp: 0.5 })
+              : 1;
+            const rad = 22 * breath;
+            const g = ctx.createRadialGradient(px, py, 0, px, py, rad);
+            g.addColorStop(0, accent); g.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.save();
+            ctx.globalAlpha = 0.55 + 0.30 * breath;
+            ctx.fillStyle = g;
+            ctx.beginPath(); ctx.arc(px, py, rad, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+          }
         });
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif';
-        spec.n.forEach(([label, nx, ny, key]) => {
+        spec.n.forEach(([label, nx, ny, key], ni) => {
           const p = pt(nx, ny);
-          ctx.beginPath(); ctx.arc(p[0], p[1], key ? 6 : 5, 0, Math.PI * 2);
-          ctx.fillStyle = key ? accent : 'rgba(255,255,255,0.34)';
+          const lit = ni === aNode || ni === bNode;   // pulse passing this node
+          ctx.beginPath(); ctx.arc(p[0], p[1], (key || lit) ? 6 : 5, 0, Math.PI * 2);
+          ctx.fillStyle = (key || lit) ? accent : 'rgba(255,255,255,0.34)';
           ctx.fill();
-          ctx.fillStyle = key ? accent : 'rgba(255,255,255,0.55)';
+          ctx.fillStyle = (key || lit) ? accent : 'rgba(255,255,255,0.55)';
           ctx.fillText(label, p[0], p[1] + (ny < 0.5 ? -16 : 17));
         });
       }
-      return () => { fit(); readAccent(); draw(); };
+      return {
+        render: () => { fit(); readAccent(); draw(null); },
+        drawPhase: (phase) => { draw(phase); },
+        offscreen,
+      };
     }
 
     const renderers = [];
     document.querySelectorAll('.mx-pc').forEach(cv => {
       const spec = SPEC[cv.getAttribute('data-pillar')];
       if (!spec) return;
-      const render = makeRenderer(cv, spec);
-      renderers.push(render);
-      fitObserve(cv.parentElement, render);
+      const r = makeRenderer(cv, spec);
+      renderers.push(r);
+      fitObserve(cv.parentElement, r.render);   // static look (also reduced-motion + resize)
     });
     // Re-tint when the zone (and thus --accent) changes under the scroll.
     if (window.MutationObserver && renderers.length) {
-      new MutationObserver(() => renderers.forEach(r => r()))
+      new MutationObserver(() => renderers.forEach(r => r.render()))
         .observe(document.body, { attributes: true, attributeFilter: ['data-zone'] });
+    }
+
+    // Reduced-motion: stop here — the static frame is already drawn by the
+    // fitObserve callback (and re-drawn on resize / zone change). No rAF.
+    if (!REDUCED && renderers.length) {
+      // One shared loop for all four canvases. Slow cadence: one full edge
+      // traversal every ~4.5s. Each diagram gets a phase offset so they
+      // don't pulse in lockstep — calm, legible, additive over the static base.
+      let t0, tp, prog = 0, accentT = 0;
+      const STRIDE = 1 / 4.5;   // edges per second
+      function frame(ts) {
+        requestAnimationFrame(frame);
+        // Pause while the whole pillar row is off-screen (every stage off).
+        if (renderers.every(r => r.offscreen())) { tp = ts; return; }
+        if (t0 === undefined) { t0 = ts; tp = ts; }
+        const dt = Math.min(0.05, (ts - tp) / 1000); tp = ts;
+        accentT += dt; if (accentT > 0.5) { accentT = 0; readAccent(); }
+        prog += dt * STRIDE;
+        renderers.forEach((r, i) => {
+          if (r.offscreen()) return;            // skip individual off-screen cards
+          r.drawPhase(prog + i * 0.6);          // staggered so they're not in lockstep
+        });
+      }
+      requestAnimationFrame(frame);
     }
 
     // The contracts — distilled in spirit from the playbook
