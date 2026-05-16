@@ -261,6 +261,47 @@
       border: 1px dashed var(--glass-bdr);
     }
 
+    /* ── Workbench pillars — the co-engineering machine ─────────────────── */
+    .mx-grid {
+      margin-top: clamp(22px, 3.5vh, 40px);
+      width: min(100%, 1100px);
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+      gap: clamp(14px, 1.8vw, 22px);
+    }
+    .mx-card {
+      display: flex; flex-direction: column;
+      padding: clamp(18px, 2vw, 26px);
+      border-radius: 16px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-bdr);
+      box-shadow: var(--glass-shd);
+    }
+    .mx-kind {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.12em;
+      text-transform: uppercase; color: var(--accent);
+    }
+    .mx-title {
+      margin-top: 6px;
+      font-size: clamp(17px, 1.7vw, 20px); font-weight: 700;
+      letter-spacing: -0.02em; color: var(--label-1);
+    }
+    .mx-what {
+      margin-top: 8px; font-size: 13px; line-height: 1.55;
+      color: var(--label-2);
+    }
+    .mx-stage {
+      position: relative; margin-top: clamp(14px, 2vh, 20px);
+      width: 100%; height: 172px;
+      border-radius: 12px; overflow: hidden;
+      background: #060a0c; border: 1px solid var(--sep);
+    }
+    .mx-stage canvas {
+      position: absolute; inset: 0; display: block;
+      width: 100%; height: 100%;
+    }
+    .mx-card .crack-link { margin-top: clamp(16px, 2vh, 22px); }
+
     /* ── "Crack it open" — the signature mechanic ───────────────────────── */
     /* Any [data-crack] element gets a discreet corner chip; activating it
        slides in a glass panel with the real sj-design source + copy path.
@@ -501,22 +542,77 @@
     </button>
   </section>
 
-  <!-- ── WORKBENCH — living core. Blog / video land in v2. ─────────────── -->
+  <!-- ── WORKBENCH — the co-engineering machine. Blog / video land in v2. ── -->
   <section id="workbench" class="zone">
     <p class="eyebrow">Workbench</p>
-    <h2>How this ships.</h2>
+    <h2>How the work gets made.</h2>
     <p class="lede">
-      Not just what gets built — the machine that builds it. Brainstorm →
-      plan → approve → small verified chunks → ship → handoff, on a loop.
-      The operating system behind everything on the Shelf.
+      Not just what ships — the machine that ships it. I co-engineer with
+      Claude under a defensive-engineering playbook: a tight brainstorm →
+      plan → approve → small verified chunks → ship → handoff loop, with
+      correctness gated at every step. The four contracts below are the
+      load-bearing parts — and this site was built under all of them.
     </p>
     <div class="sandbox-stage" id="mxStage">
       <canvas id="mxCanvas"></canvas>
-      <span class="sandbox-hint">the pipeline, always running</span>
+      <span class="sandbox-hint">the loop, always running</span>
     </div>
     <div class="sandbox-controls">
       <span class="soon">Blog &amp; video — coming</span>
-      <button type="button" class="crack-link" data-crack-open="machine">⟨ &nbsp;how the machine runs&nbsp; ⟩</button>
+      <button type="button" class="crack-link" data-crack-open="machine">⟨ &nbsp;how the loop runs&nbsp; ⟩</button>
+    </div>
+
+    <div class="mx-grid">
+      <article class="mx-card">
+        <p class="mx-kind">Review architecture</p>
+        <h3 class="mx-title">Two auditors, one arbiter</h3>
+        <p class="mx-what">
+          Every change runs a Pedant (implementation correctness) and a
+          Critic (design correctness) in parallel. An Arbiter resolves
+          conflicts with cited evidence — and only its ruling advances.
+        </p>
+        <div class="mx-stage"><canvas class="mx-pc" data-pillar="audit"></canvas></div>
+        <button type="button" class="crack-link" data-crack-open="mx-audit">⟨ &nbsp;the contract&nbsp; ⟩</button>
+      </article>
+
+      <article class="mx-card">
+        <p class="mx-kind">Context management</p>
+        <h3 class="mx-title">Context is managed state</h3>
+        <p class="mx-what">
+          No leaning on chat history. Each phase hands off a self-contained
+          Context Packet; past a token budget the agent cold-boots into a
+          fresh context carrying only the packet, so dilution never corrupts
+          the work downstream.
+        </p>
+        <div class="mx-stage"><canvas class="mx-pc" data-pillar="context"></canvas></div>
+        <button type="button" class="crack-link" data-crack-open="mx-context">⟨ &nbsp;the contract&nbsp; ⟩</button>
+      </article>
+
+      <article class="mx-card">
+        <p class="mx-kind">Agent design</p>
+        <h3 class="mx-title">A fleet of specialists</h3>
+        <p class="mx-what">
+          Not one generalist — a roster of narrow experts.
+          graphics-api-expert routes GPU questions across Vulkan / DX12 /
+          Metal / WebGPU against local vendor references; swarm skills fan
+          work out to parallel agents, capped and reconciled.
+        </p>
+        <div class="mx-stage"><canvas class="mx-pc" data-pillar="fleet"></canvas></div>
+        <button type="button" class="crack-link" data-crack-open="mx-fleet">⟨ &nbsp;the contract&nbsp; ⟩</button>
+      </article>
+
+      <article class="mx-card">
+        <p class="mx-kind">Defensive engineering</p>
+        <h3 class="mx-title">Fast, loud failure</h3>
+        <p class="mx-what">
+          A hung agent is worse than a failed one. An eight-class error
+          taxonomy makes every failure a deterministic recovery decision; a
+          circuit breaker forbids the same fix more than twice before it
+          escalates to a human.
+        </p>
+        <div class="mx-stage"><canvas class="mx-pc" data-pillar="failsafe"></canvas></div>
+        <button type="button" class="crack-link" data-crack-open="mx-failsafe">⟨ &nbsp;the contract&nbsp; ⟩</button>
+      </article>
     </div>
   </section>
 
@@ -1385,6 +1481,201 @@ fn getCamPos() -> vec3<f32> {
       draw(prog);
     }
     requestAnimationFrame(frame);
+  })();
+
+  // ── Workbench pillars — four static schematics + their crack-it-open
+  // contracts. Spec-driven: each pillar is nodes + edges in normalized
+  // coords; one generic renderer scales to the card's real box (fitObserve)
+  // and re-tints with the live zone --accent. Static by design here —
+  // animation is a later chunk; this is already correct for reduced-motion.
+  (function MachinePillars() {
+    const SPEC = {
+      audit: {
+        n: [['Pedant',0.13,0.24],['Critic',0.13,0.76],['Arbiter',0.52,0.5,1],['ship',0.88,0.5,1]],
+        e: [[0,2],[1,2],[2,3]],
+      },
+      context: {
+        n: [['packet',0.13,0.52],['8K?',0.45,0.52,1],['next',0.87,0.52],['cold-boot',0.45,0.18,1]],
+        e: [[0,1],[1,2],[1,3],[3,0]],
+      },
+      fleet: {
+        n: [['hub',0.12,0.5,1],['gfx',0.5,0.18],['swarm',0.5,0.5],['refactor',0.5,0.82],['join',0.88,0.5,1]],
+        e: [[0,1],[0,2],[0,3],[1,4],[2,4],[3,4]],
+      },
+      failsafe: {
+        n: [['try',0.1,0.5],['fail',0.33,0.5],['classify',0.57,0.5,1],['halt',0.84,0.27,1],['human',0.84,0.73]],
+        e: [[0,1],[1,2],[2,3],[2,4],[2,1]],
+      },
+    };
+
+    let accent = '#E8B450';
+    function readAccent() {
+      const c = getComputedStyle(document.body).getPropertyValue('--accent').trim();
+      if (c) accent = c;
+    }
+
+    function makeRenderer(cv, spec) {
+      const stage = cv.parentElement;
+      const ctx = cv.getContext('2d');
+      let W = 0, H = 0;
+      function fit() {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const r = stage.getBoundingClientRect();
+        W = Math.max(1, r.width); H = Math.max(1, r.height);
+        cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+      function pt(nx, ny) {
+        const padX = Math.min(W * 0.16, 42), padY = 26;
+        return [padX + nx * (W - 2 * padX), padY + ny * (H - 2 * padY)];
+      }
+      function draw() {
+        ctx.clearRect(0, 0, W, H);
+        ctx.lineWidth = 1.5;
+        spec.e.forEach(([a, b]) => {
+          const p = pt(spec.n[a][1], spec.n[a][2]);
+          const q = pt(spec.n[b][1], spec.n[b][2]);
+          const key = spec.n[a][3] || spec.n[b][3];
+          ctx.strokeStyle = key ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.10)';
+          ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+        });
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif';
+        spec.n.forEach(([label, nx, ny, key]) => {
+          const p = pt(nx, ny);
+          ctx.beginPath(); ctx.arc(p[0], p[1], key ? 6 : 5, 0, Math.PI * 2);
+          ctx.fillStyle = key ? accent : 'rgba(255,255,255,0.34)';
+          ctx.fill();
+          ctx.fillStyle = key ? accent : 'rgba(255,255,255,0.55)';
+          ctx.fillText(label, p[0], p[1] + (ny < 0.5 ? -16 : 17));
+        });
+      }
+      return () => { fit(); readAccent(); draw(); };
+    }
+
+    const renderers = [];
+    document.querySelectorAll('.mx-pc').forEach(cv => {
+      const spec = SPEC[cv.getAttribute('data-pillar')];
+      if (!spec) return;
+      const render = makeRenderer(cv, spec);
+      renderers.push(render);
+      fitObserve(cv.parentElement, render);
+    });
+    // Re-tint when the zone (and thus --accent) changes under the scroll.
+    if (window.MutationObserver && renderers.length) {
+      new MutationObserver(() => renderers.forEach(r => r()))
+        .observe(document.body, { attributes: true, attributeFilter: ['data-zone'] });
+    }
+
+    // The contracts — distilled in spirit from the playbook
+    // (~/.claude -> dev-playbook/best_practices.md) and the real ~/.claude
+    // skill fleet. Nothing here is invented.
+    if (window.CrackOpen) {
+      window.CrackOpen.register('mx-audit', {
+        title: 'Two auditors, one arbiter',
+        what: 'From the playbook’s "One Arbiter, Two Auditors." The ' +
+              'Pedant audits implementation correctness — syntax for the ' +
+              'target, platform poison pills (a CUDA call on a Metal ' +
+              'target), memory and resource safety. The Critic audits ' +
+              'design — architecture, concurrency, integration against the ' +
+              'downstream schema. They run independently; on conflict the ' +
+              'Arbiter rules with cited evidence from docs or test output, ' +
+              'never from reasoning alone. Only the ruling advances.',
+        code:
+'// ~/.claude playbook · One Arbiter, Two Auditors\n' +
+'pedant = audit(change, {            // implementation correctness\n' +
+'  syntax, platformPoisonPills,      // CUDA intrinsic on a Metal target\n' +
+'  memorySafety, resourceLeaks });\n' +
+'critic = audit(change, {            // design correctness\n' +
+'  architecture, concurrency,\n' +
+'  integratesWith: downstreamSchema });\n' +
+'\n' +
+'if (pedant.conflictsWith(critic))   // disagreement?\n' +
+'  ruling = arbiter.resolve({        // cite docs/tests, not vibes\n' +
+'    evidence: [docs, testOutput] });// insufficient -> ask the human\n' +
+'\n' +
+'advance(ruling);                    // ONLY the ruling is a deliverable',
+        take: 'https://github.com/jayvee6',
+      });
+      window.CrackOpen.register('mx-context', {
+        title: 'Context is managed state',
+        what: 'From "Context & State Management." Inter-agent state never ' +
+              'rides on a long chat history. Every phase transition emits ' +
+              'a Context Packet — current state, the active goal, ' +
+              'constraints, and preconditions the receiver must verify. ' +
+              'Past an ~8K-token reasoning chain the agent summarises into ' +
+              'a packet, emits COLD_BOOT, and re-initialises fresh carrying ' +
+              'only that packet. Degraded-attention reasoning is a failure ' +
+              'class, not something pushed through.',
+        code:
+'// ~/.claude playbook · Stateless handoffs + Token Fog\n' +
+'ContextPacket = {\n' +
+'  state:         "what is done, where artifacts live",\n' +
+'  goal:          "what THIS unit must accomplish",\n' +
+'  constraints:   "platform targets, blocked approaches",\n' +
+'  preconditions: "what the receiver must verify first",\n' +
+'};\n' +
+'\n' +
+'if (reasoningTokens > 8000) {        // attention dilution\n' +
+'  emit("COLD_BOOT", ContextPacket);  // re-init fresh\n' +
+'  return;                            // never push degraded context\n' +
+'}\n' +
+'receiver.validate(ContextPacket)     // malformed -> PRECONDITION_FAILED\n' +
+'  || halt();',
+        take: 'https://github.com/jayvee6',
+      });
+      window.CrackOpen.register('mx-fleet', {
+        title: 'A fleet of specialists',
+        what: 'How the agents are designed: not one generalist but a ' +
+              'roster of narrow experts. graphics-api-expert answers GPU ' +
+              'questions across Vulkan, DX12, Metal, WebGPU, GL, CUDA and ' +
+              'OpenCL — backed by local Khronos/Apple/Microsoft reference ' +
+              'repos and a decision tree routing to the API-specific ' +
+              'guide. Swarm skills (bug-hunt-swarm, review-swarm, ' +
+              'orchestrate-batch-refactor) fan a job out to parallel ' +
+              'agents; the orchestrator caps fan-out and reconciles a ' +
+              'dispatch manifest against completions before any phase ' +
+              'advances.',
+        code:
+'// ~/.claude/skills — narrow experts, not one generalist\n' +
+'graphics-api-expert:                 // GPU advisor\n' +
+'  apis:    [vulkan, dx12, metal, webgpu, gl, cuda, opencl]\n' +
+'  backing: local Khronos/Apple/MS reference repos\n' +
+'  route:   decisionTree(question) -> api-specific guide\n' +
+'\n' +
+'bug-hunt-swarm | review-swarm | orchestrate-batch-refactor\n' +
+'  -> fanOut(parallelAgents, cap = 5) // Orchestrator rules\n' +
+'  -> reconcile(dispatchManifest, completions)\n' +
+'  -> gate(phase)                     // missing completion = HUNG',
+        take: 'https://github.com/jayvee6',
+      });
+      window.CrackOpen.register('mx-failsafe', {
+        title: 'Fast, loud failure',
+        what: 'From "Error Handling & Fast-Fail." A hung agent is worse ' +
+              'than a failed one, so every failure is classified into one ' +
+              'of eight classes, each with a deterministic recovery ' +
+              'action. A circuit breaker forbids the same logical fix more ' +
+              'than twice; the third time it stops, emits a Logic-Deadlock ' +
+              'report, and waits for a human. Bugs get a failing test ' +
+              'before the fix. This site was built under it — including ' +
+              'pausing cleanly through API outages mid-build.',
+        code:
+'// ~/.claude playbook · Error taxonomy + circuit breaker\n' +
+'classify(failure) -> one of {\n' +
+'  TRANSIENT,         // retry w/ backoff (<=3x)\n' +
+'  INPUT_INVALID, PRECONDITION_FAILED,\n' +
+'  CONTEXT_OVERFLOW,  // cold-boot w/ packet\n' +
+'  PARTIAL_COMPLETE, HUNG,\n' +
+'  LOGIC_DEADLOCK, FATAL };  // halt -> human\n' +
+'\n' +
+'if (sameFix.attempts >= 2) {         // circuit breaker\n' +
+'  emit("LOGIC_DEADLOCK", report);    // no 3rd improvised try\n' +
+'  awaitHuman();\n' +
+'}\n' +
+'fixBug = () => { writeFailingTest(); applyFix(); }; // TDD-first',
+        take: 'https://github.com/jayvee6',
+      });
+    }
   })();
 
   // ── Zone-atmosphere — scroll retints the ambient per zone ──────────────
