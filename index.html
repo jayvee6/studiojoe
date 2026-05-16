@@ -144,6 +144,9 @@
       position: relative;
       min-height: 100svh;
       display: flex; flex-direction: column; justify-content: center;
+      align-items: flex-start;   /* don't stretch children — deterministic
+                                     box sizing across browsers (Safari's
+                                     stretch+aspect-ratio+max-width is buggy) */
       padding: clamp(88px, 14vh, 160px) clamp(24px, 6vw, 96px) clamp(64px, 10vh, 120px);
       border-bottom: 1px solid var(--sep);
     }
@@ -180,14 +183,19 @@
     .sandbox-stage {
       position: relative;
       margin-top: clamp(24px, 4vh, 44px);
-      width: 100%; max-width: 1100px;
-      aspect-ratio: 16 / 9;
+      /* explicit, definite box — no aspect-ratio (Safari mis-resolves it
+         inside a flex column). Wide-ish 16:9-ish but height is concrete. */
+      width: min(100%, 1100px);
+      height: clamp(340px, 54vh, 600px);
       border-radius: 18px; overflow: hidden;
       background: #060a0c;
       border: 1px solid var(--glass-bdr);
       box-shadow: var(--glass-shd);
     }
-    .sandbox-stage canvas { position: absolute; inset: 0; display: block; }
+    .sandbox-stage canvas {
+      position: absolute; inset: 0; display: block;
+      width: 100%; height: 100%;   /* CSS box can't diverge from the stage */
+    }
     .sandbox-hint {
       position: absolute; left: 16px; bottom: 14px; z-index: 3;
       font: 600 11px/1 var(--font); letter-spacing: 0.12em;
@@ -253,7 +261,7 @@
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
       gap: clamp(14px, 1.8vw, 22px);
-      max-width: 1100px;
+      width: min(100%, 1100px);   /* zone no longer stretches children */
     }
     .shelf-card {
       display: flex; flex-direction: column; gap: 8px;
@@ -1371,8 +1379,10 @@ fn getCamPos() -> vec3<f32> {
 
     function nodePos(i) {
       const a = (i / N) * Math.PI * 2 - Math.PI / 2;
-      const rx = Math.min(W, H * 1.6) * 0.34;
-      const ry = Math.min(H * 0.34, rx * 0.62);
+      // Keep the whole loop + centered labels inside the box: leave ~110px
+      // horizontal / ~46px vertical so "Brainstorm" et al. never clip.
+      const rx = Math.max(40, Math.min(W * 0.34, W / 2 - 110));
+      const ry = Math.max(30, Math.min(H * 0.34, H / 2 - 46));
       return [W / 2 + Math.cos(a) * rx, H / 2 + Math.sin(a) * ry];
     }
     function offscreen() {
