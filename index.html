@@ -8,6 +8,7 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
   <script src="/lib/synthetic-pulse.js"></script>
+  <script src="/lib/envelopes.js"></script>
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -151,6 +152,50 @@
       font-size: 11px; font-weight: 600; letter-spacing: 0.16em;
       text-transform: uppercase; color: var(--label-3);
     }
+
+    /* ── Sandbox (S3): hands-on playground ──────────────────────────────── */
+    .sandbox-stage {
+      position: relative;
+      margin-top: clamp(24px, 4vh, 44px);
+      width: 100%; max-width: 1100px;
+      aspect-ratio: 16 / 9;
+      border-radius: 18px; overflow: hidden;
+      background: #060a0c;
+      border: 1px solid var(--glass-bdr);
+      box-shadow: var(--glass-shd);
+    }
+    .sandbox-stage canvas { position: absolute; inset: 0; display: block; }
+    .sandbox-hint {
+      position: absolute; left: 16px; bottom: 14px; z-index: 3;
+      font: 600 11px/1 var(--font); letter-spacing: 0.12em;
+      text-transform: uppercase; color: var(--label-3);
+      pointer-events: none;
+    }
+    .sandbox-controls {
+      margin-top: clamp(16px, 2.5vh, 26px);
+      display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+    }
+    .sb-btn {
+      padding: 10px 18px; border-radius: 100px;
+      font: 600 13px/1 var(--font); letter-spacing: -0.01em;
+      cursor: pointer;
+      background: var(--fill-2); border: 1px solid var(--glass-bdr);
+      color: var(--label-1);
+      transition: background 0.2s, color 0.2s, transform 0.15s;
+    }
+    .sb-btn:hover { background: var(--fill-1); transform: translateY(-1px); }
+    .sb-btn[aria-pressed="true"] {
+      background: var(--accent); color: #04110f; border-color: transparent;
+    }
+    .sb-emojis { display: flex; gap: 6px; flex-wrap: wrap; }
+    .sb-emoji {
+      width: 38px; height: 34px; border-radius: 9px;
+      font-size: 17px; cursor: pointer; line-height: 1;
+      background: var(--fill-1); border: 1px solid var(--glass-bdr);
+      transition: background 0.2s, transform 0.15s;
+    }
+    .sb-emoji:hover { background: var(--fill-2); transform: translateY(-1px); }
+    .sb-emoji[aria-pressed="true"] { background: var(--accent-bg); border-color: var(--accent); }
 
     /* ── Showroom hero (S1): WebGPU wire-terrain behind the identity ────── */
     #showroom { overflow: hidden; }
@@ -395,11 +440,21 @@
     <p class="eyebrow">Sandbox</p>
     <h2>Put your hands on the tools.</h2>
     <p class="lede">
-      Live, in-browser: rain emojis, bend a 3D scene, crack any effect
-      open to its source. Wiring up next — this zone goes interactive in
-      the current build.
+      No video, no GIF — the real toolkit running in your browser. Make
+      it rain, or watch a formation morph between shapes. Same lib that
+      builds the rest of this site.
     </p>
-    <span class="soon">Interactive — in progress</span>
+    <div class="sandbox-stage" id="sbStage">
+      <canvas id="sbCanvas"></canvas>
+      <span class="sandbox-hint" id="sbHint">move your pointer over the stage</span>
+    </div>
+    <div class="sandbox-controls">
+      <button type="button" class="sb-btn" id="sbModeRain" aria-pressed="true">Emoji rain</button>
+      <button type="button" class="sb-btn" id="sbModeForm" aria-pressed="false">Formation</button>
+      <span class="sb-emojis" id="sbEmojis" role="group" aria-label="Rain emoji"></span>
+      <button type="button" class="sb-btn" id="sbBurst">Burst ✨</button>
+      <button type="button" class="crack-link" data-crack-open="sandbox">⟨ &nbsp;how the sandbox is built&nbsp; ⟩</button>
+    </div>
   </section>
 
   <!-- ── SHELF — vend. Real links to what exists today. ────────────────── -->
@@ -921,6 +976,27 @@ fn getCamPos() -> vec3<f32> {
 '//   lib/ + showcase/scenes/ + showcase/emoji-formations/',
         take: 'https://github.com/jayvee6/sj-design',
       },
+      'sandbox': {
+        title: 'The Sandbox — Canvas 2D + the lib',
+        what: 'Two real demos in one panel. Emoji rain is a tiny gravity ' +
+              'particle system on a DPR-fit Canvas 2D. The formation is an ' +
+              'N-gon that morphs triangle → square → pentagon → hexagon — ' +
+              'emojis arc-length-placed on the perimeter, the side count ' +
+              'eased by VizEnv, sizes pulsed by SJPulse. Your pointer ' +
+              'speeds the morph and tilts it. Same /lib/ the hero uses.',
+        code:
+'// Formation — the whole idea, condensed:\n' +
+'const sidesEnv = new VizEnv.Envelope({ attack: 0.9, release: 0.9 });\n' +
+'sides = sidesEnv.follow(KEYFRAMES[step % 4], dt);  // 3→4→5→6, eased\n' +
+'const pulse = SJPulse.kick(t);                      // size pulse\n' +
+'// emoji m at arc-length s on the n-gon perimeter:\n' +
+'//   p = lerp(V[floor(s)], V[(floor(s)+1)%n], frac(s))\n' +
+'\n' +
+'// Full version:\n' +
+'//   sj-design/showcase/emoji-formations/shape-morph.html\n' +
+'// Helpers vendored at /lib/: synthetic-pulse.js, envelopes.js',
+        take: 'https://github.com/jayvee6/sj-design',
+      },
     };
 
     const panel    = document.getElementById('crack');
@@ -1036,6 +1112,157 @@ fn getCamPos() -> vec3<f32> {
 
     // Expose for the Sandbox (S3) to register + open its own pieces.
     window.CrackOpen = { register: (id, entry) => { REG[id] = entry; }, open };
+  })();
+
+  // ── Sandbox — hands-on. Two real demos on one DPR-fit Canvas 2D,
+  // built from the same /lib/ as the hero. Pointer drives the formation;
+  // click rains. Pauses when the zone is off-screen. ─────────────────────
+  (function Sandbox() {
+    const stage = document.getElementById('sbStage');
+    const cv    = document.getElementById('sbCanvas');
+    if (!cv || !stage) return;
+    const ctx  = cv.getContext('2d');
+    const hint = document.getElementById('sbHint');
+
+    let W = 0, H = 0;
+    function fit() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const r = stage.getBoundingClientRect();
+      W = Math.max(1, r.width); H = Math.max(1, r.height);
+      cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    fit();
+    window.addEventListener('resize', fit);
+
+    const RAIN = ['✨','🪐','🔮','🎮','🧠','🤖','🌀','💫'];
+    let pick = RAIN[0];
+    let mode = 'rain';
+    const particles = [];
+    const pointer = { x: 0.5, y: 0.5, on: false };
+
+    const picker = document.getElementById('sbEmojis');
+    RAIN.forEach((e, i) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'sb-emoji'; b.textContent = e;
+      b.setAttribute('aria-pressed', i === 0 ? 'true' : 'false');
+      b.addEventListener('click', () => {
+        pick = e;
+        picker.querySelectorAll('.sb-emoji').forEach(x => x.setAttribute('aria-pressed', 'false'));
+        b.setAttribute('aria-pressed', 'true');
+      });
+      picker.appendChild(b);
+    });
+
+    function spawn(n, x) {
+      for (let i = 0; i < n; i++) particles.push({
+        x: x != null ? x : Math.random() * W,
+        y: -20 - Math.random() * 40,
+        vx: (Math.random() - 0.5) * 40,
+        vy: 30 + Math.random() * 60,
+        e: pick, s: 20 + Math.random() * 26,
+        rot: (Math.random() - 0.5) * 2, vr: (Math.random() - 0.5) * 2,
+        life: 0, max: 4 + Math.random() * 3,
+      });
+      if (particles.length > 900) particles.splice(0, particles.length - 900);
+    }
+
+    document.getElementById('sbBurst').addEventListener('click', () => spawn(120, W / 2));
+
+    function setMode(m) {
+      mode = m;
+      document.getElementById('sbModeRain').setAttribute('aria-pressed', String(m === 'rain'));
+      document.getElementById('sbModeForm').setAttribute('aria-pressed', String(m === 'form'));
+      document.getElementById('sbEmojis').style.display = m === 'rain' ? 'flex' : 'none';
+      document.getElementById('sbBurst').style.display  = m === 'rain' ? '' : 'none';
+      hint.textContent = m === 'rain'
+        ? 'click the stage to make it rain'
+        : 'move your pointer — speed + tilt the morph';
+      particles.length = 0;
+    }
+    document.getElementById('sbModeRain').addEventListener('click', () => setMode('rain'));
+    document.getElementById('sbModeForm').addEventListener('click', () => setMode('form'));
+
+    function localXY(ev) {
+      const r = stage.getBoundingClientRect();
+      return { x: (ev.clientX - r.left) / r.width, y: (ev.clientY - r.top) / r.height };
+    }
+    stage.addEventListener('pointermove', ev => { const p = localXY(ev); pointer.x = p.x; pointer.y = p.y; pointer.on = true; });
+    stage.addEventListener('pointerleave', () => { pointer.on = false; });
+    stage.addEventListener('pointerdown', ev => { if (mode === 'rain') { const p = localXY(ev); spawn(40, p.x * W); } });
+
+    const FORM = ['🔷','🔶','🟣','🟢','🟡','🔴','💠','✦','◆','🟦','🟪','🟩'];
+    const KEY = [3, 4, 5, 6];
+    const sidesEnv = window.VizEnv ? new window.VizEnv.Envelope({ attack: 0.9, release: 0.9, initial: 3 }) : null;
+    let sidesFb = 3, clock = 0;
+    function rawPulse(t) {
+      return window.SJPulse ? window.SJPulse.kick(t)
+        : Math.min(1, Math.pow(Math.max(0, Math.sin(t * 2.2)), 2) * 0.9);
+    }
+    function offscreen() {
+      const r = stage.getBoundingClientRect();
+      return r.bottom < 0 || r.top > window.innerHeight;
+    }
+
+    let t0, tp;
+    function frame(ts) {
+      requestAnimationFrame(frame);
+      if (offscreen()) { tp = ts; return; }
+      if (t0 === undefined) { t0 = ts; tp = ts; }
+      const t  = (ts - t0) / 1000;
+      const dt = Math.min(0.05, (ts - tp) / 1000); tp = ts;
+      ctx.clearRect(0, 0, W, H);
+
+      if (mode === 'rain') {
+        if (Math.random() < 0.4) spawn(1);
+        for (let i = particles.length - 1; i >= 0; i--) {
+          const p = particles[i];
+          p.life += dt;
+          if (p.life > p.max || p.y > H + 40) { particles.splice(i, 1); continue; }
+          p.vy += 140 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
+          ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+          ctx.globalAlpha = Math.max(0, 1 - p.life / p.max);
+          ctx.font = p.s + 'px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(p.e, 0, 0); ctx.restore();
+        }
+        ctx.globalAlpha = 1;
+      } else {
+        const speed = 0.32 + (pointer.on ? pointer.x * 0.9 : 0.25);
+        clock += dt * speed;
+        const target = KEY[Math.floor(clock) % 4];
+        let sides = sidesEnv ? sidesEnv.follow(target, dt)
+          : (sidesFb += (target - sidesFb) * Math.min(1, dt * 1.1), sidesFb);
+        sides = Math.max(3, sides);
+        const pulse = rawPulse(t);
+        const cx = W / 2, cy = H / 2;
+        const R = Math.min(W, H) * 0.30 * (1 + 0.14 * pulse);
+        const rot = t * 0.16 + (pointer.on ? (pointer.y - 0.5) * 1.6 : 0);
+        const M = 24, size = 20 + pulse * 14;
+        const ngon = n => {
+          const v = [];
+          for (let k = 0; k < n; k++) { const a = rot - Math.PI / 2 + k * (Math.PI * 2 / n); v.push([Math.cos(a) * R, Math.sin(a) * R]); }
+          return v;
+        };
+        const nLo = Math.floor(sides), nHi = Math.ceil(sides), fr = sides - nLo;
+        const A = ngon(nLo), B = nHi === nLo ? A : ngon(nHi);
+        const pt = (arr, n, m) => {
+          const s = (m / M) * n, e = Math.floor(s) % n, f = s - Math.floor(s);
+          const a = arr[e], b = arr[(e + 1) % n];
+          return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+        };
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = size + 'px serif';
+        for (let m = 0; m < M; m++) {
+          const p = pt(A, nLo, m), q = pt(B, nHi, m);
+          const x = cx + p[0] + (q[0] - p[0]) * fr;
+          const y = cy + p[1] + (q[1] - p[1]) * fr;
+          ctx.globalAlpha = 0.85 + pulse * 0.15;
+          ctx.fillText(FORM[m % FORM.length], x, y);
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+    setMode('rain');
+    requestAnimationFrame(frame);
   })();
 
 })();
