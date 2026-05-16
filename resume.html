@@ -405,6 +405,10 @@
       .list-row        { grid-template-columns: 1fr; gap: 8px; }
       nav a:not(:last-child) { display: none; }
     }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
   </style>
 </head>
 <body>
@@ -640,10 +644,16 @@
   'use strict';
   gsap.registerPlugin(ScrollTrigger);
 
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   const EASE = 'cubic-bezier(0.16, 1, 0.3, 1)';
 
   // ── Scroll reveal ──────────────────────────────────────────
   document.querySelectorAll('[data-sr]').forEach(el => {
+    if (REDUCED) {
+      gsap.set(el, { opacity: 1, y: 0 });
+      return;
+    }
     gsap.fromTo(el,
       { opacity: 0, y: 22 },
       {
@@ -726,6 +736,12 @@
         el.textContent = emoji;
         section.insertBefore(el, section.firstChild);
 
+        if (REDUCED) {
+          // Static: show at base opacity/rotation, no fade, no scrub, no drift
+          gsap.set(el, { opacity: baseOp, rotate: baseRot });
+          return;
+        }
+
         gsap.to(el, { opacity: baseOp, duration: 2, delay: 0.5 + i * 0.3, ease: 'power1.inOut' });
 
         // Robots keep scroll-driven Y depth; all get Perlin X + rotation
@@ -743,6 +759,8 @@
           rotRange: 5 + Math.random() * 8 });
       });
     });
+
+    if (REDUCED) return;
 
     gsap.ticker.add(time => {
       const t = time * 0.035;
@@ -775,6 +793,12 @@
         willChange: 'opacity',
       });
       container.appendChild(s);
+
+      if (REDUCED) {
+        // Static starfield: base opacity, no fade-in, no twinkle
+        gsap.set(s, { opacity: baseOp });
+        continue;
+      }
 
       // Fade in staggered
       gsap.to(s, { opacity: baseOp, duration: 2 + Math.random() * 3,
