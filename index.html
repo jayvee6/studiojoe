@@ -508,6 +508,13 @@
         <span class="shelf-go">On GitHub ↗</span>
       </a>
 
+      <a class="shelf-card" href="https://jayvee6.github.io/sj-audio-bridge/" target="_blank" rel="noopener">
+        <span class="shelf-kind">Tool</span>
+        <span class="shelf-title">SJ Audio Bridge</span>
+        <span class="shelf-desc">Native macOS menubar helper — ScreenCaptureKit system audio → a localhost WebSocket, so any browser viz reacts to whatever's playing. Zoom/Teams-style capture.</span>
+        <span class="shelf-go">Open ↗</span>
+      </a>
+
       <a class="shelf-card" href="/musicplayer/">
         <span class="shelf-kind">Side project</span>
         <span class="shelf-title">Music Player</span>
@@ -1049,15 +1056,19 @@ fn getCamPos() -> vec3<f32> {
 '    beat:   SJPulse.kick(t, { kickRate: 1.3, ghostAmp: 0 }) * 0.5,\n' +
 '  };\n' +
 '}\n' +
-'// Swap pulses(t) for an audio frame\'s bass/treble/beat and the\n' +
-'// terrain reacts to sound. That swap point is the whole hook.\n' +
+'// Swap pulses(t) for a live audio frame and the terrain reacts\n' +
+'// to sound. SJ Audio Bridge IS that swap: a macOS menubar helper\n' +
+'// piping system audio over a localhost WebSocket — real bass/\n' +
+'// treble/beat in, same shader. That swap point is the whole hook.\n' +
 '\n' +
 '// Full scene (WGSL + pipeline):\n' +
 '//   sj-design/showcase/scenes/wire-terrain.html\n' +
+'// Live system audio in (macOS):\n' +
+'//   github.com/jayvee6/sj-audio-bridge\n' +
 '// Helpers, vendored verbatim at /lib/:\n' +
 '//   synthetic-pulse.js  → SJPulse\n' +
 '//   webgpu-bootstrap.js → SJGpu',
-        take: 'https://github.com/jayvee6',
+        take: 'https://github.com/jayvee6/sj-audio-bridge',
       },
       'sj-design': {
         title: 'This whole site is sj-design',
