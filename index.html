@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -35,22 +35,6 @@
       --glass-shd: 0 8px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08);
     }
 
-    [data-theme="light"] {
-      --bg:        #EEF3F4;
-      --bg-g:      linear-gradient(178deg, #DDF2EF 0%, #E6F0F2 40%, #EEF3F4 100%);
-      --label-1:   #06201C;
-      --label-2:   rgba(6,32,28,0.60);
-      --label-3:   rgba(6,32,28,0.34);
-      --accent:    #0D9488;
-      --accent-bg: rgba(13,148,136,0.14);
-      --fill-1:    rgba(6,32,28,0.04);
-      --fill-2:    rgba(6,32,28,0.08);
-      --sep:       rgba(6,32,28,0.10);
-      --glass-bg:  rgba(255,255,255,0.62);
-      --glass-bdr: rgba(6,80,72,0.14);
-      --glass-shd: 0 8px 40px rgba(6,40,36,0.12), inset 0 1px 0 rgba(255,255,255,0.85);
-    }
-
     html {
       background: var(--bg);
       scroll-behavior: smooth;
@@ -77,10 +61,6 @@
     body[data-zone="sandbox"]   { --accent: #22D3EE; --atmo: 34,211,238; }
     body[data-zone="shelf"]     { --accent: #8B7CF6; --atmo: 139,124,246; }
     body[data-zone="workbench"] { --accent: #E8B450; --atmo: 232,180,80; }
-    [data-theme="light"] body[data-zone="showroom"]  { --accent: #0D9488; }
-    [data-theme="light"] body[data-zone="sandbox"]   { --accent: #0E7490; }
-    [data-theme="light"] body[data-zone="shelf"]     { --accent: #6D5DD3; }
-    [data-theme="light"] body[data-zone="workbench"] { --accent: #B07A12; }
     #atmo {
       position: fixed; inset: 0; z-index: 0; pointer-events: none;
       background: radial-gradient(ellipse 80% 60% at 50% 8%,
@@ -88,7 +68,7 @@
       transition: background 0.8s ease;
     }
     .crack-chip, .crack-link, nav a, .footer-link, .eyebrow,
-    .shelf-kind, .shelf-go, .scroll-cue, #theme-btn,
+    .shelf-kind, .shelf-go, .scroll-cue,
     .crack-section-label { transition: color 0.6s ease, background 0.3s, border-color 0.3s; }
 
     #gobo {
@@ -114,7 +94,6 @@
       -webkit-backdrop-filter: saturate(180%) blur(20px);
       transition: background 0.3s, border-color 0.3s;
     }
-    [data-theme="light"] header { background: rgba(230,240,242,0.55); }
     .wordmark {
       font-size: 15px; font-weight: 700;
       letter-spacing: -0.02em; color: var(--label-1);
@@ -129,14 +108,6 @@
       transition: color 0.2s, background 0.2s;
     }
     nav a:hover { color: var(--label-1); background: var(--fill-2); }
-    #theme-btn {
-      width: 32px; height: 28px; border-radius: 7px;
-      background: var(--fill-2); border: 1px solid var(--glass-bdr);
-      color: var(--label-2); font-size: 14px; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      margin-left: 8px; transition: background 0.2s, color 0.2s;
-    }
-    #theme-btn:hover { background: var(--fill-1); color: var(--label-1); }
 
     /* ── Zones ──────────────────────────────────────────────────────────── */
     main { position: relative; z-index: 10; }
@@ -235,10 +206,6 @@
       background: radial-gradient(ellipse 90% 70% at 50% 28%,
         #0e1c1f 0%, #0a1014 42%, #08090e 70%, #060608 100%);
     }
-    [data-theme="light"] #showroom::before {
-      background: radial-gradient(ellipse 90% 70% at 50% 28%,
-        #d6efeb 0%, #e6f0f2 60%, #eef3f4 100%);
-    }
     #hero-gpu {
       position: absolute; inset: 0; z-index: 0;
       width: 100%; height: 100%; display: block;
@@ -248,10 +215,6 @@
       position: absolute; inset: 0; z-index: 1; pointer-events: none;
       background: radial-gradient(ellipse 75% 75% at 50% 45%, transparent 0%,
         rgba(6,6,8,0.30) 58%, rgba(6,6,8,0.74) 100%);
-    }
-    [data-theme="light"] .hero-scrim {
-      background: radial-gradient(ellipse 75% 75% at 50% 45%, transparent 0%,
-        rgba(238,243,244,0.20) 58%, rgba(238,243,244,0.62) 100%);
     }
     .showroom-inner { position: relative; z-index: 2; }
 
@@ -418,7 +381,6 @@
       border-top: 1px solid var(--sep);
       background: rgba(0,0,0,0.25);
     }
-    [data-theme="light"] footer { background: rgba(6,40,36,0.05); }
     .footer-sub { font-size: 11px; color: var(--label-3); letter-spacing: 0.04em; }
     .footer-links { display: flex; gap: 16px; flex-wrap: wrap; }
     .footer-link {
@@ -446,7 +408,6 @@
     <a href="/resume.html">Resume</a>
     <a href="https://www.linkedin.com/in/joey-v-287ba5394" target="_blank" rel="noopener">LinkedIn</a>
     <a href="https://github.com/jayvee6" target="_blank" rel="noopener">GitHub</a>
-    <button id="theme-btn" aria-label="Toggle theme">☀️</button>
   </nav>
 </header>
 
@@ -608,20 +569,6 @@
   gsap.set('#hd', { opacity: 0, y: 12 });
   gsap.to('#hh', { opacity: 1, y: 0, duration: 0.75, ease: EASE, delay: 0.10 });
   gsap.to('#hd', { opacity: 1, y: 0, duration: 0.55, ease: EASE, delay: 0.38 });
-
-  // ── Dark / Light toggle (carried forward — same localStorage key) ──────
-  const btn = document.getElementById('theme-btn');
-  let isDark = (() => { try { return localStorage.getItem('theme') !== 'light'; } catch (e) { return true; } })();
-  function applyTheme() {
-    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
-    btn.textContent = isDark ? '☀️' : '🌙';
-  }
-  btn.addEventListener('click', () => {
-    isDark = !isDark;
-    try { localStorage.setItem('theme', isDark ? 'dark' : 'light'); } catch (e) {}
-    applyTheme();
-  });
-  applyTheme();
 
   // ── Perlin noise (Ken Perlin's improved algorithm) ─────────────────────
   const _pp = (function () {
