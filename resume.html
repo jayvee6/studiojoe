@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,39 +12,26 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    /* ── Design tokens (same system as the presentation skill) ── */
+    /* ── Design tokens — Nocturne / Aurora (matches studiojoe.dev):
+         graphite base + cool aurora glow + electric-teal accent.
+         Same 13-name contract; dark-only (light mode retired). ── */
     :root {
-      --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
-              "Helvetica Neue", Arial, sans-serif;
-      --bg:         #000000;
-      --bg-g:       radial-gradient(ellipse at 35% 15%, #1A237E 0%, #191970 28%, #0d0d3a 58%, #050510 100%);
-      --label-1:    rgba(255,255,255,0.92);
-      --label-2:    rgba(255,255,255,0.55);
-      --label-3:    rgba(255,255,255,0.25);
-      --accent:     #0A84FF;
-      --accent-bg:  rgba(10,132,255,0.12);
-      --fill-1:     rgba(255,255,255,0.06);
-      --fill-2:     rgba(255,255,255,0.11);
-      --sep:        rgba(255,255,255,0.12);
-      --glass-bg:   rgba(255,255,255,0.10);
-      --glass-bdr:  rgba(255,255,255,0.16);
-      --glass-shd:  0 8px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.12);
-    }
-
-    [data-theme="light"] {
-      --bg:         #E8F4FF;
-      --bg-g:       linear-gradient(175deg, #0096FF 0%, #1E90FF 28%, #5BB8FF 52%, #C8E8FF 72%, #EEF7FF 100%);
-      --label-1:    #001E3C;
-      --label-2:    rgba(0,30,60,0.55);
-      --label-3:    rgba(0,30,60,0.28);
-      --accent:     #E8450A;
-      --accent-bg:  rgba(232,69,10,0.28);
-      --fill-1:     rgba(0,100,200,0.05);
-      --fill-2:     rgba(0,100,200,0.09);
-      --sep:        rgba(0,80,180,0.12);
-      --glass-bg:   rgba(200,230,255,0.68);
-      --glass-bdr:  rgba(0,100,200,0.14);
-      --glass-shd:  0 8px 40px rgba(0,50,120,0.12), inset 0 1px 0 rgba(255,255,255,0.85);
+      --font:      -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+                   "Helvetica Neue", Arial, sans-serif;
+      --bg:        #060608;
+      --bg-g:      radial-gradient(ellipse 90% 60% at 50% -10%,
+                     #122 0%, #0c1418 30%, #08090e 62%, #060608 100%);
+      --label-1:   rgba(255,255,255,0.92);
+      --label-2:   rgba(255,255,255,0.55);
+      --label-3:   rgba(255,255,255,0.28);
+      --accent:    #2DD4BF;
+      --accent-bg: rgba(45,212,191,0.12);
+      --fill-1:    rgba(255,255,255,0.04);
+      --fill-2:    rgba(255,255,255,0.08);
+      --sep:       rgba(255,255,255,0.09);
+      --glass-bg:  rgba(255,255,255,0.05);
+      --glass-bdr: rgba(255,255,255,0.10);
+      --glass-shd: 0 8px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08);
     }
 
     html {
@@ -100,10 +87,6 @@
       -webkit-backdrop-filter: saturate(180%) blur(20px);
       transition: background 0.3s, border-color 0.3s;
     }
-    [data-theme="light"] header {
-      background: rgba(0,100,200,0.35);
-    }
-
     .wordmark {
       font-size: 15px; font-weight: 700;
       letter-spacing: -0.02em;
@@ -121,15 +104,6 @@
       transition: color 0.2s, background 0.2s;
     }
     nav a:hover { color: var(--label-1); background: var(--fill-2); }
-
-    #theme-btn {
-      width: 32px; height: 28px; border-radius: 7px;
-      background: var(--fill-2); border: 1px solid var(--glass-bdr);
-      color: var(--label-2); font-size: 14px; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      margin-left: 8px; transition: background 0.2s, color 0.2s;
-    }
-    #theme-btn:hover { background: var(--fill-1); color: var(--label-1); }
 
     /* ── Layout ────────────────────────────────────────────── */
     .container { max-width: 1100px; margin: 0 auto; }
@@ -206,18 +180,18 @@
       letter-spacing: -0.01em;
     }
     .btn-solid {
-      background: var(--accent); color: #fff;
+      background: var(--accent); color: #04110f;
       box-shadow:
         inset 0 1px 0 rgba(255,255,255,0.28),
         inset 0 -1px 0 rgba(0,0,0,0.22),
-        0 2px 10px rgba(10,132,255,0.38);
+        0 2px 10px rgba(45,212,191,0.34);
     }
     .btn-solid:hover {
       filter: brightness(1.12);
       box-shadow:
         inset 0 1px 0 rgba(255,255,255,0.28),
         inset 0 -1px 0 rgba(0,0,0,0.22),
-        0 4px 18px rgba(10,132,255,0.52);
+        0 4px 18px rgba(45,212,191,0.46);
     }
     .btn-ghost {
       background: rgba(255,255,255,0.09);
@@ -236,17 +210,6 @@
         inset 0 1.5px 0 rgba(255,255,255,0.55),
         inset 0 -1px 0 rgba(0,0,0,0.18),
         0 4px 14px rgba(0,0,0,0.32);
-    }
-    [data-theme="light"] .btn-ghost {
-      background: rgba(255,255,255,0.60);
-      border: 1px solid rgba(255,255,255,0.82);
-      box-shadow:
-        inset 0 1.5px 0 rgba(255,255,255,0.92),
-        inset 0 -1px 0 rgba(0,60,140,0.08),
-        0 2px 8px rgba(0,30,80,0.10);
-    }
-    [data-theme="light"] .btn-ghost:hover {
-      background: rgba(255,255,255,0.78);
     }
 
     /* ── Work cards ────────────────────────────────────────── */
@@ -332,30 +295,6 @@
         inset 0 -1.5px 0 rgba(0,0,0,0.22),
         0 20px 52px rgba(0,0,0,0.44),
         0 4px 10px rgba(0,0,0,0.18);
-    }
-    [data-theme="light"] .e-card,
-    [data-theme="light"] .now-card,
-    [data-theme="light"] .card {
-      background: rgba(255,255,255,0.55);
-      border: 1px solid rgba(255,255,255,0.78);
-      box-shadow:
-        inset 0 1.5px 0 rgba(255,255,255,0.92),
-        inset 1px 0 0 rgba(255,255,255,0.60),
-        inset -1px 0 0 rgba(255,255,255,0.40),
-        inset 0 -1.5px 0 rgba(0,60,140,0.08),
-        0 6px 24px rgba(0,30,80,0.12),
-        0 1px 2px rgba(0,30,80,0.06);
-    }
-    [data-theme="light"] .e-card:hover,
-    [data-theme="light"] .now-card:hover,
-    [data-theme="light"] .card:hover {
-      box-shadow:
-        inset 0 1.5px 0 rgba(255,255,255,1),
-        inset 1px 0 0 rgba(255,255,255,0.80),
-        inset -1px 0 0 rgba(255,255,255,0.60),
-        inset 0 -1.5px 0 rgba(0,60,140,0.08),
-        0 18px 44px rgba(0,30,80,0.18),
-        0 4px 8px rgba(0,30,80,0.08);
     }
 
     /* ── Expertise grid ────────────────────────────────────── */
@@ -493,7 +432,6 @@
     <a href="#work">Work</a>
     <a href="#now">Now</a>
     <a href="/" style="opacity:0.5">← Home</a>
-    <button id="theme-btn" aria-label="Toggle theme">☀️</button>
   </nav>
 </header>
 
@@ -686,24 +624,6 @@
       }
     );
   });
-
-  // ── Dark / Light toggle ────────────────────────────────────
-  const btn  = document.getElementById('theme-btn');
-  let isDark = (() => { try { return localStorage.getItem('theme') !== 'light'; } catch(e) { return true; } })();
-
-  function applyTheme() {
-    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
-    btn.textContent = isDark ? '☀️' : '🌙';
-    btn.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
-  }
-
-  btn.addEventListener('click', () => {
-    isDark = !isDark;
-    try { localStorage.setItem('theme', isDark ? 'dark' : 'light'); } catch(e) {}
-    applyTheme();
-  });
-
-  applyTheme();
 
   // ── Perlin noise (Ken Perlin's improved algorithm) ─────────
   const _pp = (function () {
