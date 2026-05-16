@@ -67,7 +67,30 @@
       transition: background 0.4s, color 0.4s;
     }
 
-    /* ── Atmosphere base (S0). Zone-shifting atmosphere lands in S4. ─────── */
+    /* ── Atmosphere base + zone-shifting system (S4a) ───────────────────── */
+    /* The site doesn't HAVE a look — it demonstrates the look engine.
+       Each zone retints --accent and the ambient glow; an
+       IntersectionObserver sets body[data-zone] and these transition.
+       Same inspiration (cinematic, atmospheric), shifting execution. */
+    body { --atmo: 45,212,191; transition: background 0.4s, color 0.4s; }
+    body[data-zone="showroom"]  { --accent: #2DD4BF; --atmo: 45,212,191; }
+    body[data-zone="sandbox"]   { --accent: #22D3EE; --atmo: 34,211,238; }
+    body[data-zone="shelf"]     { --accent: #8B7CF6; --atmo: 139,124,246; }
+    body[data-zone="workbench"] { --accent: #E8B450; --atmo: 232,180,80; }
+    [data-theme="light"] body[data-zone="showroom"]  { --accent: #0D9488; }
+    [data-theme="light"] body[data-zone="sandbox"]   { --accent: #0E7490; }
+    [data-theme="light"] body[data-zone="shelf"]     { --accent: #6D5DD3; }
+    [data-theme="light"] body[data-zone="workbench"] { --accent: #B07A12; }
+    #atmo {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background: radial-gradient(ellipse 80% 60% at 50% 8%,
+        rgba(var(--atmo), 0.14) 0%, rgba(var(--atmo), 0.05) 38%, transparent 70%);
+      transition: background 0.8s ease;
+    }
+    .crack-chip, .crack-link, nav a, .footer-link, .eyebrow,
+    .shelf-kind, .shelf-go, .scroll-cue, #theme-btn,
+    .crack-section-label { transition: color 0.6s ease, background 0.3s, border-color 0.3s; }
+
     #gobo {
       position: fixed; inset: 0; z-index: 1;
       pointer-events: none; overflow: hidden;
@@ -405,6 +428,7 @@
 <body>
 
 <div class="grain" aria-hidden="true"></div>
+<div id="atmo" aria-hidden="true"></div>
 <div id="gobo" aria-hidden="true"></div>
 
 <!-- Header (carried forward verbatim) -->
@@ -1263,6 +1287,28 @@ fn getCamPos() -> vec3<f32> {
     }
     setMode('rain');
     requestAnimationFrame(frame);
+  })();
+
+  // ── Zone-atmosphere — scroll retints the ambient per zone ──────────────
+  // The accent + glow shift between zones; CSS transitions do the crossfade.
+  // Demonstrates the sj-design theme/mood idea: one look engine, many moods.
+  (function ZoneAtmosphere() {
+    const zones = ['showroom', 'sandbox', 'shelf', 'workbench']
+      .map(id => document.getElementById(id))
+      .filter(Boolean);
+    if (!zones.length || !('IntersectionObserver' in window)) {
+      document.body.dataset.zone = 'showroom';
+      return;
+    }
+    document.body.dataset.zone = 'showroom';
+    const ratio = new Map();
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => ratio.set(e.target.id, e.intersectionRatio));
+      let best = document.body.dataset.zone, max = -1;
+      ratio.forEach((r, id) => { if (r > max) { max = r; best = id; } });
+      if (best && best !== document.body.dataset.zone) document.body.dataset.zone = best;
+    }, { threshold: [0.15, 0.35, 0.55, 0.75] });
+    zones.forEach(z => io.observe(z));
   })();
 
 })();
