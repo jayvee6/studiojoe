@@ -114,7 +114,7 @@
       overflow: hidden;
     }
 
-    #expertise, #known, #work, #now {
+    #expertise, #known, #work, #method, #now {
       z-index: 12;
     }
 
@@ -430,6 +430,7 @@
     <a href="#expertise">Expertise</a>
     <a href="#known">Known for</a>
     <a href="#work">Work</a>
+    <a href="#method">Co-engineering</a>
     <a href="#now">Now</a>
     <a href="/" style="opacity:0.5">← Home</a>
   </nav>
@@ -444,7 +445,9 @@
     <p  class="hero-bio"  data-sr>
       10+ years shipping high-visibility releases and protecting platform
       integrity across mobile, desktop, TV, wearable, and AR. I turn
-      ambiguous issues into actionable evidence — fast.
+      ambiguous issues into actionable evidence — fast. Off the clock I
+      design and ship real-time-graphics tools and apps, co-engineering
+      with a disciplined multi-agent Claude workflow.
     </p>
     <div class="ctas" data-sr>
       <a class="btn btn-solid" href="https://www.linkedin.com/in/joey-v-287ba5394" target="_blank" rel="noopener">LinkedIn ↗</a>
@@ -560,6 +563,31 @@
   </div>
 </section>
 
+<!-- ═══════════════════════════════════ CO-ENGINEERING ═══ -->
+<section id="method">
+  <div class="container">
+    <p  class="eyebrow"          data-sr>How the work gets made</p>
+    <h2 class="section-heading"  data-sr>Co-engineering with AI</h2>
+    <div class="now-grid">
+      <div class="now-card" data-sr>
+        <p class="now-tag">Review architecture</p>
+        <p class="now-title">Two auditors, one arbiter</p>
+        <p class="now-desc">Every change is audited twice — once for implementation correctness, once for design — and an arbiter resolves conflicts with cited evidence. Only the ruling ships.</p>
+      </div>
+      <div class="now-card" data-sr>
+        <p class="now-tag">Context management</p>
+        <p class="now-title">Context as managed state</p>
+        <p class="now-desc">Work moves on self-contained handoff packets, not chat history; past a token budget the agent cold-boots fresh. Long tasks resume cleanly across any interruption.</p>
+      </div>
+      <div class="now-card" data-sr>
+        <p class="now-tag">Agent design</p>
+        <p class="now-title">A fleet of specialists</p>
+        <p class="now-desc">Narrow expert agents over one generalist — a GPU-API advisor across Vulkan / Metal / WebGPU, parallel review and bug-hunt swarms — fanned out under a cap and reconciled before anything advances.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ═══════════════════════════════════ NOW ════ -->
 <section id="now">
   <div class="container">
@@ -659,6 +687,7 @@
       { id: 'expertise', pool: ['🧠','🔬','🤔','🧪','🔍','💡'],      count: 3 },
       { id: 'known',     pool: ['🔍','🧪','🔬','🤔','🎯'],            count: 2 },
       { id: 'work',      pool: ['🤖','🤖','🤖','🤖','🧪','🔬'],       count: 5 },
+      { id: 'method',    pool: ['🧠','🤖','⚙️','🔁','🔬','🧩'],       count: 2 },
       { id: 'now',       pool: ['🪐','🎮','🎥','👾','🚀'],             count: 2, zones: [{ bottom: '14%', right: '3%' }, { top: '8%', left: '1%' }] },
     ];
     // Peripheral zones — edges of each section away from the centred .container
