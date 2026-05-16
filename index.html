@@ -222,6 +222,117 @@
       border: 1px dashed var(--glass-bdr);
     }
 
+    /* ── "Crack it open" — the signature mechanic ───────────────────────── */
+    /* Any [data-crack] element gets a discreet corner chip; activating it
+       slides in a glass panel with the real sj-design source + copy path.
+       Generic + registry-driven so every zone reuses one component. */
+    [data-crack] { position: relative; }
+    .crack-chip {
+      position: absolute; right: 14px; bottom: 14px; z-index: 5;
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 8px 14px; border-radius: 100px;
+      font: 600 12px/1 var(--font); letter-spacing: 0.02em;
+      color: var(--label-1);
+      background: var(--glass-bg); border: 1px solid var(--glass-bdr);
+      box-shadow: var(--glass-shd);
+      -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+      cursor: pointer; opacity: 0; transform: translateY(6px);
+      transition: opacity 0.3s, transform 0.3s, background 0.2s;
+    }
+    [data-crack]:hover .crack-chip,
+    [data-crack]:focus-within .crack-chip,
+    .crack-chip:focus-visible { opacity: 1; transform: translateY(0); }
+    .crack-chip:hover { background: var(--accent-bg); }
+    .crack-chip .gl { color: var(--accent); font-family: "SF Mono", ui-monospace, monospace; }
+
+    #crack-backdrop {
+      position: fixed; inset: 0; z-index: 9000;
+      background: rgba(2,3,5,0.55);
+      -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+      opacity: 0; pointer-events: none; transition: opacity 0.35s;
+    }
+    #crack-backdrop.open { opacity: 1; pointer-events: auto; }
+
+    #crack {
+      position: fixed; top: 0; right: 0; z-index: 9001;
+      width: min(540px, 92vw); height: 100svh;
+      display: flex; flex-direction: column;
+      background: var(--bg);
+      border-left: 1px solid var(--glass-bdr);
+      box-shadow: -24px 0 80px rgba(0,0,0,0.5);
+      transform: translateX(102%);
+      transition: transform 0.42s cubic-bezier(0.16,1,0.3,1);
+    }
+    #crack.open { transform: translateX(0); }
+    .crack-head {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 16px; padding: clamp(24px,4vw,40px) clamp(22px,3.5vw,36px) 18px;
+      border-bottom: 1px solid var(--sep);
+    }
+    .crack-eyebrow {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.16em;
+      text-transform: uppercase; color: var(--accent); margin-bottom: 8px;
+    }
+    .crack-title {
+      font-size: clamp(20px,2.4vw,26px); font-weight: 700;
+      letter-spacing: -0.02em; color: var(--label-1); line-height: 1.15;
+    }
+    #crack-close {
+      flex: none; width: 34px; height: 34px; border-radius: 9px;
+      background: var(--fill-2); border: 1px solid var(--glass-bdr);
+      color: var(--label-2); font-size: 16px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s, color 0.2s;
+    }
+    #crack-close:hover { background: var(--fill-1); color: var(--label-1); }
+    .crack-body {
+      flex: 1; overflow-y: auto;
+      padding: clamp(20px,3.5vw,32px) clamp(22px,3.5vw,36px) clamp(28px,5vw,44px);
+      display: flex; flex-direction: column; gap: 22px;
+    }
+    .crack-what { font-size: 15px; line-height: 1.6; color: var(--label-2); }
+    .crack-section-label {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--label-3); margin-bottom: 10px;
+    }
+    .crack-code {
+      margin: 0; padding: 18px 20px; border-radius: 12px;
+      background: var(--fill-1); border: 1px solid var(--sep);
+      font: 12.5px/1.65 "SF Mono", ui-monospace, "Menlo", monospace;
+      color: var(--label-1); white-space: pre; overflow-x: auto;
+    }
+    .crack-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+    .crack-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 20px; border-radius: 100px;
+      font: 600 13px/1 var(--font); letter-spacing: -0.01em;
+      cursor: pointer; text-decoration: none;
+      transition: filter 0.2s, transform 0.15s, background 0.2s;
+    }
+    .crack-btn.primary { background: var(--accent); color: #04110f; border: none; }
+    .crack-btn.primary:hover { filter: brightness(1.12); transform: translateY(-1px); }
+    .crack-btn.ghost {
+      background: var(--fill-2); border: 1px solid var(--glass-bdr);
+      color: var(--label-1);
+    }
+    .crack-btn.ghost:hover { background: var(--fill-1); }
+    .crack-link {
+      align-self: flex-start; margin-top: clamp(22px,3vh,36px);
+      padding: 10px 18px; border-radius: 100px;
+      font: 600 12px/1 var(--font); letter-spacing: 0.04em;
+      color: var(--label-2);
+      background: transparent; border: 1px dashed var(--glass-bdr);
+      cursor: pointer; transition: color 0.2s, border-color 0.2s, background 0.2s;
+    }
+    .crack-link:hover {
+      color: var(--accent); border-color: var(--accent);
+      background: var(--accent-bg);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .crack-chip, #crack, #crack-backdrop { transition: opacity 0.2s; }
+      #crack { transition: none; }
+    }
+
     /* ── Footer (static — the page scrolls through zones now) ───────────── */
     footer {
       position: relative; z-index: 10;
@@ -265,7 +376,7 @@
 <main>
 
   <!-- ── SHOWROOM — the monument. WebGPU hero lands in S1. ──────────────── -->
-  <section id="showroom" class="zone">
+  <section id="showroom" class="zone" data-crack="wire-terrain">
     <canvas id="hero-gpu" aria-hidden="true"></canvas>
     <div class="hero-scrim" aria-hidden="true"></div>
     <div class="showroom-inner">
@@ -337,6 +448,9 @@
       </a>
 
     </div>
+    <button type="button" class="crack-link" data-crack-open="sj-design">
+      ⟨ &nbsp;every pixel on this page is sj-design — crack it open&nbsp; ⟩
+    </button>
   </section>
 
   <!-- ── WORKBENCH — living core. Blog / video land in v2. ─────────────── -->
@@ -361,6 +475,19 @@
     <a class="footer-link" href="https://github.com/jayvee6" target="_blank" rel="noopener">GitHub ↗</a>
   </div>
 </footer>
+
+<!-- "Crack it open" panel — filled by the CrackOpen component on open -->
+<div id="crack-backdrop" aria-hidden="true"></div>
+<aside id="crack" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="crack-title">
+  <div class="crack-head">
+    <div>
+      <p class="crack-eyebrow">Crack it open</p>
+      <h2 class="crack-title" id="crack-title"></h2>
+    </div>
+    <button type="button" id="crack-close" aria-label="Close">✕</button>
+  </div>
+  <div class="crack-body" id="crack-body"></div>
+</aside>
 
 <script>
 (function () {
@@ -739,6 +866,176 @@ fn getCamPos() -> vec3<f32> {
       }
       requestAnimationFrame(frame);
     })();
+  })();
+
+  // ── "Crack it open" — the signature mechanic ───────────────────────────
+  // Every holy-shit on this page has a 1-click "...and here's how, take it"
+  // underneath. Registry-driven + generic: [data-crack="id"] boxes get a
+  // corner chip; [data-crack-open="id"] is an explicit trigger. The Sandbox
+  // (S3) reuses this same component for each interactive piece.
+  (function CrackOpen() {
+    const REG = {
+      'wire-terrain': {
+        title: 'Wire Terrain — WebGPU',
+        what: 'The moving monument behind the headline: a raymarched ' +
+              'fractal-Brownian-motion terrain with analytic wireframe ' +
+              'lines. One fullscreen-triangle WGSL fragment shader, a ' +
+              'single render pass, zero postprocessing — verbatim from ' +
+              "sj-design's perf-tuned scene. The site isn't built next " +
+              'to the tool; it IS the tool.',
+        code:
+'// The only part you tune — the pulse. Everything else is the scene.\n' +
+'function pulses(t) {\n' +
+'  return {\n' +
+'    bass:   SJPulse.kick(t),\n' +
+'    treble: SJPulse.flicker(t, { rate: 6 }) * 0.6,\n' +
+'    beat:   SJPulse.kick(t, { kickRate: 1.3, ghostAmp: 0 }) * 0.5,\n' +
+'  };\n' +
+'}\n' +
+'// Swap pulses(t) for an audio frame\'s bass/treble/beat and the\n' +
+'// terrain reacts to sound. That swap point is the whole hook.\n' +
+'\n' +
+'// Full scene (WGSL + pipeline):\n' +
+'//   sj-design/showcase/scenes/wire-terrain.html\n' +
+'// Helpers, vendored verbatim at /lib/:\n' +
+'//   synthetic-pulse.js  → SJPulse\n' +
+'//   webgpu-bootstrap.js → SJGpu',
+        take: 'https://github.com/jayvee6/sj-design',
+      },
+      'sj-design': {
+        title: 'This whole site is sj-design',
+        what: "studiojoe.dev isn't built beside the toolkit — it's built " +
+              'out of it. Same lib/, same scenes, same patterns the ' +
+              'showcase ships. The eye candy is the proof; the toolkit ' +
+              'is the point. Take it.',
+        code:
+'<!-- studiojoe.dev/index.html — the actual lines -->\n' +
+'<script src="/lib/synthetic-pulse.js"></scr' + 'ipt>\n' +
+'//   vendored verbatim from sj-design/lib/\n' +
+'\n' +
+'SJPulse.kick(t)                  // drives the hero terrain\n' +
+'gsap.ticker.add(t => /* pnoise */) // the ambient drift\n' +
+'\n' +
+'// The whole toolkit, free:\n' +
+'//   github.com/jayvee6/sj-design\n' +
+'//   lib/ + showcase/scenes/ + showcase/emoji-formations/',
+        take: 'https://github.com/jayvee6/sj-design',
+      },
+    };
+
+    const panel    = document.getElementById('crack');
+    const backdrop = document.getElementById('crack-backdrop');
+    const titleEl  = document.getElementById('crack-title');
+    const bodyEl   = document.getElementById('crack-body');
+    const closeBtn = document.getElementById('crack-close');
+    if (!panel || !backdrop) return;
+
+    let lastFocus = null;   // reduced-motion is handled in CSS
+
+    function buildBody(entry) {
+      bodyEl.textContent = '';
+      const what = document.createElement('p');
+      what.className = 'crack-what';
+      what.textContent = entry.what;
+
+      const lbl = document.createElement('p');
+      lbl.className = 'crack-section-label';
+      lbl.textContent = 'The source';
+
+      const pre = document.createElement('pre');
+      pre.className = 'crack-code';
+      pre.textContent = entry.code;
+
+      const actions = document.createElement('div');
+      actions.className = 'crack-actions';
+
+      const take = document.createElement('a');
+      take.className = 'crack-btn primary';
+      take.href = entry.take;
+      take.target = '_blank';
+      take.rel = 'noopener';
+      take.textContent = 'Take it → GitHub';
+
+      const copy = document.createElement('button');
+      copy.type = 'button';
+      copy.className = 'crack-btn ghost';
+      copy.textContent = 'Copy the source';
+      copy.addEventListener('click', () => {
+        const done = () => {
+          copy.textContent = 'Copied ✓';
+          setTimeout(() => { copy.textContent = 'Copy the source'; }, 1600);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(entry.code).then(done, done);
+        } else { done(); }
+      });
+
+      actions.appendChild(take);
+      actions.appendChild(copy);
+      bodyEl.appendChild(what);
+      bodyEl.appendChild(lbl);
+      bodyEl.appendChild(pre);
+      bodyEl.appendChild(actions);
+    }
+
+    function open(id) {
+      const entry = REG[id];
+      if (!entry) return;
+      lastFocus = document.activeElement;
+      titleEl.textContent = entry.title;
+      buildBody(entry);
+      backdrop.classList.add('open');
+      panel.classList.add('open');
+      backdrop.setAttribute('aria-hidden', 'false');
+      panel.setAttribute('aria-hidden', 'false');
+      closeBtn.focus();
+      document.addEventListener('keydown', onKey);
+    }
+
+    function close() {
+      panel.classList.remove('open');
+      backdrop.classList.remove('open');
+      backdrop.setAttribute('aria-hidden', 'true');
+      panel.setAttribute('aria-hidden', 'true');
+      document.removeEventListener('keydown', onKey);
+      if (lastFocus && lastFocus.focus) lastFocus.focus();
+    }
+
+    function onKey(e) {
+      if (e.key === 'Escape') { close(); return; }
+      if (e.key !== 'Tab') return;
+      // Focus trap within the panel.
+      const f = panel.querySelectorAll(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])');
+      if (!f.length) return;
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+
+    closeBtn.addEventListener('click', close);
+    backdrop.addEventListener('click', close);
+
+    // Inject a corner chip into every [data-crack] box.
+    document.querySelectorAll('[data-crack]').forEach(box => {
+      const id = box.getAttribute('data-crack');
+      if (!REG[id]) return;
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'crack-chip';
+      chip.setAttribute('aria-label', 'Crack it open — see the source');
+      chip.innerHTML = '<span class="gl">&lt;/&gt;</span> crack it open';
+      chip.addEventListener('click', e => { e.stopPropagation(); open(id); });
+      box.appendChild(chip);
+    });
+
+    // Bind explicit triggers.
+    document.querySelectorAll('[data-crack-open]').forEach(btn => {
+      btn.addEventListener('click', () => open(btn.getAttribute('data-crack-open')));
+    });
+
+    // Expose for the Sandbox (S3) to register + open its own pieces.
+    window.CrackOpen = { register: (id, entry) => { REG[id] = entry; }, open };
   })();
 
 })();
