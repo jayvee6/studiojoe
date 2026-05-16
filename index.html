@@ -1,26 +1,32 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Studio Joe</title>
-  <meta name="description" content="Code, camera, and everything in between. Build with intention.">
+  <meta name="description" content="Real-time graphics across web and native. The studio, the tools, the proof.">
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="/lib/synthetic-pulse.js"></script>
+  <script src="/lib/envelopes.js"></script>
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    /* ── Design tokens — same 13-name contract; new "Nocturne / Aurora"
+         direction (graphite base + cool aurora glow + electric-teal accent).
+         The old Blue Hour indigo is retired. ─────────────────────────────── */
     :root {
       --font:      -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
                    "Helvetica Neue", Arial, sans-serif;
-      --bg:        #000000;
-      --bg-g:      radial-gradient(ellipse at 35% 15%, #1A237E 0%, #191970 28%, #0d0d3a 58%, #050510 100%);
+      --bg:        #060608;
+      --bg-g:      radial-gradient(ellipse 90% 60% at 50% -10%,
+                     #122 0%, #0c1418 30%, #08090e 62%, #060608 100%);
       --label-1:   rgba(255,255,255,0.92);
       --label-2:   rgba(255,255,255,0.55);
-      --label-3:   rgba(255,255,255,0.25);
-      --accent:    #0A84FF;
-      --accent-bg: rgba(10,132,255,0.12);
+      --label-3:   rgba(255,255,255,0.28);
+      --accent:    #2DD4BF;
+      --accent-bg: rgba(45,212,191,0.12);
       --fill-1:    rgba(255,255,255,0.04);
       --fill-2:    rgba(255,255,255,0.08);
       --sep:       rgba(255,255,255,0.09);
@@ -29,27 +35,9 @@
       --glass-shd: 0 8px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08);
     }
 
-    [data-theme="light"] {
-      --bg:        #E8F4FF;
-      --bg-g:      linear-gradient(175deg, #0096FF 0%, #1E90FF 28%, #5BB8FF 52%, #C8E8FF 72%, #EEF7FF 100%);
-      --label-1:   #001E3C;
-      --label-2:   rgba(0,30,60,0.60);
-      --label-3:   rgba(0,30,60,0.32);
-      --accent:    #E8450A;
-      --accent-bg: rgba(232,69,10,0.15);
-      --fill-1:    rgba(0,30,60,0.04);
-      --fill-2:    rgba(0,30,60,0.08);
-      --sep:       rgba(0,30,60,0.10);
-      --glass-bg:  rgba(200,230,255,0.65);
-      --glass-bdr: rgba(0,80,180,0.14);
-      --glass-shd: 0 8px 40px rgba(0,30,80,0.12), inset 0 1px 0 rgba(255,255,255,0.85);
-    }
-
     html {
-      overflow-x: hidden;
       background: var(--bg);
-      min-height: 100svh;
-      transition: background 0.4s;
+      scroll-behavior: smooth;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
@@ -57,20 +45,36 @@
     body {
       font-family: var(--font);
       background: var(--bg-g);
+      background-attachment: fixed;
       color: var(--label-1);
       min-height: 100svh;
-      display: flex;
-      flex-direction: column;
       transition: background 0.4s, color 0.4s;
     }
 
-    /* ── Starfield container ───────────────────────────── */
+    /* ── Atmosphere base + zone-shifting system (S4a) ───────────────────── */
+    /* The site doesn't HAVE a look — it demonstrates the look engine.
+       Each zone retints --accent and the ambient glow; an
+       IntersectionObserver sets body[data-zone] and these transition.
+       Same inspiration (cinematic, atmospheric), shifting execution. */
+    body { --atmo: 45,212,191; transition: background 0.4s, color 0.4s; }
+    body[data-zone="showroom"]  { --accent: #2DD4BF; --atmo: 45,212,191; }
+    body[data-zone="sandbox"]   { --accent: #22D3EE; --atmo: 34,211,238; }
+    body[data-zone="shelf"]     { --accent: #8B7CF6; --atmo: 139,124,246; }
+    body[data-zone="workbench"] { --accent: #E8B450; --atmo: 232,180,80; }
+    #atmo {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background: radial-gradient(ellipse 80% 60% at 50% 8%,
+        rgba(var(--atmo), 0.14) 0%, rgba(var(--atmo), 0.05) 38%, transparent 70%);
+      transition: background 0.8s ease;
+    }
+    .crack-chip, .crack-link, nav a, .footer-link, .eyebrow,
+    .shelf-kind, .shelf-go, .scroll-cue,
+    .crack-section-label { transition: color 0.6s ease, background 0.3s, border-color 0.3s; }
+
     #gobo {
-      position: fixed; inset: 0; z-index: 6;
+      position: fixed; inset: 0; z-index: 1;
       pointer-events: none; overflow: hidden;
     }
-
-    /* ── Grain ─────────────────────────────────────────── */
     .grain {
       position: fixed; inset: 0; z-index: 9999;
       pointer-events: none;
@@ -78,29 +82,24 @@
       opacity: 0.035; mix-blend-mode: overlay;
     }
 
-
-    /* ── Header ────────────────────────────────────────── */
+    /* ── Header ─────────────────────────────────────────────────────────── */
     header {
       position: fixed; top: 0; left: 0; right: 0;
       z-index: 1000; height: 52px;
-      display: flex; align-items: center;
-      justify-content: space-between;
+      display: flex; align-items: center; justify-content: space-between;
       padding: 0 clamp(24px, 5vw, 80px);
       border-bottom: 1px solid var(--sep);
-      background: rgba(0,0,0,0.55);
+      background: rgba(6,6,8,0.55);
       backdrop-filter: saturate(180%) blur(20px);
       -webkit-backdrop-filter: saturate(180%) blur(20px);
       transition: background 0.3s, border-color 0.3s;
     }
-    [data-theme="light"] header { background: rgba(0,60,140,0.30); }
-
     .wordmark {
       font-size: 15px; font-weight: 700;
       letter-spacing: -0.02em; color: var(--label-1);
       text-decoration: none; transition: color 0.2s;
     }
     .wordmark:hover { color: var(--accent); }
-
     nav { display: flex; align-items: center; gap: 4px; }
     nav a {
       font-size: 13px; font-weight: 500;
@@ -110,123 +109,420 @@
     }
     nav a:hover { color: var(--label-1); background: var(--fill-2); }
 
-    #theme-btn {
-      width: 32px; height: 28px; border-radius: 7px;
-      background: var(--fill-2); border: 1px solid var(--glass-bdr);
-      color: var(--label-2); font-size: 14px; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      margin-left: 8px; transition: background 0.2s, color 0.2s;
-    }
-    #theme-btn:hover { background: var(--fill-1); color: var(--label-1); }
-
-    /* ── Hero — full viewport, centered ───────────────── */
-    main {
-      flex: 1;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      text-align: center;
-      /* top pad clears header (52px), bottom pad clears footer (44px) */
-      padding: clamp(80px, 12vh, 140px) clamp(24px, 5vw, 80px) 44px;
+    /* ── Zones ──────────────────────────────────────────────────────────── */
+    main { position: relative; z-index: 10; }
+    .zone {
       position: relative;
-      z-index: 11; /* above gobo (6) — text always frontmost */
-      min-height: clamp(560px, 100svh, 960px);
+      min-height: 100svh;
+      display: flex; flex-direction: column; justify-content: center;
+      align-items: flex-start;   /* don't stretch children — deterministic
+                                     box sizing across browsers (Safari's
+                                     stretch+aspect-ratio+max-width is buggy) */
+      padding: clamp(88px, 14vh, 160px) clamp(24px, 6vw, 96px) clamp(64px, 10vh, 120px);
+      border-bottom: 1px solid var(--sep);
+    }
+    .zone:last-of-type { border-bottom: none; }
+    .eyebrow {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--accent);
+      margin-bottom: 18px;
+    }
+    .zone h1 {
+      font-size: clamp(2.6rem, 7vw, 6.4rem);
+      font-weight: 700; letter-spacing: -0.035em; line-height: 1.02;
+      color: var(--label-1); max-width: 18ch;
+    }
+    .zone h1 .accent { color: var(--accent); }
+    .zone h2 {
+      font-size: clamp(1.8rem, 4vw, 3.4rem);
+      font-weight: 700; letter-spacing: -0.03em; line-height: 1.05;
+      color: var(--label-1); max-width: 16ch;
+    }
+    .lede {
+      margin-top: 22px;
+      font-size: clamp(15px, 1.6vw, 19px);
+      font-weight: 400; line-height: 1.55;
+      color: var(--label-2); max-width: 52ch;
+    }
+    .scroll-cue {
+      margin-top: clamp(40px, 7vh, 80px);
+      font-size: 11px; font-weight: 600; letter-spacing: 0.16em;
+      text-transform: uppercase; color: var(--label-3);
     }
 
-    .hero-hl {
-      font-size: clamp(2.4rem, 6.5vw, 6.5rem);
-      font-weight: 700; letter-spacing: -0.03em;
-      line-height: 1.0; color: var(--label-1);
-      max-width: 16ch;
-      margin-bottom: 28px;
-      opacity: 0;
+    /* ── Sandbox (S3): hands-on playground ──────────────────────────────── */
+    .sandbox-stage {
+      position: relative;
+      margin-top: clamp(24px, 4vh, 44px);
+      /* explicit, definite box — no aspect-ratio (Safari mis-resolves it
+         inside a flex column). Wide-ish 16:9-ish but height is concrete. */
+      width: min(100%, 1100px);
+      height: clamp(340px, 54vh, 600px);
+      border-radius: 18px; overflow: hidden;
+      background: #060a0c;
+      border: 1px solid var(--glass-bdr);
+      box-shadow: var(--glass-shd);
     }
-    .hero-hl .accent { color: var(--accent); }
+    .sandbox-stage canvas {
+      position: absolute; inset: 0; display: block;
+      width: 100%; height: 100%;   /* CSS box can't diverge from the stage */
+    }
+    .sandbox-hint {
+      position: absolute; left: 16px; bottom: 14px; z-index: 3;
+      font: 600 11px/1 var(--font); letter-spacing: 0.12em;
+      text-transform: uppercase; color: var(--label-3);
+      pointer-events: none;
+    }
+    .sandbox-controls {
+      margin-top: clamp(16px, 2.5vh, 26px);
+      display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+    }
+    .sb-btn {
+      padding: 10px 18px; border-radius: 100px;
+      font: 600 13px/1 var(--font); letter-spacing: -0.01em;
+      cursor: pointer;
+      background: var(--fill-2); border: 1px solid var(--glass-bdr);
+      color: var(--label-1);
+      transition: background 0.2s, color 0.2s, transform 0.15s;
+    }
+    .sb-btn:hover { background: var(--fill-1); transform: translateY(-1px); }
+    .sb-btn[aria-pressed="true"] {
+      background: var(--accent); color: #04110f; border-color: transparent;
+    }
+    .sb-emojis { display: flex; gap: 6px; flex-wrap: wrap; }
+    .sb-emoji {
+      width: 38px; height: 34px; border-radius: 9px;
+      font-size: 17px; cursor: pointer; line-height: 1;
+      background: var(--fill-1); border: 1px solid var(--glass-bdr);
+      transition: background 0.2s, transform 0.15s;
+    }
+    .sb-emoji:hover { background: var(--fill-2); transform: translateY(-1px); }
+    .sb-emoji[aria-pressed="true"] { background: var(--accent-bg); border-color: var(--accent); }
 
-    /* Disciplines — plain dot-separated text */
-    .disciplines {
-      font-size: clamp(11px, 1.1vw, 13px);
-      font-weight: 500; letter-spacing: 0.06em;
-      text-transform: uppercase; color: var(--label-2);
-      margin-bottom: clamp(40px, 6vh, 64px);
-      opacity: 0;
+    /* ── Showroom hero (S1): WebGPU wire-terrain behind the identity ────── */
+    #showroom { overflow: hidden; }
+    #showroom::before {                 /* atmosphere fallback — hero never blank */
+      content: ''; position: absolute; inset: 0; z-index: 0;
+      background: radial-gradient(ellipse 90% 70% at 50% 28%,
+        #0e1c1f 0%, #0a1014 42%, #08090e 70%, #060608 100%);
+    }
+    #hero-gpu {
+      position: absolute; inset: 0; z-index: 0;
+      width: 100%; height: 100%; display: block;
+      pointer-events: none;
+    }
+    .hero-scrim {
+      position: absolute; inset: 0; z-index: 1; pointer-events: none;
+      background: radial-gradient(ellipse 75% 75% at 50% 45%, transparent 0%,
+        rgba(6,6,8,0.30) 58%, rgba(6,6,8,0.74) 100%);
+    }
+    .showroom-inner { position: relative; z-index: 2; }
+
+    /* ── Shelf grid ─────────────────────────────────────────────────────── */
+    .shelf-grid {
+      margin-top: clamp(28px, 4vh, 48px);
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+      gap: clamp(14px, 1.8vw, 22px);
+      width: min(100%, 1100px);   /* zone no longer stretches children */
+    }
+    .shelf-card {
+      display: flex; flex-direction: column; gap: 8px;
+      padding: clamp(18px, 2vw, 26px);
+      border-radius: 16px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-bdr);
+      box-shadow: var(--glass-shd);
+      text-decoration: none;
+      transition: transform 0.3s cubic-bezier(0.16,1,0.3,1), box-shadow 0.3s;
+    }
+    .shelf-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+    }
+    .shelf-kind {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.12em;
+      text-transform: uppercase; color: var(--accent);
+    }
+    .shelf-title {
+      font-size: clamp(17px, 1.7vw, 20px); font-weight: 700;
+      letter-spacing: -0.02em; color: var(--label-1);
+    }
+    .shelf-desc { font-size: 13px; line-height: 1.55; color: var(--label-2); }
+    .shelf-go {
+      margin-top: 4px; font-size: 13px; font-weight: 600;
+      color: var(--accent);
+    }
+    .soon {
+      display: inline-block; margin-top: 10px;
+      font-size: 12px; font-weight: 600; letter-spacing: 0.04em;
+      color: var(--label-3);
+      padding: 6px 12px; border-radius: 100px;
+      border: 1px dashed var(--glass-bdr);
     }
 
-    /* CTAs — text links only */
-    .ctas {
-      display: flex; align-items: center;
-      justify-content: center; gap: 28px;
-      flex-wrap: wrap; opacity: 0;
+    /* ── "Crack it open" — the signature mechanic ───────────────────────── */
+    /* Any [data-crack] element gets a discreet corner chip; activating it
+       slides in a glass panel with the real sj-design source + copy path.
+       Generic + registry-driven so every zone reuses one component. */
+    [data-crack] { position: relative; }
+    .crack-chip {
+      position: absolute; right: 14px; bottom: 14px; z-index: 5;
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 8px 14px; border-radius: 100px;
+      font: 600 12px/1 var(--font); letter-spacing: 0.02em;
+      color: var(--label-1);
+      background: var(--glass-bg); border: 1px solid var(--glass-bdr);
+      box-shadow: var(--glass-shd);
+      -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+      cursor: pointer; opacity: 0; transform: translateY(6px);
+      transition: opacity 0.3s, transform 0.3s, background 0.2s;
     }
-    .cta-link {
-      font-size: 14px; font-weight: 500;
-      color: var(--label-2); text-decoration: none;
-      letter-spacing: -0.01em;
-      transition: color 0.2s;
-      display: flex; align-items: center; gap: 4px;
-    }
-    .cta-link:first-child { color: var(--accent); }
-    .cta-link:hover { color: var(--label-1); }
-    .cta-link:first-child:hover { filter: brightness(1.15); }
+    [data-crack]:hover .crack-chip,
+    [data-crack]:focus-within .crack-chip,
+    .crack-chip:focus-visible { opacity: 1; transform: translateY(0); }
+    .crack-chip:hover { background: var(--accent-bg); }
+    .crack-chip .gl { color: var(--accent); font-family: "SF Mono", ui-monospace, monospace; }
 
-    /* ── Footer ────────────────────────────────────────── */
+    #crack-backdrop {
+      position: fixed; inset: 0; z-index: 9000;
+      background: rgba(2,3,5,0.55);
+      -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+      opacity: 0; pointer-events: none; transition: opacity 0.35s;
+    }
+    #crack-backdrop.open { opacity: 1; pointer-events: auto; }
+
+    #crack {
+      position: fixed; top: 0; right: 0; z-index: 9001;
+      width: min(540px, 92vw); height: 100svh;
+      display: flex; flex-direction: column;
+      background: var(--bg);
+      border-left: 1px solid var(--glass-bdr);
+      box-shadow: -24px 0 80px rgba(0,0,0,0.5);
+      transform: translateX(102%);
+      transition: transform 0.42s cubic-bezier(0.16,1,0.3,1);
+    }
+    #crack.open { transform: translateX(0); }
+    .crack-head {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 16px; padding: clamp(24px,4vw,40px) clamp(22px,3.5vw,36px) 18px;
+      border-bottom: 1px solid var(--sep);
+    }
+    .crack-eyebrow {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.16em;
+      text-transform: uppercase; color: var(--accent); margin-bottom: 8px;
+    }
+    .crack-title {
+      font-size: clamp(20px,2.4vw,26px); font-weight: 700;
+      letter-spacing: -0.02em; color: var(--label-1); line-height: 1.15;
+    }
+    #crack-close {
+      flex: none; width: 34px; height: 34px; border-radius: 9px;
+      background: var(--fill-2); border: 1px solid var(--glass-bdr);
+      color: var(--label-2); font-size: 16px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s, color 0.2s;
+    }
+    #crack-close:hover { background: var(--fill-1); color: var(--label-1); }
+    .crack-body {
+      flex: 1; overflow-y: auto;
+      padding: clamp(20px,3.5vw,32px) clamp(22px,3.5vw,36px) clamp(28px,5vw,44px);
+      display: flex; flex-direction: column; gap: 22px;
+    }
+    .crack-what { font-size: 15px; line-height: 1.6; color: var(--label-2); }
+    .crack-section-label {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--label-3); margin-bottom: 10px;
+    }
+    .crack-code {
+      margin: 0; padding: 18px 20px; border-radius: 12px;
+      background: var(--fill-1); border: 1px solid var(--sep);
+      font: 12.5px/1.65 "SF Mono", ui-monospace, "Menlo", monospace;
+      color: var(--label-1); white-space: pre; overflow-x: auto;
+    }
+    .crack-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+    .crack-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 20px; border-radius: 100px;
+      font: 600 13px/1 var(--font); letter-spacing: -0.01em;
+      cursor: pointer; text-decoration: none;
+      transition: filter 0.2s, transform 0.15s, background 0.2s;
+    }
+    .crack-btn.primary { background: var(--accent); color: #04110f; border: none; }
+    .crack-btn.primary:hover { filter: brightness(1.12); transform: translateY(-1px); }
+    .crack-btn.ghost {
+      background: var(--fill-2); border: 1px solid var(--glass-bdr);
+      color: var(--label-1);
+    }
+    .crack-btn.ghost:hover { background: var(--fill-1); }
+    .crack-link {
+      align-self: flex-start; margin-top: clamp(22px,3vh,36px);
+      padding: 10px 18px; border-radius: 100px;
+      font: 600 12px/1 var(--font); letter-spacing: 0.04em;
+      color: var(--label-2);
+      background: transparent; border: 1px dashed var(--glass-bdr);
+      cursor: pointer; transition: color 0.2s, border-color 0.2s, background 0.2s;
+    }
+    .crack-link:hover {
+      color: var(--accent); border-color: var(--accent);
+      background: var(--accent-bg);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .crack-chip, #crack, #crack-backdrop { transition: opacity 0.2s; }
+      #crack { transition: none; }
+    }
+
+    /* ── Footer (static — the page scrolls through zones now) ───────────── */
     footer {
-      position: fixed; bottom: 0; left: 0; right: 0;
-      z-index: 999;
-      padding: 0 clamp(24px, 5vw, 80px);
-      height: 44px;
-      background: linear-gradient(to top, rgba(0,0,0,0.40) 0%, transparent 100%);
-      display: flex; align-items: center;
-      justify-content: space-between; gap: 12px;
+      position: relative; z-index: 10;
+      padding: clamp(28px, 5vh, 48px) clamp(24px, 6vw, 96px);
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px;
+      border-top: 1px solid var(--sep);
+      background: rgba(0,0,0,0.25);
     }
-    [data-theme="light"] footer {
-      background: linear-gradient(to top, rgba(0,20,80,0.35) 0%, transparent 100%);
-    }
-    [data-theme="light"] .footer-sub,
-    [data-theme="light"] .footer-link { color: var(--label-2); }
-    .footer-sub {
-      font-size: 11px; color: var(--label-3);
-      letter-spacing: 0.04em;
-    }
-    .footer-links { display: flex; gap: 16px; }
+    .footer-sub { font-size: 11px; color: var(--label-3); letter-spacing: 0.04em; }
+    .footer-links { display: flex; gap: 16px; flex-wrap: wrap; }
     .footer-link {
       font-size: 11px; font-weight: 500; color: var(--label-3);
       text-decoration: none; letter-spacing: 0.04em;
       transition: color 0.2s;
     }
     .footer-link:hover { color: var(--accent); }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
   </style>
 </head>
 <body>
 
 <div class="grain" aria-hidden="true"></div>
-<div id="gobo"    aria-hidden="true"></div>
+<div id="atmo" aria-hidden="true"></div>
+<div id="gobo" aria-hidden="true"></div>
 
-<!-- Header -->
+<!-- Header (carried forward verbatim) -->
 <header>
   <a class="wordmark" href="/">Studio Joe</a>
   <nav>
     <a href="/resume.html">Resume</a>
     <a href="https://www.linkedin.com/in/joey-v-287ba5394" target="_blank" rel="noopener">LinkedIn</a>
     <a href="https://github.com/jayvee6" target="_blank" rel="noopener">GitHub</a>
-    <button id="theme-btn" aria-label="Toggle theme">☀️</button>
   </nav>
 </header>
 
-<!-- Hero -->
 <main>
 
-  <h1 class="hero-hl" id="hh">
-    Build with intention<span class="accent">.</span>
-  </h1>
+  <!-- ── SHOWROOM — the monument. WebGPU hero lands in S1. ──────────────── -->
+  <section id="showroom" class="zone" data-crack="wire-terrain">
+    <canvas id="hero-gpu" aria-hidden="true"></canvas>
+    <div class="hero-scrim" aria-hidden="true"></div>
+    <div class="showroom-inner">
+      <p class="eyebrow">Studio Joe</p>
+      <h1 id="hh">Real-time graphics, web <span class="accent">and</span> native.</h1>
+      <p class="lede" id="hd">
+        A studio that ships its own tools. WebGPU, Canvas, Metal — the eye
+        candy here is the proof, and every bit of it is takeable.
+      </p>
+      <p class="scroll-cue">Scroll — Sandbox · Shelf · Workbench ↓</p>
+    </div>
+  </section>
 
-  <p class="disciplines" id="hd">
-    Quality Engineering · Software Development · Video Production · Consulting
-  </p>
+  <!-- ── SANDBOX — hands-on. Interactive pieces land in S3. ────────────── -->
+  <section id="sandbox" class="zone">
+    <p class="eyebrow">Sandbox</p>
+    <h2>Put your hands on the tools.</h2>
+    <p class="lede">
+      No video, no GIF — the real toolkit running in your browser. Make
+      it rain, or watch a formation morph between shapes. Same lib that
+      builds the rest of this site.
+    </p>
+    <div class="sandbox-stage" id="sbStage">
+      <canvas id="sbCanvas"></canvas>
+      <span class="sandbox-hint" id="sbHint">move your pointer over the stage</span>
+    </div>
+    <div class="sandbox-controls">
+      <button type="button" class="sb-btn" id="sbModeRain" aria-pressed="true">Emoji rain</button>
+      <button type="button" class="sb-btn" id="sbModeForm" aria-pressed="false">Formation</button>
+      <span class="sb-emojis" id="sbEmojis" role="group" aria-label="Rain emoji"></span>
+      <button type="button" class="sb-btn" id="sbBurst">Burst ✨</button>
+      <button type="button" class="crack-link" data-crack-open="sandbox">⟨ &nbsp;how the sandbox is built&nbsp; ⟩</button>
+    </div>
+  </section>
 
+  <!-- ── SHELF — vend. Real links to what exists today. ────────────────── -->
+  <section id="shelf" class="zone">
+    <p class="eyebrow">Shelf</p>
+    <h2>Take something with you.</h2>
+    <p class="lede">
+      The tools and projects, free to use. The store wraps these later;
+      for now they are one click away.
+    </p>
+    <div class="shelf-grid">
+
+      <a class="shelf-card" href="https://github.com/jayvee6" target="_blank" rel="noopener">
+        <span class="shelf-kind">Toolkit</span>
+        <span class="shelf-title">sj-design</span>
+        <span class="shelf-desc">The motion / graphics / emoji-viz toolkit this site is built out of — WebGPU scenes, dancing formations, atmosphere system. Going public; the rest of the work is on GitHub now.</span>
+        <span class="shelf-go">On GitHub ↗</span>
+      </a>
+
+      <a class="shelf-card" href="/musicplayer/">
+        <span class="shelf-kind">Side project</span>
+        <span class="shelf-title">Music Player</span>
+        <span class="shelf-desc">Album-art-reactive web music player — color extraction, iPod-skin UI.</span>
+        <span class="shelf-go">Open ↗</span>
+      </a>
+
+      <a class="shelf-card" href="/ipod.html">
+        <span class="shelf-kind">Side project</span>
+        <span class="shelf-title">iPod</span>
+        <span class="shelf-desc">A working web iPod — Spotify and Apple Music, click-wheel and all.</span>
+        <span class="shelf-go">Open ↗</span>
+      </a>
+
+      <a class="shelf-card" href="/resume.html">
+        <span class="shelf-kind">About</span>
+        <span class="shelf-title">Resume</span>
+        <span class="shelf-desc">The work, the range, the proof — quality engineering through real-time graphics.</span>
+        <span class="shelf-go">Read ↗</span>
+      </a>
+
+      <a class="shelf-card" href="https://github.com/jayvee6" target="_blank" rel="noopener">
+        <span class="shelf-kind">Code</span>
+        <span class="shelf-title">GitHub</span>
+        <span class="shelf-desc">Everything in the open — apps, skills, side projects, this site.</span>
+        <span class="shelf-go">Browse ↗</span>
+      </a>
+
+    </div>
+    <button type="button" class="crack-link" data-crack-open="sj-design">
+      ⟨ &nbsp;every pixel on this page is sj-design — crack it open&nbsp; ⟩
+    </button>
+  </section>
+
+  <!-- ── WORKBENCH — living core. Blog / video land in v2. ─────────────── -->
+  <section id="workbench" class="zone">
+    <p class="eyebrow">Workbench</p>
+    <h2>How this ships.</h2>
+    <p class="lede">
+      Not just what gets built — the machine that builds it. Brainstorm →
+      plan → approve → small verified chunks → ship → handoff, on a loop.
+      The operating system behind everything on the Shelf.
+    </p>
+    <div class="sandbox-stage" id="mxStage">
+      <canvas id="mxCanvas"></canvas>
+      <span class="sandbox-hint">the pipeline, always running</span>
+    </div>
+    <div class="sandbox-controls">
+      <span class="soon">Blog &amp; video — coming</span>
+      <button type="button" class="crack-link" data-crack-open="machine">⟨ &nbsp;how the machine runs&nbsp; ⟩</button>
+    </div>
+  </section>
 
 </main>
 
-<!-- Footer -->
+<!-- Footer (carried forward) -->
 <footer>
   <p class="footer-sub">© 2026 Studio Joe</p>
   <div class="footer-links">
@@ -236,51 +532,56 @@
   </div>
 </footer>
 
+<!-- "Crack it open" panel — filled by the CrackOpen component on open -->
+<div id="crack-backdrop" aria-hidden="true"></div>
+<aside id="crack" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="crack-title">
+  <div class="crack-head">
+    <div>
+      <p class="crack-eyebrow">Crack it open</p>
+      <h2 class="crack-title" id="crack-title"></h2>
+    </div>
+    <button type="button" id="crack-close" aria-label="Close">✕</button>
+  </div>
+  <div class="crack-body" id="crack-body"></div>
+</aside>
+
 <script>
 (function () {
   'use strict';
 
   const EASE = 'cubic-bezier(0.16, 1, 0.3, 1)';
 
-  // ── Entrance animations ────────────────────────────────
-  const tl = gsap.timeline({ defaults: { ease: EASE } });
-  tl.to('#hh', { opacity: 1, duration: 0.75 },                    0.1)
-    .fromTo('#hh', { y: 28 }, { y: 0, duration: 0.75 },          0.1)
-    .to('#hd', { opacity: 1, duration: 0.5 },                     0.38)
-    .fromTo('#hd', { y: 12 }, { y: 0, duration: 0.5 },           0.38)
-
-  // ── Dark / Light toggle ────────────────────────────────
-  const btn    = document.getElementById('theme-btn');
-  let   isDark = (() => { try { return localStorage.getItem('theme') !== 'light'; } catch(e) { return true; } })();
-
-  function applyTheme() {
-    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
-    btn.textContent = isDark ? '☀️' : '🌙';
+  // ── Canvas sizing — track the ELEMENT's real box, not the window and
+  // not a one-shot parse-time read. ResizeObserver fires after every
+  // layout (incl. the post-parse aspect-ratio / flex resolution and font
+  // load), rAF-debounced. This is what keeps every canvas locked to its
+  // container instead of drifting off it. ───────────────────────────────
+  function fitObserve(el, cb) {
+    let raf = 0;
+    const run = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(cb); };
+    if (window.ResizeObserver) { new ResizeObserver(run).observe(el); }
+    else { window.addEventListener('resize', run); }
+    run();
   }
 
-  btn.addEventListener('click', () => {
-    isDark = !isDark;
-    try { localStorage.setItem('theme', isDark ? 'dark' : 'light'); } catch(e) {}
-    applyTheme();
-  });
+  // ── Entrance ───────────────────────────────────────────────────────────
+  gsap.set('#hh', { opacity: 0, y: 28 });
+  gsap.set('#hd', { opacity: 0, y: 12 });
+  gsap.to('#hh', { opacity: 1, y: 0, duration: 0.75, ease: EASE, delay: 0.10 });
+  gsap.to('#hd', { opacity: 1, y: 0, duration: 0.55, ease: EASE, delay: 0.38 });
 
-  applyTheme();
-
-  // ── Perlin noise (Ken Perlin's improved algorithm) ────────
+  // ── Perlin noise (Ken Perlin's improved algorithm) ─────────────────────
   const _pp = (function () {
     const s = [151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,190,6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,88,237,149,56,87,174,20,125,136,171,168,68,175,74,165,71,134,139,48,27,166,77,146,158,231,83,111,229,122,60,211,133,230,220,105,92,41,55,46,245,40,244,102,143,54,65,25,63,161,1,216,80,73,209,76,132,187,208,89,18,169,200,196,135,130,116,188,159,86,164,100,109,198,173,186,3,64,52,217,226,250,124,123,5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,223,183,170,213,119,248,152,2,44,154,163,70,221,153,101,155,167,43,172,9,129,22,39,253,19,98,108,110,79,113,224,232,178,185,112,104,218,246,97,228,251,34,242,193,238,210,144,12,191,179,162,241,81,51,145,235,249,14,239,107,49,192,214,31,181,199,106,157,184,84,204,176,115,121,50,45,127,4,150,254,138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180];
     const p = new Uint8Array(512);
     for (let i = 0; i < 256; i++) p[i] = p[i + 256] = s[i];
     return p;
   })();
-
   function pnoise(x, y) {
     const xi = Math.floor(x) & 255, yi = Math.floor(y) & 255;
-    const xf = x - Math.floor(x),   yf = y - Math.floor(y);
-    // Fade curve: 6t^5 - 15t^4 + 10t^3
+    const xf = x - Math.floor(x), yf = y - Math.floor(y);
     const fade = t => t * t * t * (t * (t * 6 - 15) + 10);
     const u = fade(xf), v = fade(yf);
-    // Gradient vectors — dot product of gradient with distance vector
     const grad = (h, dx, dy) => {
       const hh = h & 3, a = hh < 2 ? dx : dy, b = hh < 2 ? dy : dx;
       return ((hh & 1) ? -a : a) + ((hh & 2) ? -b : b);
@@ -294,25 +595,22 @@
     );
   }
 
-  // ── Deco emojis — randomised pool, Perlin XY + rotation ──────
+  // ── Deco emojis — scoped to the Showroom zone ──────────────────────────
   (function initDecoEmojis() {
-    const POOL  = ['🪐','🔮','🤔','🔍','🧪','🧠','🔬','🎥','🎮','👾','💻','🤖'];
+    const POOL = ['🪐','🔮','🧠','🔬','🎥','🎮','👾','💻','🤖','✨','🛰️','🌀'];
     const ZONES = [
-      { top: '7%',    right: '3%'  },
-      { bottom: '9%', left:  '2%'  },
-      { top: '45%',   right: '0%'  },
-      { top: '18%',   left:  '3%'  },
+      { top: '14%',    right: '4%' },
+      { bottom: '16%', left:  '3%' },
+      { top: '52%',    right: '1%' },
     ];
-    const container = document.querySelector('main');
-    const picked    = POOL.slice().sort(() => Math.random() - 0.5).slice(0, 3);
-    const active    = [];
-
+    const container = document.getElementById('showroom');
+    const picked = POOL.slice().sort(() => Math.random() - 0.5).slice(0, 3);
+    const active = [];
     picked.forEach((emoji, i) => {
-      const sz      = 90  + Math.floor(Math.random() * 100);
-      const baseOp  = 0.12 + Math.random() * 0.08;
+      const sz = 90 + Math.floor(Math.random() * 100);
+      const baseOp = 0.10 + Math.random() * 0.07;
       const baseRot = (Math.random() - 0.5) * 50;
-      const zone    = ZONES[i % ZONES.length];
-
+      const zone = ZONES[i % ZONES.length];
       const el = document.createElement('span');
       el.setAttribute('aria-hidden', 'true');
       Object.assign(el.style, {
@@ -322,50 +620,793 @@
       });
       el.textContent = emoji;
       container.appendChild(el);
-
       gsap.to(el, { opacity: baseOp, duration: 2, delay: 0.8 + i * 0.35, ease: 'power1.inOut' });
       active.push({ el, baseRot,
         ox: Math.random() * 100, oy: Math.random() * 100,
         range: 20 + Math.random() * 20, rotRange: 6 + Math.random() * 8 });
     });
-
     gsap.ticker.add(time => {
       const t = time * 0.035;
       active.forEach(({ el, baseRot, ox, oy, range, rotRange }) => {
-        const px = pnoise(t + ox,             oy             ) * range;
-        const py = pnoise(ox,                 t + oy         ) * range;
-        const pr = pnoise(ox * 1.7,           t * 0.6 + oy * 1.3) * rotRange;
+        const px = pnoise(t + ox, oy) * range;
+        const py = pnoise(ox, t + oy) * range;
+        const pr = pnoise(ox * 1.7, t * 0.6 + oy * 1.3) * rotRange;
         gsap.set(el, { x: px, y: py, rotate: baseRot + pr });
       });
     });
   })();
 
-  // ── Starfield ──────────────────────────────────────────────
+  // ── Starfield (gobo) ───────────────────────────────────────────────────
   (function initStarfield() {
     const container = document.getElementById('gobo');
     const COUNT = 70;
     for (let i = 0; i < COUNT; i++) {
-      const s   = document.createElement('span');
+      const s = document.createElement('span');
       const dim = Math.random() < 0.65 ? 1 : Math.random() < 0.6 ? 2 : 3;
-      const x   = Math.random() * 100;
-      const y   = Math.random() * 100;
       const baseOp = 0.15 + Math.random() * 0.55;
       Object.assign(s.style, {
         position: 'absolute', borderRadius: '50%',
         width: dim + 'px', height: dim + 'px',
-        left: x + '%', top: y + '%',
+        left: (Math.random() * 100) + '%', top: (Math.random() * 100) + '%',
         background: 'rgba(255,255,255,1)',
-        opacity: 0, pointerEvents: 'none',
-        willChange: 'opacity',
+        opacity: 0, pointerEvents: 'none', willChange: 'opacity',
       });
       container.appendChild(s);
-
       gsap.to(s, { opacity: baseOp, duration: 2 + Math.random() * 3,
                    delay: Math.random() * 6, ease: 'power1.inOut' });
       gsap.to(s, { opacity: baseOp * 0.12, duration: 1.2 + Math.random() * 4,
                    delay: Math.random() * 10, ease: 'sine.inOut',
                    repeat: -1, yoyo: true });
     }
+  })();
+
+  // ── Showroom hero — wire-terrain (WebGPU) ──────────────────────────────
+  // Raymarched FBM terrain + analytic wireframe, one fullscreen-triangle
+  // fragment shader (verbatim from sj-design/showcase/scenes/wire-terrain).
+  // Silent fallback: no WebGPU → return quietly, the #showroom::before
+  // atmosphere gradient stays (hero is never blank, never an error overlay).
+  // Renders at maxDPR 1 × renderScale 0.66 and pauses when scrolled past.
+  (function initHeroGPU() {
+    const canvas = document.getElementById('hero-gpu');
+    if (!canvas || !navigator.gpu) return;
+
+    const WGSL = `
+struct Uniforms {
+    elapsed:    f32,
+    bass:       f32,
+    treble:     f32,
+    beatPulse:  f32,
+    resolution: vec2<f32>,
+    react:      f32,
+    _pad:       f32,
+}
+@group(0) @binding(0) var<uniform> u: Uniforms;
+
+struct VSOut {
+    @builtin(position) pos: vec4<f32>,
+    @location(0)       uv:  vec2<f32>,
+}
+
+@vertex fn vs_main(@builtin(vertex_index) vid: u32) -> VSOut {
+    var pos = array<vec2<f32>, 3>(
+        vec2<f32>(-1.0, -1.0),
+        vec2<f32>( 3.0, -1.0),
+        vec2<f32>(-1.0,  3.0),
+    );
+    var uvs = array<vec2<f32>, 3>(
+        vec2<f32>(0.0, 0.0),
+        vec2<f32>(2.0, 0.0),
+        vec2<f32>(0.0, 2.0),
+    );
+    var out: VSOut;
+    out.pos = vec4<f32>(pos[vid], 0.0, 1.0);
+    out.uv  = uvs[vid];
+    return out;
+}
+
+fn hash2(p: vec2<f32>) -> f32 {
+    var q = fract(p * vec2<f32>(127.1, 311.7));
+    q += dot(q, q + 19.19);
+    return fract(q.x * q.y);
+}
+
+fn vnoise(p: vec2<f32>) -> f32 {
+    let i = floor(p); let f = fract(p);
+    let u2 = f * f * (3.0 - 2.0 * f);
+    return mix(
+        mix(hash2(i),               hash2(i + vec2<f32>(1.0, 0.0)), u2.x),
+        mix(hash2(i + vec2<f32>(0.0, 1.0)), hash2(i + vec2<f32>(1.0, 1.0)), u2.x),
+        u2.y
+    );
+}
+
+fn fbm(p_in: vec2<f32>) -> f32 {
+    var p = p_in; var v = 0.0f; var a = 0.5f;
+    for (var i = 0; i < 3; i++) {
+        v += a * vnoise(p);
+        p  = p * 2.0 + vec2<f32>(3.14, 1.59);
+        a *= 0.5;
+    }
+    return v;
+}
+
+fn terrainH(xz: vec2<f32>, t: f32) -> f32 {
+    let p  = xz * 0.15 + vec2<f32>(0.0, t * 0.35);
+    let n  = fbm(p);
+    let n2 = fbm(p * 1.6 + vec2<f32>(7.1, 3.3));
+    return (n - 0.5) * (2.5 + u.bass * 3.5)
+         + (n2 - 0.5) * (0.35 + u.treble * 0.4)
+         + u.beatPulse * 0.9;
+}
+
+fn buildRay(screenUV: vec2<f32>) -> vec3<f32> {
+    let cAng   = sin(u.elapsed * 0.08) * 0.9 + u.elapsed * 0.05;
+    let r      = 12.0f;
+    let camPos = vec3<f32>(cos(cAng) * r,
+                           2.8 + sin(u.elapsed * 0.3) * 0.6,
+                           sin(cAng) * r);
+    let camTarget = vec3<f32>(0.0, 0.4 + u.bass * 0.5, 0.0);
+    let fwd    = normalize(camTarget - camPos);
+    let right  = normalize(cross(fwd, vec3<f32>(0.0, 1.0, 0.0)));
+    let up     = cross(right, fwd);
+    let asp    = u.resolution.x / u.resolution.y;
+    let uv     = (screenUV - 0.5) * vec2<f32>(asp, 1.0);
+    return normalize(fwd * 1.5 + right * uv.x + up * uv.y);
+}
+
+fn getCamPos() -> vec3<f32> {
+    let cAng = sin(u.elapsed * 0.08) * 0.9 + u.elapsed * 0.05;
+    let r    = 12.0f;
+    return vec3<f32>(cos(cAng) * r,
+                     2.8 + sin(u.elapsed * 0.3) * 0.6,
+                     sin(cAng) * r);
+}
+
+@fragment fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
+    let camPos = getCamPos();
+    let rd     = buildRay(in.uv);
+
+    let fogColor = vec3<f32>(0.000, 0.000, 0.031);
+
+    var tRay = 0.2f;
+    var hit  = false;
+    var hitP = vec3<f32>(0.0);
+
+    var prevT = tRay;
+    for (var i = 0; i < 56; i++) {
+        let p  = camPos + rd * tRay;
+        let h  = terrainH(p.xz, u.elapsed);
+        let dy = p.y - h;
+        if dy < 0.0 {
+            var lo = prevT; var hi = tRay;
+            for (var j = 0; j < 4; j++) {
+                let mid = (lo + hi) * 0.5;
+                let pm  = camPos + rd * mid;
+                let hm  = terrainH(pm.xz, u.elapsed);
+                if pm.y - hm < 0.0 { hi = mid; } else { lo = mid; }
+            }
+            hit  = true;
+            hitP = camPos + rd * ((lo + hi) * 0.5);
+            break;
+        }
+        prevT  = tRay;
+        tRay  += max(0.10, dy * 0.55);
+        if tRay > 200.0 { break; }
+    }
+
+    if (!hit) {
+        let skyGrad = smoothstep(-0.1, 0.3, rd.y);
+        let skyCol  = mix(fogColor * 2.0, fogColor * 0.5, skyGrad);
+        return vec4<f32>(skyCol, 1.0);
+    }
+
+    let h   = terrainH(hitP.xz, u.elapsed);
+    let h01 = clamp((h + 2.5) / 6.0, 0.0, 1.0);
+    let low  = vec3<f32>(0.55, 0.10, 0.75);
+    let mid  = vec3<f32>(0.20, 0.40, 0.95);
+    let high = vec3<f32>(0.20, 0.95, 0.90);
+    var col = mix(low, mid, smoothstep(0.0, 0.55, h01));
+    col      = mix(col, high, smoothstep(0.45, 1.0, h01));
+
+    let GRID_FREQ = 1.4f;
+    let perpScale = clamp(tRay / 20.0, 1.0, 4.0);
+    let LINE_W    = 0.032f * perpScale;
+    let cx = fract(hitP.x * GRID_FREQ);
+    let cz = fract(hitP.z * GRID_FREQ);
+    let isWire = (cx < LINE_W || cx > 1.0 - LINE_W ||
+                  cz < LINE_W || cz > 1.0 - LINE_W);
+    if (!isWire) {
+        col = vec3<f32>(0.03, 0.01, 0.08) + vec3<f32>(0.05, 0.02, 0.12) * h01;
+    }
+
+    col *= 0.8 + u.bass * 0.45 + u.beatPulse * 0.3;
+
+    let fogFactor = 1.0 - exp(-tRay * 0.035);
+    col = mix(col, fogColor, fogFactor);
+
+    return vec4<f32>(clamp(col, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
+}
+`;
+
+    function pulses(t) {
+      if (window.SJPulse) {
+        return {
+          bass:   window.SJPulse.kick(t),
+          treble: window.SJPulse.flicker(t, { rate: 6.0 }) * 0.6,
+          beat:   window.SJPulse.kick(t, { kickRate: 1.3, ghostAmp: 0 }) * 0.5,
+        };
+      }
+      const k = Math.max(0, Math.sin(t * 2.2));
+      return {
+        bass:   Math.min(1, k * k * 0.9 + Math.max(0, Math.sin(t * 5.1 + 1.3)) * 0.35),
+        treble: Math.abs(Math.sin(t * 6.0)) * 0.6,
+        beat:   Math.max(0, Math.sin(t * 1.3)) * 0.5,
+      };
+    }
+
+    (async () => {
+      let adapter;
+      try {
+        adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+      } catch (e) { return; }
+      if (!adapter) return;
+      const device = await adapter.requestDevice();
+
+      // Backing store only (CSS keeps the canvas at 100% of #showroom).
+      // maxDPR 1 × renderScale 0.66 — raymarch is fragment-bound; softness
+      // hidden by the wireframe + fog + motion (sj-design perf lesson).
+      // Size to the canvas's OWN box (#showroom, via inset:0) — NOT the
+      // window. The zone is taller than the viewport (min-height:100svh +
+      // padding); sizing to the window stretched the terrain. Backing-store
+      // aspect now matches the displayed box, so the WGSL camera aspect
+      // (u.resolution) is correct.
+      const SCALE = 0.66;
+      const host = canvas.parentElement;
+      function size() {
+        const r = host.getBoundingClientRect();
+        const dpr = Math.min(window.devicePixelRatio || 1, 1) * SCALE;
+        canvas.width  = Math.max(1, Math.round(r.width  * dpr));
+        canvas.height = Math.max(1, Math.round(r.height * dpr));
+      }
+      fitObserve(host, size);
+
+      const context = canvas.getContext('webgpu');
+      const format  = navigator.gpu.getPreferredCanvasFormat();
+      context.configure({ device, format, alphaMode: 'opaque' });
+
+      const module = device.createShaderModule({ code: WGSL });
+      const bgl = device.createBindGroupLayout({
+        entries: [{ binding: 0,
+          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+          buffer: { type: 'uniform' } }],
+      });
+      const uniforms   = new Float32Array(8);
+      const uniformBuf = device.createBuffer({
+        size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      });
+      const bindGroup = device.createBindGroup({
+        layout: bgl, entries: [{ binding: 0, resource: { buffer: uniformBuf } }],
+      });
+      const pipeline = device.createRenderPipeline({
+        layout: device.createPipelineLayout({ bindGroupLayouts: [bgl] }),
+        vertex:   { module, entryPoint: 'vs_main' },
+        fragment: { module, entryPoint: 'fs_main', targets: [{ format }] },
+        primitive: { topology: 'triangle-list' },
+      });
+
+      let t0;
+      function frame(ts) {
+        requestAnimationFrame(frame);
+        // Pause the GPU when the Showroom is scrolled out of view.
+        if (window.scrollY > window.innerHeight * 1.05) return;
+        if (t0 === undefined) t0 = ts;
+        const t = (ts - t0) / 1000;
+        const p = pulses(t);
+        uniforms[0] = t;
+        uniforms[1] = p.bass;
+        uniforms[2] = p.treble;
+        uniforms[3] = p.beat;
+        uniforms[4] = canvas.width;
+        uniforms[5] = canvas.height;
+        uniforms[6] = 1.0;
+        uniforms[7] = 0;
+        device.queue.writeBuffer(uniformBuf, 0, uniforms);
+        const enc  = device.createCommandEncoder();
+        const pass = enc.beginRenderPass({
+          colorAttachments: [{
+            view: context.getCurrentTexture().createView(),
+            loadOp: 'clear', storeOp: 'store',
+            clearValue: { r: 0, g: 0, b: 0.031, a: 1 },
+          }],
+        });
+        pass.setPipeline(pipeline);
+        pass.setBindGroup(0, bindGroup);
+        pass.draw(3);
+        pass.end();
+        device.queue.submit([enc.finish()]);
+      }
+      requestAnimationFrame(frame);
+    })();
+  })();
+
+  // ── "Crack it open" — the signature mechanic ───────────────────────────
+  // Every holy-shit on this page has a 1-click "...and here's how, take it"
+  // underneath. Registry-driven + generic: [data-crack="id"] boxes get a
+  // corner chip; [data-crack-open="id"] is an explicit trigger. The Sandbox
+  // (S3) reuses this same component for each interactive piece.
+  (function CrackOpen() {
+    const REG = {
+      'wire-terrain': {
+        title: 'Wire Terrain — WebGPU',
+        what: 'The moving monument behind the headline: a raymarched ' +
+              'fractal-Brownian-motion terrain with analytic wireframe ' +
+              'lines. One fullscreen-triangle WGSL fragment shader, a ' +
+              'single render pass, zero postprocessing — verbatim from ' +
+              "sj-design's perf-tuned scene. The site isn't built next " +
+              'to the tool; it IS the tool.',
+        code:
+'// The only part you tune — the pulse. Everything else is the scene.\n' +
+'function pulses(t) {\n' +
+'  return {\n' +
+'    bass:   SJPulse.kick(t),\n' +
+'    treble: SJPulse.flicker(t, { rate: 6 }) * 0.6,\n' +
+'    beat:   SJPulse.kick(t, { kickRate: 1.3, ghostAmp: 0 }) * 0.5,\n' +
+'  };\n' +
+'}\n' +
+'// Swap pulses(t) for an audio frame\'s bass/treble/beat and the\n' +
+'// terrain reacts to sound. That swap point is the whole hook.\n' +
+'\n' +
+'// Full scene (WGSL + pipeline):\n' +
+'//   sj-design/showcase/scenes/wire-terrain.html\n' +
+'// Helpers, vendored verbatim at /lib/:\n' +
+'//   synthetic-pulse.js  → SJPulse\n' +
+'//   webgpu-bootstrap.js → SJGpu',
+        take: 'https://github.com/jayvee6',
+      },
+      'sj-design': {
+        title: 'This whole site is sj-design',
+        what: "studiojoe.dev isn't built beside the toolkit — it's built " +
+              'out of it. Same lib/, same scenes, same patterns the ' +
+              'showcase ships. The eye candy is the proof; the toolkit ' +
+              'is the point. Take it.',
+        code:
+'<!-- studiojoe.dev/index.html — the actual lines -->\n' +
+'<script src="/lib/synthetic-pulse.js"></scr' + 'ipt>\n' +
+'//   vendored verbatim from sj-design/lib/\n' +
+'\n' +
+'SJPulse.kick(t)                  // drives the hero terrain\n' +
+'gsap.ticker.add(t => /* pnoise */) // the ambient drift\n' +
+'\n' +
+'// The whole toolkit (going public):\n' +
+'//   github.com/jayvee6\n' +
+'//   lib/ + showcase/scenes/ + showcase/emoji-formations/',
+        take: 'https://github.com/jayvee6',
+      },
+      'sandbox': {
+        title: 'The Sandbox — Canvas 2D + the lib',
+        what: 'Two real demos in one panel. Emoji rain is a tiny gravity ' +
+              'particle system on a DPR-fit Canvas 2D. The formation is an ' +
+              'N-gon that morphs triangle → square → pentagon → hexagon — ' +
+              'emojis arc-length-placed on the perimeter, the side count ' +
+              'eased by VizEnv, sizes pulsed by SJPulse. Your pointer ' +
+              'speeds the morph and tilts it. Same /lib/ the hero uses.',
+        code:
+'// Formation — the whole idea, condensed:\n' +
+'const sidesEnv = new VizEnv.Envelope({ attack: 0.9, release: 0.9 });\n' +
+'sides = sidesEnv.follow(KEYFRAMES[step % 4], dt);  // 3→4→5→6, eased\n' +
+'const pulse = SJPulse.kick(t);                      // size pulse\n' +
+'// emoji m at arc-length s on the n-gon perimeter:\n' +
+'//   p = lerp(V[floor(s)], V[(floor(s)+1)%n], frac(s))\n' +
+'\n' +
+'// Full version:\n' +
+'//   sj-design/showcase/emoji-formations/shape-morph.html\n' +
+'// Helpers vendored at /lib/: synthetic-pulse.js, envelopes.js',
+        take: 'https://github.com/jayvee6',
+      },
+      'machine': {
+        title: 'The machine that ships this',
+        what: 'Every project on the Shelf is built the same way: a tight ' +
+              'loop, not a marathon. Brainstorm the real job, plan it, ' +
+              'get approval, then ship in small independently-verified ' +
+              'chunks — each htmlhint/lint-clean and pushed live before ' +
+              'the next starts — with a handoff log so any interruption ' +
+              'resumes cleanly. This diagram is itself one of those ' +
+              'chunks, drawn with the same Canvas the Sandbox uses.',
+        code:
+'// The loop, every chunk:\n' +
+'brainstorm()                 // find the real job, not the asked one\n' +
+'  .then(plan)                // phased, ≤1-2h chunks — never a mega-PR\n' +
+'  .then(approve)             // gate before code\n' +
+'  .then(() => chunks.forEach(c => {\n' +
+'    build(c); verify(c);     // htmlhint + syntax + eyeball\n' +
+'    commit(c); push(c);      // each chunk ships live on its own\n' +
+'    handoff.append(c);       // resumable across any interruption\n' +
+'  }));\n' +
+'\n' +
+'// Same discipline behind StudioJoeMusic, sj-design, the savers.',
+        take: 'https://github.com/jayvee6',
+      },
+    };
+
+    const panel    = document.getElementById('crack');
+    const backdrop = document.getElementById('crack-backdrop');
+    const titleEl  = document.getElementById('crack-title');
+    const bodyEl   = document.getElementById('crack-body');
+    const closeBtn = document.getElementById('crack-close');
+    if (!panel || !backdrop) return;
+
+    let lastFocus = null;   // reduced-motion is handled in CSS
+
+    function buildBody(entry) {
+      bodyEl.textContent = '';
+      const what = document.createElement('p');
+      what.className = 'crack-what';
+      what.textContent = entry.what;
+
+      const lbl = document.createElement('p');
+      lbl.className = 'crack-section-label';
+      lbl.textContent = 'The source';
+
+      const pre = document.createElement('pre');
+      pre.className = 'crack-code';
+      pre.textContent = entry.code;
+
+      const actions = document.createElement('div');
+      actions.className = 'crack-actions';
+
+      const take = document.createElement('a');
+      take.className = 'crack-btn primary';
+      take.href = entry.take;
+      take.target = '_blank';
+      take.rel = 'noopener';
+      take.textContent = 'Take it → GitHub';
+
+      const copy = document.createElement('button');
+      copy.type = 'button';
+      copy.className = 'crack-btn ghost';
+      copy.textContent = 'Copy the source';
+      copy.addEventListener('click', () => {
+        const done = () => {
+          copy.textContent = 'Copied ✓';
+          setTimeout(() => { copy.textContent = 'Copy the source'; }, 1600);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(entry.code).then(done, done);
+        } else { done(); }
+      });
+
+      actions.appendChild(take);
+      actions.appendChild(copy);
+      bodyEl.appendChild(what);
+      bodyEl.appendChild(lbl);
+      bodyEl.appendChild(pre);
+      bodyEl.appendChild(actions);
+    }
+
+    function open(id) {
+      const entry = REG[id];
+      if (!entry) return;
+      lastFocus = document.activeElement;
+      titleEl.textContent = entry.title;
+      buildBody(entry);
+      backdrop.classList.add('open');
+      panel.classList.add('open');
+      backdrop.setAttribute('aria-hidden', 'false');
+      panel.setAttribute('aria-hidden', 'false');
+      closeBtn.focus();
+      document.addEventListener('keydown', onKey);
+    }
+
+    function close() {
+      panel.classList.remove('open');
+      backdrop.classList.remove('open');
+      backdrop.setAttribute('aria-hidden', 'true');
+      panel.setAttribute('aria-hidden', 'true');
+      document.removeEventListener('keydown', onKey);
+      if (lastFocus && lastFocus.focus) lastFocus.focus();
+    }
+
+    function onKey(e) {
+      if (e.key === 'Escape') { close(); return; }
+      if (e.key !== 'Tab') return;
+      // Focus trap within the panel.
+      const f = panel.querySelectorAll(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])');
+      if (!f.length) return;
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+
+    closeBtn.addEventListener('click', close);
+    backdrop.addEventListener('click', close);
+
+    // Inject a corner chip into every [data-crack] box.
+    document.querySelectorAll('[data-crack]').forEach(box => {
+      const id = box.getAttribute('data-crack');
+      if (!REG[id]) return;
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'crack-chip';
+      chip.setAttribute('aria-label', 'Crack it open — see the source');
+      chip.innerHTML = '<span class="gl">&lt;/&gt;</span> crack it open';
+      chip.addEventListener('click', e => { e.stopPropagation(); open(id); });
+      box.appendChild(chip);
+    });
+
+    // Bind explicit triggers.
+    document.querySelectorAll('[data-crack-open]').forEach(btn => {
+      btn.addEventListener('click', () => open(btn.getAttribute('data-crack-open')));
+    });
+
+    // Expose for the Sandbox (S3) to register + open its own pieces.
+    window.CrackOpen = { register: (id, entry) => { REG[id] = entry; }, open };
+  })();
+
+  // ── Sandbox — hands-on. Two real demos on one DPR-fit Canvas 2D,
+  // built from the same /lib/ as the hero. Pointer drives the formation;
+  // click rains. Pauses when the zone is off-screen. ─────────────────────
+  (function Sandbox() {
+    const stage = document.getElementById('sbStage');
+    const cv    = document.getElementById('sbCanvas');
+    if (!cv || !stage) return;
+    const ctx  = cv.getContext('2d');
+    const hint = document.getElementById('sbHint');
+
+    let W = 0, H = 0;
+    function fit() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const r = stage.getBoundingClientRect();
+      W = Math.max(1, r.width); H = Math.max(1, r.height);
+      cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    fitObserve(stage, fit);
+
+    const RAIN = ['✨','🪐','🔮','🎮','🧠','🤖','🌀','💫'];
+    let pick = RAIN[0];
+    let mode = 'rain';
+    const particles = [];
+    const pointer = { x: 0.5, y: 0.5, on: false };
+
+    const picker = document.getElementById('sbEmojis');
+    RAIN.forEach((e, i) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'sb-emoji'; b.textContent = e;
+      b.setAttribute('aria-pressed', i === 0 ? 'true' : 'false');
+      b.addEventListener('click', () => {
+        pick = e;
+        picker.querySelectorAll('.sb-emoji').forEach(x => x.setAttribute('aria-pressed', 'false'));
+        b.setAttribute('aria-pressed', 'true');
+      });
+      picker.appendChild(b);
+    });
+
+    function spawn(n, x) {
+      for (let i = 0; i < n; i++) particles.push({
+        x: x != null ? x : Math.random() * W,
+        y: -20 - Math.random() * 40,
+        vx: (Math.random() - 0.5) * 40,
+        vy: 30 + Math.random() * 60,
+        e: pick, s: 20 + Math.random() * 26,
+        rot: (Math.random() - 0.5) * 2, vr: (Math.random() - 0.5) * 2,
+        life: 0, max: 4 + Math.random() * 3,
+      });
+      if (particles.length > 900) particles.splice(0, particles.length - 900);
+    }
+
+    document.getElementById('sbBurst').addEventListener('click', () => spawn(120, W / 2));
+
+    function setMode(m) {
+      mode = m;
+      document.getElementById('sbModeRain').setAttribute('aria-pressed', String(m === 'rain'));
+      document.getElementById('sbModeForm').setAttribute('aria-pressed', String(m === 'form'));
+      document.getElementById('sbEmojis').style.display = m === 'rain' ? 'flex' : 'none';
+      document.getElementById('sbBurst').style.display  = m === 'rain' ? '' : 'none';
+      hint.textContent = m === 'rain'
+        ? 'click the stage to make it rain'
+        : 'move your pointer — speed + tilt the morph';
+      particles.length = 0;
+    }
+    document.getElementById('sbModeRain').addEventListener('click', () => setMode('rain'));
+    document.getElementById('sbModeForm').addEventListener('click', () => setMode('form'));
+
+    function localXY(ev) {
+      const r = stage.getBoundingClientRect();
+      return { x: (ev.clientX - r.left) / r.width, y: (ev.clientY - r.top) / r.height };
+    }
+    stage.addEventListener('pointermove', ev => { const p = localXY(ev); pointer.x = p.x; pointer.y = p.y; pointer.on = true; });
+    stage.addEventListener('pointerleave', () => { pointer.on = false; });
+    stage.addEventListener('pointerdown', ev => { if (mode === 'rain') { const p = localXY(ev); spawn(40, p.x * W); } });
+
+    const FORM = ['🔷','🔶','🟣','🟢','🟡','🔴','💠','✦','◆','🟦','🟪','🟩'];
+    const KEY = [3, 4, 5, 6];
+    const sidesEnv = window.VizEnv ? new window.VizEnv.Envelope({ attack: 0.9, release: 0.9, initial: 3 }) : null;
+    let sidesFb = 3, clock = 0;
+    function rawPulse(t) {
+      return window.SJPulse ? window.SJPulse.kick(t)
+        : Math.min(1, Math.pow(Math.max(0, Math.sin(t * 2.2)), 2) * 0.9);
+    }
+    function offscreen() {
+      const r = stage.getBoundingClientRect();
+      return r.bottom < 0 || r.top > window.innerHeight;
+    }
+
+    let t0, tp;
+    function frame(ts) {
+      requestAnimationFrame(frame);
+      if (offscreen()) { tp = ts; return; }
+      if (t0 === undefined) { t0 = ts; tp = ts; }
+      const t  = (ts - t0) / 1000;
+      const dt = Math.min(0.05, (ts - tp) / 1000); tp = ts;
+      ctx.clearRect(0, 0, W, H);
+
+      if (mode === 'rain') {
+        if (Math.random() < 0.4) spawn(1);
+        for (let i = particles.length - 1; i >= 0; i--) {
+          const p = particles[i];
+          p.life += dt;
+          if (p.life > p.max || p.y > H + 40) { particles.splice(i, 1); continue; }
+          p.vy += 140 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
+          ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+          ctx.globalAlpha = Math.max(0, 1 - p.life / p.max);
+          ctx.font = p.s + 'px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(p.e, 0, 0); ctx.restore();
+        }
+        ctx.globalAlpha = 1;
+      } else {
+        const speed = 0.32 + (pointer.on ? pointer.x * 0.9 : 0.25);
+        clock += dt * speed;
+        const target = KEY[Math.floor(clock) % 4];
+        let sides = sidesEnv ? sidesEnv.follow(target, dt)
+          : (sidesFb += (target - sidesFb) * Math.min(1, dt * 1.1), sidesFb);
+        sides = Math.max(3, sides);
+        const pulse = rawPulse(t);
+        const cx = W / 2, cy = H / 2;
+        const R = Math.min(W, H) * 0.30 * (1 + 0.14 * pulse);
+        const rot = t * 0.16 + (pointer.on ? (pointer.y - 0.5) * 1.6 : 0);
+        const M = 24, size = 20 + pulse * 14;
+        const ngon = n => {
+          const v = [];
+          for (let k = 0; k < n; k++) { const a = rot - Math.PI / 2 + k * (Math.PI * 2 / n); v.push([Math.cos(a) * R, Math.sin(a) * R]); }
+          return v;
+        };
+        const nLo = Math.floor(sides), nHi = Math.ceil(sides), fr = sides - nLo;
+        const A = ngon(nLo), B = nHi === nLo ? A : ngon(nHi);
+        const pt = (arr, n, m) => {
+          const s = (m / M) * n, e = Math.floor(s) % n, f = s - Math.floor(s);
+          const a = arr[e], b = arr[(e + 1) % n];
+          return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+        };
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = size + 'px serif';
+        for (let m = 0; m < M; m++) {
+          const p = pt(A, nLo, m), q = pt(B, nHi, m);
+          const x = cx + p[0] + (q[0] - p[0]) * fr;
+          const y = cy + p[1] + (q[1] - p[1]) * fr;
+          ctx.globalAlpha = 0.85 + pulse * 0.15;
+          ctx.fillText(FORM[m % FORM.length], x, y);
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+    setMode('rain');
+    requestAnimationFrame(frame);
+  })();
+
+  // ── Workbench — "how the machine ships" pipeline diagram ───────────────
+  // A node loop (Brainstorm → … → Handoff → repeat) with a pulse
+  // travelling the edges. Uses the live zone --accent so it stays in the
+  // atmosphere. Same Canvas + off-screen-pause discipline as the Sandbox.
+  (function Machine() {
+    const stage = document.getElementById('mxStage');
+    const cv    = document.getElementById('mxCanvas');
+    if (!cv || !stage) return;
+    const ctx = cv.getContext('2d');
+    const STEPS = ['Brainstorm','Plan','Approve','Chunk','Verify','Ship','Handoff'];
+    const N = STEPS.length;
+    const REDUCED = window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    let W = 0, H = 0;
+    function fit() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const r = stage.getBoundingClientRect();
+      W = Math.max(1, r.width); H = Math.max(1, r.height);
+      cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    fitObserve(stage, () => { fit(); if (REDUCED) { readAccent(); draw(null); } });
+
+    let accent = '#2DD4BF', accentT = 0;
+    function readAccent() {
+      const c = getComputedStyle(document.body).getPropertyValue('--accent').trim();
+      if (c) accent = c;
+    }
+    readAccent();
+
+    function nodePos(i) {
+      const a = (i / N) * Math.PI * 2 - Math.PI / 2;
+      // Keep the whole loop + centered labels inside the box: leave ~110px
+      // horizontal / ~46px vertical so "Brainstorm" et al. never clip.
+      const rx = Math.max(40, Math.min(W * 0.34, W / 2 - 110));
+      const ry = Math.max(30, Math.min(H * 0.34, H / 2 - 46));
+      return [W / 2 + Math.cos(a) * rx, H / 2 + Math.sin(a) * ry];
+    }
+    function offscreen() {
+      const r = stage.getBoundingClientRect();
+      return r.bottom < 0 || r.top > window.innerHeight;
+    }
+
+    let t0, tp, prog = 0;
+    function draw(activeF) {
+      ctx.clearRect(0, 0, W, H);
+      // edges
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < N; i++) {
+        const p = nodePos(i), q = nodePos((i + 1) % N);
+        ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+        ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+      }
+      // travelling pulse along the active edge
+      if (activeF != null) {
+        const seg = Math.floor(activeF), f = activeF - seg;
+        const p = nodePos(seg % N), q = nodePos((seg + 1) % N);
+        const px = p[0] + (q[0] - p[0]) * f, py = p[1] + (q[1] - p[1]) * f;
+        const g = ctx.createRadialGradient(px, py, 0, px, py, 26);
+        g.addColorStop(0, accent); g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(px, py, 26, 0, Math.PI * 2); ctx.fill();
+      }
+      // nodes
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = '600 12px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif';
+      for (let i = 0; i < N; i++) {
+        const p = nodePos(i);
+        const isActive = activeF != null &&
+          (Math.floor(activeF) % N === i || (Math.floor(activeF) + 1) % N === i);
+        ctx.beginPath(); ctx.arc(p[0], p[1], 6, 0, Math.PI * 2);
+        ctx.fillStyle = isActive ? accent : 'rgba(255,255,255,0.35)';
+        ctx.fill();
+        ctx.fillStyle = isActive ? accent : 'rgba(255,255,255,0.55)';
+        const lift = p[1] < H / 2 ? -18 : 20;
+        ctx.fillText(STEPS[i], p[0], p[1] + lift);
+      }
+    }
+
+    if (REDUCED) return;   // static draw handled by the fitObserve callback
+
+    function frame(ts) {
+      requestAnimationFrame(frame);
+      if (offscreen()) { tp = ts; return; }
+      if (t0 === undefined) { t0 = ts; tp = ts; }
+      const dt = Math.min(0.05, (ts - tp) / 1000); tp = ts;
+      accentT += dt; if (accentT > 0.5) { accentT = 0; readAccent(); }
+      prog = (prog + dt * 0.6) % N;   // ~12s per full loop
+      draw(prog);
+    }
+    requestAnimationFrame(frame);
+  })();
+
+  // ── Zone-atmosphere — scroll retints the ambient per zone ──────────────
+  // The accent + glow shift between zones; CSS transitions do the crossfade.
+  // Demonstrates the sj-design theme/mood idea: one look engine, many moods.
+  (function ZoneAtmosphere() {
+    const zones = ['showroom', 'sandbox', 'shelf', 'workbench']
+      .map(id => document.getElementById(id))
+      .filter(Boolean);
+    if (!zones.length || !('IntersectionObserver' in window)) {
+      document.body.dataset.zone = 'showroom';
+      return;
+    }
+    document.body.dataset.zone = 'showroom';
+    const ratio = new Map();
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => ratio.set(e.target.id, e.intersectionRatio));
+      let best = document.body.dataset.zone, max = -1;
+      ratio.forEach((r, id) => { if (r > max) { max = r; best = id; } });
+      if (best && best !== document.body.dataset.zone) document.body.dataset.zone = best;
+    }, { threshold: [0.15, 0.35, 0.55, 0.75] });
+    zones.forEach(z => io.observe(z));
   })();
 
 })();
