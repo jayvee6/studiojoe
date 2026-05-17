@@ -199,7 +199,7 @@
     .sb-emoji:hover { background: var(--fill-2); transform: translateY(-1px); }
     .sb-emoji[aria-pressed="true"] { background: var(--accent-bg); border-color: var(--accent); }
 
-    /* ── Showroom hero (S1): WebGPU wire-terrain behind the identity ────── */
+    /* ── Showroom hero (S1): WebGPU black hole behind the identity ──────── */
     #showroom { overflow: hidden; }
     #showroom::before {                 /* atmosphere fallback — hero never blank */
       content: ''; position: absolute; inset: 0; z-index: 0;
@@ -217,6 +217,75 @@
         rgba(6,6,8,0.30) 58%, rgba(6,6,8,0.74) 100%);
     }
     .showroom-inner { position: relative; z-index: 2; }
+
+    /* ── Hero tuner — live black-hole scene controls ────────────────────── */
+    .bh-tuner {
+      position: absolute; left: clamp(16px, 4vw, 40px);
+      bottom: clamp(16px, 4vh, 36px); z-index: 4;
+      display: flex; flex-direction: column-reverse; gap: 10px;
+      align-items: flex-start;   /* toggle pinned low, panel expands upward */
+    }
+    .bh-tuner-toggle {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 8px 14px; border-radius: 100px;
+      font: 600 12px/1 var(--font); letter-spacing: 0.02em;
+      color: var(--label-1);
+      background: var(--glass-bg); border: 1px solid var(--glass-bdr);
+      box-shadow: var(--glass-shd);
+      -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+      cursor: pointer; transition: background 0.2s, color 0.2s;
+    }
+    .bh-tuner-toggle:hover { background: var(--accent-bg); }
+    .bh-tuner-toggle .gl { color: var(--accent);
+      font-family: "SF Mono", ui-monospace, monospace; }
+    .bh-tuner-panel {
+      display: none; flex-direction: column; gap: 14px;
+      width: min(280px, 78vw);
+      padding: 18px 18px 16px; border-radius: 16px;
+      background: var(--glass-bg); border: 1px solid var(--glass-bdr);
+      box-shadow: var(--glass-shd);
+      -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+    }
+    .bh-tuner[data-open="true"] .bh-tuner-panel { display: flex; }
+    .bh-row { display: flex; flex-direction: column; gap: 6px; }
+    .bh-row-head {
+      display: flex; justify-content: space-between; align-items: baseline;
+      font: 600 11px/1 var(--font); letter-spacing: 0.10em;
+      text-transform: uppercase; color: var(--label-3);
+    }
+    .bh-row-val {
+      font: 600 11px/1 "SF Mono", ui-monospace, monospace;
+      color: var(--accent);
+    }
+    .bh-row input[type="range"] {
+      -webkit-appearance: none; appearance: none;
+      width: 100%; height: 4px; border-radius: 100px; margin: 0;
+      background: var(--fill-2); cursor: pointer; accent-color: var(--accent);
+    }
+    .bh-row input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--accent); border: none;
+    }
+    .bh-row input[type="range"]::-moz-range-thumb {
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--accent); border: none;
+    }
+    .bh-tuner-reset {
+      align-self: flex-start; margin-top: 2px;
+      padding: 7px 14px; border-radius: 100px;
+      font: 600 11px/1 var(--font); letter-spacing: 0.04em;
+      color: var(--label-2);
+      background: transparent; border: 1px dashed var(--glass-bdr);
+      cursor: pointer; transition: color 0.2s, border-color 0.2s, background 0.2s;
+    }
+    .bh-tuner-reset:hover {
+      color: var(--accent); border-color: var(--accent);
+      background: var(--accent-bg);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .bh-tuner-toggle, .bh-tuner-reset { transition: none; }
+    }
 
     /* ── Shelf grid ─────────────────────────────────────────────────────── */
     .shelf-grid {
@@ -455,7 +524,7 @@
 <main>
 
   <!-- ── SHOWROOM — the monument. WebGPU hero lands in S1. ──────────────── -->
-  <section id="showroom" class="zone" data-crack="wire-terrain">
+  <section id="showroom" class="zone" data-crack="black-hole">
     <canvas id="hero-gpu" aria-hidden="true"></canvas>
     <div class="hero-scrim" aria-hidden="true"></div>
     <div class="showroom-inner">
@@ -763,9 +832,11 @@
     }
   })();
 
-  // ── Showroom hero — wire-terrain (WebGPU) ──────────────────────────────
-  // Raymarched FBM terrain + analytic wireframe, one fullscreen-triangle
-  // fragment shader (verbatim from sj-design/showcase/scenes/wire-terrain).
+  // ── Showroom hero — black hole / "Gargantua" (WebGPU) ──────────────────
+  // Schwarzschild null-geodesic raymarch: photon ring, lensed starfield and
+  // a Shakura-Sunyaev Doppler-beamed accretion disk. One fullscreen-triangle
+  // fragment shader, single pass (verbatim from the locked bh-007 prototype,
+  // musicplayer-viz/prototypes/blackhole.html — the parity-locked look).
   // Silent fallback: no WebGPU → return quietly, the #showroom::before
   // atmosphere gradient stays (hero is never blank, never an error overlay).
   // Renders at maxDPR 1 × renderScale 0.66 and pauses when scrolled past.
@@ -773,17 +844,116 @@
     const canvas = document.getElementById('hero-gpu');
     if (!canvas || !navigator.gpu) return;
 
+    // Live scene params — the hero tuner writes these, the frame loop reads
+    // them. Defaults match the locked cinematic framing.
+    const bhParams = {
+      diskBright: 1.0, spin: 1.0, react: 1.0,
+      camDist: 26.0, camEl: 0.12, orbit: 0.06,
+    };
+    const BH_DEFAULTS = Object.freeze({ ...bhParams });
+
+    // Injected only once the pipeline is live (no dead UI behind the
+    // gradient fallback). All-DOM, no innerHTML — same hygiene as CrackOpen.
+    function buildTuner() {
+      const host = canvas.parentElement;            // #showroom
+      if (!host || host.querySelector('.bh-tuner')) return;
+      const SPEC = [
+        { key: 'diskBright', label: 'Disk brightness', min: 0,    max: 2,   step: 0.05,  fmt: v => v.toFixed(2) },
+        { key: 'spin',       label: 'Disk spin',       min: 0,    max: 2,   step: 0.05,  fmt: v => v.toFixed(2) },
+        { key: 'react',      label: 'Reactivity',      min: 0,    max: 2,   step: 0.05,  fmt: v => v.toFixed(2) },
+        { key: 'camDist',    label: 'Distance',        min: 12,   max: 48,  step: 1,     fmt: v => v.toFixed(0) },
+        { key: 'camEl',      label: 'Camera angle',    min: -0.5, max: 0.6, step: 0.01,  fmt: v => v.toFixed(2) },
+        { key: 'orbit',      label: 'Orbit speed',     min: 0,    max: 0.2, step: 0.005, fmt: v => v.toFixed(3) },
+      ];
+      const wrap = document.createElement('div');
+      wrap.className = 'bh-tuner';
+      wrap.setAttribute('data-open', 'false');
+
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'bh-tuner-toggle';
+      toggle.setAttribute('aria-expanded', 'false');
+      const gl = document.createElement('span');
+      gl.className = 'gl'; gl.textContent = '✦';
+      toggle.appendChild(gl);
+      toggle.appendChild(document.createTextNode(' Tune the scene'));
+
+      const panel = document.createElement('div');
+      panel.className = 'bh-tuner-panel';
+      panel.setAttribute('role', 'group');
+      panel.setAttribute('aria-label', 'Black hole scene controls');
+
+      SPEC.forEach(s => {
+        const row  = document.createElement('div');  row.className  = 'bh-row';
+        const head = document.createElement('div');  head.className = 'bh-row-head';
+        const name = document.createElement('span'); name.textContent = s.label;
+        const val  = document.createElement('span'); val.className  = 'bh-row-val';
+        val.textContent = s.fmt(bhParams[s.key]);
+        head.appendChild(name); head.appendChild(val);
+        const input = document.createElement('input');
+        input.type = 'range';
+        input.min = s.min; input.max = s.max; input.step = s.step;
+        input.value = bhParams[s.key];
+        input.setAttribute('aria-label', s.label);
+        input.addEventListener('input', () => {
+          const n = parseFloat(input.value);
+          bhParams[s.key] = n;
+          val.textContent = s.fmt(n);
+        });
+        row.appendChild(head); row.appendChild(input);
+        panel.appendChild(row);
+        s._input = input; s._val = val;
+      });
+
+      const reset = document.createElement('button');
+      reset.type = 'button';
+      reset.className = 'bh-tuner-reset';
+      reset.textContent = 'Reset';
+      reset.addEventListener('click', () => {
+        SPEC.forEach(s => {
+          const d = BH_DEFAULTS[s.key];
+          bhParams[s.key] = d;
+          s._input.value = d;
+          s._val.textContent = s.fmt(d);
+        });
+      });
+      panel.appendChild(reset);
+
+      toggle.addEventListener('click', () => {
+        const open = wrap.getAttribute('data-open') !== 'true';
+        wrap.setAttribute('data-open', open ? 'true' : 'false');
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+
+      wrap.appendChild(toggle);
+      wrap.appendChild(panel);
+      host.appendChild(wrap);
+    }
+
     const WGSL = `
-struct Uniforms {
-    elapsed:    f32,
-    bass:       f32,
-    treble:     f32,
-    beatPulse:  f32,
-    resolution: vec2<f32>,
-    react:      f32,
-    _pad:       f32,
+override MAX_STEPS: i32 = 220;   // specialised per-canvas-width at pipeline build
+
+// 64 bytes. 4 f32 before vec2 keeps resolution on an 8-byte boundary;
+// padded to a 16-byte multiple. This is the parity ABI for the future
+// viz/blackhole-wgpu.js + Shaders/BlackHole.metal port.
+struct U {
+    elapsed:    f32,        // 0
+    bass:       f32,        // 4
+    beat:       f32,        // 8
+    treble:     f32,        // 12
+    resolution: vec2<f32>,  // 16  (8-byte aligned)
+    valence:    f32,        // 24
+    energy:     f32,        // 28
+    mid:        f32,        // 32
+    spin:       f32,        // 36  control
+    diskBright: f32,        // 40  control
+    camAz:      f32,        // 44  camera azimuth
+    camEl:      f32,        // 48  camera elevation
+    camDist:    f32,        // 52  camera distance
+    react:      f32,        // 56  master reactivity
+    _pad0:      f32,        // 60  -> 64
 }
-@group(0) @binding(0) var<uniform> u: Uniforms;
+@group(0) @binding(0) var<uniform> u: U;
 
 struct VSOut {
     @builtin(position) pos: vec4<f32>,
@@ -791,143 +961,248 @@ struct VSOut {
 }
 
 @vertex fn vs_main(@builtin(vertex_index) vid: u32) -> VSOut {
-    var pos = array<vec2<f32>, 3>(
-        vec2<f32>(-1.0, -1.0),
-        vec2<f32>( 3.0, -1.0),
-        vec2<f32>(-1.0,  3.0),
+    var p = array<vec2<f32>, 3>(
+        vec2<f32>(-1.0, -1.0), vec2<f32>(3.0, -1.0), vec2<f32>(-1.0, 3.0),
     );
     var uvs = array<vec2<f32>, 3>(
-        vec2<f32>(0.0, 0.0),
-        vec2<f32>(2.0, 0.0),
-        vec2<f32>(0.0, 2.0),
+        vec2<f32>(0.0, 0.0), vec2<f32>(2.0, 0.0), vec2<f32>(0.0, 2.0),
     );
-    var out: VSOut;
-    out.pos = vec4<f32>(pos[vid], 0.0, 1.0);
-    out.uv  = uvs[vid];
-    return out;
+    var o: VSOut;
+    o.pos = vec4<f32>(p[vid], 0.0, 1.0);
+    o.uv  = uvs[vid];
+    return o;
 }
 
+// ---- Constants (rs = 1) ---------------------------------------------------
+const RS:     f32 = 1.0;     // Schwarzschild radius (event horizon)
+const PH_R:   f32 = 1.5;     // photon sphere
+const DISK_IN:  f32 = 3.0;   // ISCO inner edge
+const DISK_OUT: f32 = 11.0;  // outer edge
+const FAR:    f32 = 64.0;    // escape radius -> starfield
+const PI:     f32 = 3.14159265359;
+
+// ---- Hash / value noise / fbm (from ferrofluid-wgpu.js) -------------------
 fn hash2(p: vec2<f32>) -> f32 {
     var q = fract(p * vec2<f32>(127.1, 311.7));
-    q += dot(q, q + 19.19);
+    let d = dot(q, q + vec2<f32>(19.19));
+    q += vec2<f32>(d);
     return fract(q.x * q.y);
 }
-
 fn vnoise(p: vec2<f32>) -> f32 {
     let i = floor(p); let f = fract(p);
-    let u2 = f * f * (3.0 - 2.0 * f);
+    let w = f * f * (vec2<f32>(3.0) - 2.0 * f);
     return mix(
-        mix(hash2(i),               hash2(i + vec2<f32>(1.0, 0.0)), u2.x),
-        mix(hash2(i + vec2<f32>(0.0, 1.0)), hash2(i + vec2<f32>(1.0, 1.0)), u2.x),
-        u2.y
-    );
+        mix(hash2(i),                       hash2(i + vec2<f32>(1.0, 0.0)), w.x),
+        mix(hash2(i + vec2<f32>(0.0, 1.0)), hash2(i + vec2<f32>(1.0, 1.0)), w.x),
+        w.y);
 }
-
-fn fbm(p_in: vec2<f32>) -> f32 {
-    var p = p_in; var v = 0.0f; var a = 0.5f;
-    for (var i = 0; i < 3; i++) {
+fn fbm(p0: vec2<f32>) -> f32 {
+    var p = p0; var v = 0.0; var a = 0.5;
+    for (var i = 0; i < 5; i++) {
         v += a * vnoise(p);
-        p  = p * 2.0 + vec2<f32>(3.14, 1.59);
+        p  = p * 2.07 + vec2<f32>(3.14, 1.59);
         a *= 0.5;
     }
     return v;
 }
-
-fn terrainH(xz: vec2<f32>, t: f32) -> f32 {
-    let p  = xz * 0.15 + vec2<f32>(0.0, t * 0.35);
-    let n  = fbm(p);
-    let n2 = fbm(p * 1.6 + vec2<f32>(7.1, 3.3));
-    return (n - 0.5) * (2.5 + u.bass * 3.5)
-         + (n2 - 0.5) * (0.35 + u.treble * 0.4)
-         + u.beatPulse * 0.9;
+fn hash3(p: vec3<f32>) -> f32 {
+    return fract(sin(dot(p, vec3<f32>(127.1, 311.7, 74.7))) * 43758.5453);
 }
 
-fn buildRay(screenUV: vec2<f32>) -> vec3<f32> {
-    let cAng   = sin(u.elapsed * 0.08) * 0.9 + u.elapsed * 0.05;
-    let r      = 12.0f;
-    let camPos = vec3<f32>(cos(cAng) * r,
-                           2.8 + sin(u.elapsed * 0.3) * 0.6,
-                           sin(cAng) * r);
-    let camTarget = vec3<f32>(0.0, 0.4 + u.bass * 0.5, 0.0);
-    let fwd    = normalize(camTarget - camPos);
-    let right  = normalize(cross(fwd, vec3<f32>(0.0, 1.0, 0.0)));
-    let up     = cross(right, fwd);
-    let asp    = u.resolution.x / u.resolution.y;
-    let uv     = (screenUV - 0.5) * vec2<f32>(asp, 1.0);
-    return normalize(fwd * 1.5 + right * uv.x + up * uv.y);
+// ---- Blackbody-ish temperature ramp ---------------------------------------
+// t in [0,1]: 0 = cool outer disk (deep orange), 1 = hot inner / Doppler-blue.
+fn bbColor(t: f32) -> vec3<f32> {
+    let x = clamp(t, 0.0, 1.0);
+    let cool = vec3<f32>(1.00, 0.32, 0.06);   // ~3000K orange
+    let mid  = vec3<f32>(1.00, 0.74, 0.36);   // ~5500K amber-white
+    let hot  = vec3<f32>(0.78, 0.85, 1.00);   // ~12000K blue-white
+    let a = mix(cool, mid, smoothstep(0.0, 0.5, x));
+    return mix(a, hot, smoothstep(0.5, 1.0, x));
 }
 
-fn getCamPos() -> vec3<f32> {
-    let cAng = sin(u.elapsed * 0.08) * 0.9 + u.elapsed * 0.05;
-    let r    = 12.0f;
-    return vec3<f32>(cos(cAng) * r,
-                     2.8 + sin(u.elapsed * 0.3) * 0.6,
-                     sin(cAng) * r);
+// ---- ACES filmic + OLED dither (verbatim from disco-chrome-wgpu.js) -------
+fn aces(c: vec3<f32>) -> vec3<f32> {
+    return clamp((c * (2.51 * c + 0.03)) / (c * (2.43 * c + 0.59) + 0.14),
+                 vec3<f32>(0.0), vec3<f32>(1.0));
+}
+fn sjDither(c: vec3<f32>, fragCoord: vec2<f32>) -> vec3<f32> {
+    let ign = fract(52.9829189 * fract(dot(fragCoord, vec2<f32>(0.06711056, 0.00583715))));
+    return c + (ign - 0.5) / 255.0;
+}
+
+// ---- Lensed starfield (sampled with the BENT ray dir) ---------------------
+fn starfield(dir: vec3<f32>) -> vec3<f32> {
+    let a = atan2(dir.z, dir.x);
+    let b = asin(clamp(dir.y, -1.0, 1.0));
+    var col = vec3<f32>(0.0);
+    // Faint cool nebula band so the void is not a flat dead black.
+    let band = exp(-b * b * 5.0);
+    col += vec3<f32>(0.012, 0.018, 0.040) * band * (0.5 + 0.5 * fbm(vec2<f32>(a * 1.5, b * 3.0)));
+    // 3 sparse star layers at increasing density.
+    for (var k = 0; k < 3; k++) {
+        let sc = 26.0 + f32(k) * 42.0;
+        let gv = vec2<f32>(a, b) * sc;
+        let cell = floor(gv);
+        let h  = hash3(vec3<f32>(cell, f32(k) * 7.0));
+        if (h > 0.982) {
+            let fp = fract(gv) - 0.5;
+            let d  = dot(fp, fp);
+            let tw = 0.7 + 0.3 * sin(u.elapsed * (1.0 + h * 3.0) + h * 30.0);
+            let bri = (h - 0.982) / 0.018;
+            col += vec3<f32>(0.9, 0.95, 1.0) * exp(-d * 70.0) * bri * tw * 0.9;
+        }
+    }
+    return col;
+}
+
+// ---- Accretion-disk emission at an equatorial crossing point --------------
+// pc = world point on the y=0 plane; rd = photon travel dir at the crossing
+// (for Doppler line-of-sight). Returns premultiplied emissive RGB.
+// Returns rgb = premultiplied emission, a = local opacity. Opacity is tied
+// to actual gas density and is identically 0 outside the annulus, so a ray
+// crossing the equatorial plane far from the disk does NOT attenuate the
+// background (that bug painted a translucent "glass dome" over the frame).
+fn diskEmission(pc: vec3<f32>, rd: vec3<f32>) -> vec4<f32> {
+    let rr = length(pc.xz);
+    if (rr < DISK_IN || rr > DISK_OUT) { return vec4<f32>(0.0); }
+
+    // Radial 0=inner .. 1=outer, with soft inner/outer edges.
+    let nr   = (rr - DISK_IN) / (DISK_OUT - DISK_IN);
+    let edge = smoothstep(0.0, 0.10, nr) * (1.0 - smoothstep(0.74, 1.0, nr));
+
+    // Keplerian shear ~ r^-1.5. Rotate the SAMPLE POINT by the per-radius
+    // shear angle and sample noise in Cartesian disk space. A rotation is
+    // inherently continuous and 2pi-periodic, so there is NO atan2 seam
+    // (atan2's -x-axis 2pi jump was the hard radial break across the disk).
+    let omega = u.spin * (1.4 + u.mid * 1.1) * pow(DISK_IN / rr, 1.5);
+    let rotA  = omega * u.elapsed;
+    let cs = cos(rotA); let sn = sin(rotA);
+    let q  = vec2<f32>(pc.x * cs - pc.z * sn, pc.x * sn + pc.z * cs);
+
+    // Two-scale sheared FBM -> filamentary gas. Treble lifts the fine octave;
+    // beat injects an outward-travelling shock ring (radius grows with time,
+    // amplitude gated by beat in the turb term below).
+    let shockX = (nr - fract(u.elapsed * 0.18)) * 6.0;
+    let shock = exp(-shockX * shockX);
+    let f1 = fbm(q * 0.55 + vec2<f32>(1.7, 0.0));
+    let f2 = fbm(q * 1.50 + vec2<f32>(7.0, 3.0));
+    var turb = mix(f1, f2, 0.35 + u.treble * 0.40 * u.react);
+    turb = pow(clamp(turb, 0.0, 1.0), 1.6) + u.beat * u.react * 0.35 * shock;
+
+    // Shakura-Sunyaev temperature: T ~ (r_in/r)^0.75 with zero-torque edge.
+    let tProf = pow(DISK_IN / rr, 0.75) * (1.0 - sqrt(DISK_IN / rr));
+    let tNorm = clamp(tProf * 3.1, 0.0, 1.0);
+
+    // Relativistic Doppler beaming. Gas orbits in +y sense (flip with spin).
+    let dirSpin = sign(u.spin + 1e-4);
+    let vdir = normalize(vec3<f32>(-pc.z, 0.0, pc.x) * dirSpin);
+    let beta = clamp(sqrt(0.5 / rr), 0.0, 0.92);          // ~ v/c, Keplerian
+    let gamma = 1.0 / sqrt(1.0 - beta * beta);
+    let losB  = beta * dot(vdir, -rd);                    // toward observer
+    let dopp  = 1.0 / (gamma * (1.0 - losB));             // Doppler factor D
+    let beam  = pow(clamp(dopp, 0.05, 6.0), 3.0);         // intensity ~ D^3
+
+    // Gravitational redshift out of the well.
+    let grav  = sqrt(max(0.0, 1.0 - RS / rr));
+
+    // Doppler+grav also shift the apparent temperature (colour).
+    let tShift = clamp(tNorm * dopp * grav + (u.valence - 0.5) * 0.18, 0.0, 1.0);
+    var col = bbColor(tShift);
+
+    let bassGlow = 1.0 + u.bass * u.react * 0.9 * (1.0 - nr);  // bass = inner glow
+    let bri = edge * (0.18 + turb * 1.25) * tNorm * beam * grav
+            * (1.4 + u.energy * 0.9) * bassGlow
+            * u.diskBright * (3.0 + u.beat * u.react * 2.2);
+    // Optically thin outer disk, thicker dense inner gas; never fully opaque
+    // so the lensed far side still reads through the near side.
+    let alpha = clamp(edge * (0.30 + turb * 0.55) * (0.6 + u.energy * 0.5),
+                      0.0, 0.90);
+    return vec4<f32>(col * bri, alpha);
+}
+
+// ---- Geodesic acceleration: null ray in Schwarzschild ---------------------
+// d2p/dl2 = -1.5 * h2 * p / r^5 ,  h2 = |cross(p, v)|^2 (conserved).
+fn accel(p: vec3<f32>, h2: f32) -> vec3<f32> {
+    let r2 = dot(p, p);
+    return -1.5 * h2 * p / (r2 * r2 * sqrt(r2));
 }
 
 @fragment fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
-    let camPos = getCamPos();
-    let rd     = buildRay(in.uv);
+    let asp = u.resolution.x / u.resolution.y;
 
-    let fogColor = vec3<f32>(0.000, 0.000, 0.031);
+    // Orbit camera (azimuth/elevation/distance from uniforms).
+    let ce = cos(u.camEl); let se = sin(u.camEl);
+    let ca = cos(u.camAz); let sa = sin(u.camAz);
+    let camPos = vec3<f32>(sa * ce, se, ca * ce) * u.camDist;
+    let fwd    = normalize(-camPos);
+    let right0 = normalize(cross(fwd, vec3<f32>(0.0, 1.0, 0.0)));
+    let up0    = cross(right0, fwd);
+    // Site composition only (NOT the locked physics): a slight cinematic
+    // roll + the hole biased low in the frame, so the disk sweeps across
+    // the lower hero like a planetary limb and the void above carries the
+    // headline.
+    let roll = 0.16;                       // ~9 degrees
+    let cr = cos(roll); let sr = sin(roll);
+    let right = right0 * cr + up0 * sr;
+    let up    = up0 * cr - right0 * sr;
+    let ndc   = (in.uv - vec2<f32>(0.5, 0.32)) * vec2<f32>(asp, 1.0);
+    var rd    = normalize(fwd * 1.75 + right * ndc.x + up * ndc.y);
 
-    var tRay = 0.2f;
-    var hit  = false;
-    var hitP = vec3<f32>(0.0);
+    var p  = camPos;
+    let h2 = dot(cross(p, rd), cross(p, rd));   // conserved angular momentum^2
 
-    var prevT = tRay;
-    for (var i = 0; i < 56; i++) {
-        let p  = camPos + rd * tRay;
-        let h  = terrainH(p.xz, u.elapsed);
-        let dy = p.y - h;
-        if dy < 0.0 {
-            var lo = prevT; var hi = tRay;
-            for (var j = 0; j < 4; j++) {
-                let mid = (lo + hi) * 0.5;
-                let pm  = camPos + rd * mid;
-                let hm  = terrainH(pm.xz, u.elapsed);
-                if pm.y - hm < 0.0 { hi = mid; } else { lo = mid; }
-            }
-            hit  = true;
-            hitP = camPos + rd * ((lo + hi) * 0.5);
-            break;
+    var accum = vec3<f32>(0.0);   // emissive accumulation
+    var trans = 1.0;              // remaining transmittance (front-to-back)
+    var hitHorizon = false;
+    var prevY = p.y;
+    var minR  = 1e9;
+
+    for (var i = 0; i < MAX_STEPS; i++) {
+        let r2 = dot(p, p);
+        let r  = sqrt(r2);
+        minR = min(minR, r);
+
+        if (r < RS) { hitHorizon = true; break; }
+        if (r > FAR && dot(p, rd) > 0.0) { break; }
+
+        // Adaptive affine step: tiny near the horizon, large far away.
+        let dl = clamp(0.16 * (r - 0.85), 0.012, 1.6);
+
+        // Velocity-Verlet integration of the geodesic.
+        let a1 = accel(p, h2);
+        let pNext = p + rd * dl + 0.5 * a1 * dl * dl;
+        let a2 = accel(pNext, h2);
+        rd = normalize(rd + 0.5 * (a1 + a2) * dl);
+
+        // Equatorial-plane crossing -> sample the thin disk (interpolated).
+        if (prevY * pNext.y < 0.0) {
+            let f  = prevY / (prevY - pNext.y);
+            let pc = mix(p, pNext, f);
+            let em = diskEmission(pc, normalize(pNext - p));
+            accum += trans * em.rgb;          // front-to-back over-composite
+            trans *= (1.0 - em.a);            // 0 outside annulus -> no wash
+            if (trans < 0.02) { break; }
         }
-        prevT  = tRay;
-        tRay  += max(0.10, dy * 0.55);
-        if tRay > 200.0 { break; }
+        prevY = pNext.y;
+        p = pNext;
     }
 
-    if (!hit) {
-        let skyGrad = smoothstep(-0.1, 0.3, rd.y);
-        let skyCol  = mix(fogColor * 2.0, fogColor * 0.5, skyGrad);
-        return vec4<f32>(skyCol, 1.0);
+    // Background only shows through whatever transmittance survived, and
+    // never through the event horizon (that is the shadow).
+    var col = accum;
+    if (!hitHorizon) {
+        col += trans * starfield(rd);
     }
 
-    let h   = terrainH(hitP.xz, u.elapsed);
-    let h01 = clamp((h + 2.5) / 6.0, 0.0, 1.0);
-    let low  = vec3<f32>(0.55, 0.10, 0.75);
-    let mid  = vec3<f32>(0.20, 0.40, 0.95);
-    let high = vec3<f32>(0.20, 0.95, 0.90);
-    var col = mix(low, mid, smoothstep(0.0, 0.55, h01));
-    col      = mix(col, high, smoothstep(0.45, 1.0, h01));
-
-    let GRID_FREQ = 1.4f;
-    let perpScale = clamp(tRay / 20.0, 1.0, 4.0);
-    let LINE_W    = 0.032f * perpScale;
-    let cx = fract(hitP.x * GRID_FREQ);
-    let cz = fract(hitP.z * GRID_FREQ);
-    let isWire = (cx < LINE_W || cx > 1.0 - LINE_W ||
-                  cz < LINE_W || cz > 1.0 - LINE_W);
-    if (!isWire) {
-        col = vec3<f32>(0.03, 0.01, 0.08) + vec3<f32>(0.05, 0.02, 0.12) * h01;
+    // Photon-sphere rim: a faint warm halo when the ray skimmed r ~ 1.5
+    // without falling in. Physically motivated (light that nearly orbited).
+    if (!hitHorizon) {
+        let skimX = (minR - PH_R) * 3.4;
+        let skim  = exp(-skimX * skimX);
+        col += vec3<f32>(1.0, 0.66, 0.34) * skim * 0.05 * (1.0 + u.bass * u.react);
     }
 
-    col *= 0.8 + u.bass * 0.45 + u.beatPulse * 0.3;
-
-    let fogFactor = 1.0 - exp(-tRay * 0.035);
-    col = mix(col, fogColor, fogFactor);
-
-    return vec4<f32>(clamp(col, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
+    return vec4<f32>(sjDither(aces(col), in.pos.xy), 1.0);
 }
 `;
 
@@ -971,7 +1246,8 @@ fn getCamPos() -> vec3<f32> {
         canvas.width  = Math.max(1, Math.round(r.width  * dpr));
         canvas.height = Math.max(1, Math.round(r.height * dpr));
       }
-      fitObserve(host, size);
+      size();                 // sync — fitObserve defers to rAF; need a real
+      fitObserve(host, size);  // backing-store size before the pipeline build
 
       const context = canvas.getContext('webgpu');
       const format  = navigator.gpu.getPreferredCanvasFormat();
@@ -983,43 +1259,69 @@ fn getCamPos() -> vec3<f32> {
           visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
           buffer: { type: 'uniform' } }],
       });
-      const uniforms   = new Float32Array(8);
+      const uniforms   = new Float32Array(16);          // 64-byte parity ABI
       const uniformBuf = device.createBuffer({
-        size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       });
       const bindGroup = device.createBindGroup({
         layout: bgl, entries: [{ binding: 0, resource: { buffer: uniformBuf } }],
       });
+      // Adaptive geodesic step budget (prototype pattern): the raymarch is
+      // fragment-bound, so trim steps as the backing store grows.
+      const maxSteps = canvas.width > 2560 ? 150 : canvas.width > 1920 ? 190 : 240;
       const pipeline = device.createRenderPipeline({
         layout: device.createPipelineLayout({ bindGroupLayouts: [bgl] }),
         vertex:   { module, entryPoint: 'vs_main' },
-        fragment: { module, entryPoint: 'fs_main', targets: [{ format }] },
+        fragment: { module, entryPoint: 'fs_main', targets: [{ format }],
+                    constants: { MAX_STEPS: maxSteps } },
         primitive: { topology: 'triangle-list' },
       });
 
-      let t0;
+      buildTuner();
+
+      // Global animation slowdown — scales the virtual clock, so the disk
+      // swirl, shock ring, starfield twinkle, pulses AND the camera orbit
+      // all slow together proportionally. 1 = real-time, 0.5 = half speed.
+      const TIME_SCALE = 0.5;
+      let t0, prevTs, azim = 0.6;
       function frame(ts) {
         requestAnimationFrame(frame);
         // Pause the GPU when the Showroom is scrolled out of view.
         if (window.scrollY > window.innerHeight * 1.05) return;
         if (t0 === undefined) t0 = ts;
-        const t = (ts - t0) / 1000;
+        const t = ((ts - t0) / 1000) * TIME_SCALE;
         const p = pulses(t);
-        uniforms[0] = t;
-        uniforms[1] = p.bass;
-        uniforms[2] = p.treble;
-        uniforms[3] = p.beat;
-        uniforms[4] = canvas.width;
-        uniforms[5] = canvas.height;
-        uniforms[6] = 1.0;
-        uniforms[7] = 0;
+        const dt = (prevTs === undefined ? 0 : Math.min(0.05, (ts - prevTs) / 1000)) * TIME_SCALE;
+        prevTs = ts;
+        azim += bhParams.orbit * dt;                       // integrated, so
+                                                           // the speed slider
+                                                           // never jumps
+        // 64-byte parity ABI (see WGSL struct U). pulses(t) drives
+        // bass/treble/beat; mid/valence/energy are ambient defaults; the
+        // disk + camera params are live from the hero tuner panel.
+        uniforms[0]  = t;                                  // elapsed
+        uniforms[1]  = p.bass;                             // bass
+        uniforms[2]  = p.beat;                             // beat
+        uniforms[3]  = p.treble;                           // treble
+        uniforms[4]  = canvas.width;                       // resolution.x
+        uniforms[5]  = canvas.height;                      // resolution.y
+        uniforms[6]  = 0.55 + 0.25 * Math.sin(t * 0.13);   // valence
+        uniforms[7]  = 0.6;                                // energy
+        uniforms[8]  = (Math.sin(t * 0.9) + 1) * 0.5;      // mid
+        uniforms[9]  = bhParams.spin;                      // spin
+        uniforms[10] = bhParams.diskBright;                // diskBright
+        uniforms[11] = azim;                               // camAz (auto-orbit)
+        uniforms[12] = bhParams.camEl;                     // camEl
+        uniforms[13] = bhParams.camDist;                   // camDist
+        uniforms[14] = bhParams.react;                     // react
+        uniforms[15] = 0;                                  // _pad0
         device.queue.writeBuffer(uniformBuf, 0, uniforms);
         const enc  = device.createCommandEncoder();
         const pass = enc.beginRenderPass({
           colorAttachments: [{
             view: context.getCurrentTexture().createView(),
             loadOp: 'clear', storeOp: 'store',
-            clearValue: { r: 0, g: 0, b: 0.031, a: 1 },
+            clearValue: { r: 0, g: 0, b: 0, a: 1 },
           }],
         });
         pass.setPipeline(pipeline);
@@ -1039,35 +1341,35 @@ fn getCamPos() -> vec3<f32> {
   // (S3) reuses this same component for each interactive piece.
   (function CrackOpen() {
     const REG = {
-      'wire-terrain': {
-        title: 'Wire Terrain — WebGPU',
-        what: 'The moving monument behind the headline: a raymarched ' +
-              'fractal-Brownian-motion terrain with analytic wireframe ' +
-              'lines. One fullscreen-triangle WGSL fragment shader, a ' +
-              'single render pass, zero postprocessing — verbatim from ' +
-              "sj-design's perf-tuned scene. The site isn't built next " +
-              'to the tool; it IS the tool.',
+      'black-hole': {
+        title: 'Black Hole — WebGPU',
+        what: 'The monument behind the headline: a Schwarzschild ' +
+              'null-geodesic raymarch — real bent light, photon ring, ' +
+              'Einstein ring, and a Doppler-beamed Shakura–Sunyaev ' +
+              'accretion disk. One fullscreen-triangle WGSL fragment ' +
+              'shader, a single render pass, in-shader ACES. The same ' +
+              'locked shader runs native on Metal in StudioJoeMusic — ' +
+              'this is the web half of that parity. Tune it live from ' +
+              "the panel; the site isn't built next to the tool, it IS " +
+              'the tool.',
         code:
-'// The only part you tune — the pulse. Everything else is the scene.\n' +
+'// Live scene params — the tuner panel writes straight into these:\n' +
+'bhParams = { diskBright, spin, react, camDist, camEl, orbit };\n' +
+'\n' +
+'// The audio hook — pulses(t) still drives the disk:\n' +
 'function pulses(t) {\n' +
 '  return {\n' +
-'    bass:   SJPulse.kick(t),\n' +
-'    treble: SJPulse.flicker(t, { rate: 6 }) * 0.6,\n' +
-'    beat:   SJPulse.kick(t, { kickRate: 1.3, ghostAmp: 0 }) * 0.5,\n' +
+'    bass:   SJPulse.kick(t),                        // inner glow\n' +
+'    treble: SJPulse.flicker(t, { rate: 6 }) * 0.6,  // filaments\n' +
+'    beat:   SJPulse.kick(t, { kickRate: 1.3 }) * 0.5, // shock ring\n' +
 '  };\n' +
 '}\n' +
-'// Swap pulses(t) for a live audio frame and the terrain reacts\n' +
-'// to sound. SJ Audio Bridge IS that swap: a macOS menubar helper\n' +
-'// piping system audio over a localhost WebSocket — real bass/\n' +
-'// treble/beat in, same shader. That swap point is the whole hook.\n' +
+'// Swap pulses(t) for a live audio frame and the disk reacts to\n' +
+'// sound. SJ Audio Bridge IS that swap: a macOS menubar helper\n' +
+'// piping system audio over a localhost WebSocket — same shader.\n' +
 '\n' +
-'// Full scene (WGSL + pipeline):\n' +
-'//   sj-design/showcase/scenes/wire-terrain.html\n' +
-'// Live system audio in (macOS):\n' +
-'//   github.com/jayvee6/sj-audio-bridge\n' +
-'// Helpers, vendored verbatim at /lib/:\n' +
-'//   synthetic-pulse.js  → SJPulse\n' +
-'//   webgpu-bootstrap.js → SJGpu',
+'// The 64-byte uniform ABI is parity-locked web <-> iOS Metal.\n' +
+'// Helper vendored verbatim at /lib/:  synthetic-pulse.js → SJPulse',
         take: 'https://github.com/jayvee6/sj-audio-bridge',
       },
       'sj-design': {
