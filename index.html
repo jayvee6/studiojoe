@@ -577,24 +577,17 @@
         <span class="shelf-go">On GitHub ↗</span>
       </a>
 
-      <a class="shelf-card" href="https://jayvee6.github.io/sj-audio-bridge/" target="_blank" rel="noopener">
-        <span class="shelf-kind">Tool</span>
-        <span class="shelf-title">SJ Audio Bridge</span>
-        <span class="shelf-desc">Native macOS menubar helper — ScreenCaptureKit system audio → a localhost WebSocket, so any browser viz reacts to whatever's playing. Zoom/Teams-style capture.</span>
+      <a class="shelf-card" href="https://jayvee6.github.io/sj-audio/" target="_blank" rel="noopener">
+        <span class="shelf-kind">Library</span>
+        <span class="shelf-title">sj-audio</span>
+        <span class="shelf-desc">Cross-browser web-audio capture + analysis for music viz — mic, media element, device picker, tab audio, file. Zero deps, TypeScript, one-line engine with fallback.</span>
         <span class="shelf-go">Open ↗</span>
       </a>
 
-      <a class="shelf-card" href="/musicplayer/">
+      <a class="shelf-card" href="https://musicnerd.studiojoe.dev/" target="_blank" rel="noopener">
         <span class="shelf-kind">Side project</span>
-        <span class="shelf-title">Music Player</span>
-        <span class="shelf-desc">Album-art-reactive web music player — color extraction, iPod-skin UI.</span>
-        <span class="shelf-go">Open ↗</span>
-      </a>
-
-      <a class="shelf-card" href="/ipod.html">
-        <span class="shelf-kind">Side project</span>
-        <span class="shelf-title">iPod</span>
-        <span class="shelf-desc">A working web iPod — Spotify and Apple Music, click-wheel and all.</span>
+        <span class="shelf-title">Music Nerd</span>
+        <span class="shelf-desc">The music-player &amp; web-iPod projects — album-art-reactive player with color extraction, and a working click-wheel iPod (Spotify &amp; Apple Music).</span>
         <span class="shelf-go">Open ↗</span>
       </a>
 
@@ -1365,12 +1358,12 @@ fn accel(p: vec3<f32>, h2: f32) -> vec3<f32> {
 '  };\n' +
 '}\n' +
 '// Swap pulses(t) for a live audio frame and the disk reacts to\n' +
-'// sound. SJ Audio Bridge IS that swap: a macOS menubar helper\n' +
-'// piping system audio over a localhost WebSocket — same shader.\n' +
+'// sound. sj-audio is that swap: a zero-dep browser library that\n' +
+'// turns mic / media / device audio into frames — same shader.\n' +
 '\n' +
 '// The 64-byte uniform ABI is parity-locked web <-> iOS Metal.\n' +
 '// Helper vendored verbatim at /lib/:  synthetic-pulse.js → SJPulse',
-        take: 'https://github.com/jayvee6/sj-audio-bridge',
+        take: 'https://jayvee6.github.io/sj-audio/',
       },
       'sj-design': {
         title: 'This whole site is sj-design',
