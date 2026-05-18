@@ -1623,6 +1623,36 @@ fn accel(p: vec3<f32>, h2: f32) -> vec3<f32> {
 
     const FORM = ['🔷','🔶','🟣','🟢','🟡','🔴','💠','✦','◆','🟦','🟪','🟩'];
     const KEY = [3, 4, 5, 6];
+
+    // Pre-rasterize every sandbox glyph once into an off-screen canvas.
+    // Per-frame fillText() of color-emoji glyphs is ~10× slower than
+    // drawImage() on Windows (Segoe UI Emoji / DirectWrite) — at up to
+    // 900 rain particles that was the Windows-only stutter. Same
+    // technique as sj-design's emoji-vortex. Unchanged on macOS.
+    const EMOJI_GLYPH  = 0.82;   // glyph fraction of the cache box (safe padding)
+    const EMOJI_MAX_PX = 52;     // ≥ largest on-screen glyph (rain s≤46, form≤34)
+    const emojiCache = (() => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const px  = Math.ceil((EMOJI_MAX_PX / EMOJI_GLYPH) * dpr);
+      const map = {};
+      for (const e of RAIN.concat(FORM)) {
+        const oc = document.createElement('canvas');
+        oc.width = oc.height = px;
+        const o = oc.getContext('2d');
+        o.font = px * EMOJI_GLYPH + 'px serif';
+        o.textAlign = 'center';
+        o.textBaseline = 'middle';
+        o.fillText(e, px / 2, px / 2);
+        map[e] = oc;
+      }
+      return map;
+    })();
+    function drawEmoji(emoji, x, y, size) {
+      const img = emojiCache[emoji];
+      if (!img) return;
+      const box = size / EMOJI_GLYPH, h = box / 2;
+      ctx.drawImage(img, x - h, y - h, box, box);
+    }
     const sidesEnv = window.VizEnv ? new window.VizEnv.Envelope({ attack: 0.9, release: 0.9, initial: 3 }) : null;
     let sidesFb = 3, clock = 0;
     function rawPulse(t) {
@@ -1652,8 +1682,7 @@ fn accel(p: vec3<f32>, h2: f32) -> vec3<f32> {
           p.vy += 140 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
           ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
           ctx.globalAlpha = Math.max(0, 1 - p.life / p.max);
-          ctx.font = p.s + 'px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          ctx.fillText(p.e, 0, 0); ctx.restore();
+          drawEmoji(p.e, 0, 0, p.s); ctx.restore();
         }
         ctx.globalAlpha = 1;
       } else {
@@ -1680,13 +1709,13 @@ fn accel(p: vec3<f32>, h2: f32) -> vec3<f32> {
           const a = arr[e], b = arr[(e + 1) % n];
           return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
         };
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = size + 'px serif';
+        // No per-frame ctx.font / fillText — drawEmoji() blits the cache.
         for (let m = 0; m < M; m++) {
           const p = pt(A, nLo, m), q = pt(B, nHi, m);
           const x = cx + p[0] + (q[0] - p[0]) * fr;
           const y = cy + p[1] + (q[1] - p[1]) * fr;
           ctx.globalAlpha = 0.85 + pulse * 0.15;
-          ctx.fillText(FORM[m % FORM.length], x, y);
+          drawEmoji(FORM[m % FORM.length], x, y, size);
         }
         ctx.globalAlpha = 1;
       }
