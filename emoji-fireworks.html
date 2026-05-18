@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Emoji Fireworks — sj-design showcase</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #04060f; color: #f5f5f7;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+      overflow: hidden;
+    }
+    canvas { display: block; width: 100vw; height: 100vh; }
+    .label {
+      position: fixed; top: 24px; left: 24px; z-index: 10;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.16em;
+      text-transform: uppercase; color: #8e8e93;
+    }
+    .label strong { color: #f5f5f7; letter-spacing: 0.04em; text-transform: none; font-size: 14px; display: block; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="label">
+    sj-design / emoji visualizations
+    <strong>Fireworks</strong>
+    <span style="display:block;margin-top:6px;font-size:10px;font-weight:600;letter-spacing:0.1em;color:#636366;">CLICK = LAUNCH&nbsp;&nbsp;·&nbsp;&nbsp;1 PEONY&nbsp;2 RING&nbsp;3 STAR&nbsp;4 HEART&nbsp;5 SMILEY</span>
+  </div>
+  <canvas id="c"></canvas>
+
+  <!-- Optional shared helper — inline fallback below kicks in if it 404s -->
+  <script src="../lib/canvas-size.js"></script>
+  <script>
+    // ─── Emoji Fireworks ───────────────────────────────────────────────────
+    // True parabolic-arc fireworks: each rocket is integrated with manual
+    // physics (gravity + per-frame velocity) so the trajectory is a real
+    // parabola, not a linear tween with easing. On reaching its randomly
+    // chosen explosion-Y it detonates into a themed radial burst.
+    //
+    // Each launch picks from THEMES — rocket emoji + matching debris set —
+    // so "rocket → sparkles", "heart → hearts", "pumpkin → ghosts" etc.
+    // read as thematically coherent. Z-depth is baked in per launch:
+    // farther rockets are smaller+dimmer+slower, near ones are 1.3× scale.
+    //
+    // Auto-fire: timer-driven here (every 1.8s) so it runs with no audio.
+    // To wire to music, call launch() from your beat detector and reset
+    // lastAutoFireT = t to suppress the idle timer on beat frames.
+
+    const canvas = document.getElementById('c');
+    const ctx    = canvas.getContext('2d');
+
+    // Pre-rasterize each emoji once on first use (memoized). Per-frame
+    // fillText() of color-emoji glyphs is ~10× slower than drawImage() on
+    // Windows (Segoe UI Emoji / DirectWrite) — same technique as
+    // emoji-vortex.html. Smooth on Windows, unchanged on macOS. Lazy
+    // because the emoji set is spread across THEMES (rockets + debris).
+    const EMOJI_GLYPH  = 0.82;   // glyph fraction of the cache box (safe padding)
+    const EMOJI_MAX_PX = 72;     // ≥ largest on-screen emoji in this demo
+    const _emojiCache = new Map();
+    function emojiBitmap(e) {
+      let img = _emojiCache.get(e);
+      if (!img) {
+        const dpr = Math.min(2, window.devicePixelRatio || 1);
+        const px  = Math.ceil((EMOJI_MAX_PX / EMOJI_GLYPH) * dpr);
+        img = document.createElement('canvas');
+        img.width = img.height = px;
+        const o = img.getContext('2d');
+        o.font = `${px * EMOJI_GLYPH}px -apple-system, system-ui, sans-serif`;
+        o.textAlign = 'center';
+        o.textBaseline = 'middle';
+        o.fillText(e, px / 2, px / 2);
+        _emojiCache.set(e, img);
+      }
+      return img;
+    }
+    function drawEmoji(emoji, x, y, size) {
+      const box = size / EMOJI_GLYPH, h = box / 2;
+      ctx.drawImage(emojiBitmap(emoji), x - h, y - h, box, box);
+    }
+
+    const GRAVITY           = 520;   // px/s² — tuned for full-viewport canvas
+    const MAX_PARTICLES     = 900;   // hard perf bound on the live debris set
+    const LAUNCH_SPEED_UNIT = 180;
+    const EXPLOSION_UNIT    = 260;
+    const ANGLE_RANGE_DEG   = 20;    // ±20° from vertical — mild visible arc
+
+    // Depth curves — 20% closer than "on the horizon" so the show reads
+    // as close-range spectacle, not pinprick distant lights.
+    const zToScale = z => 0.72 + z * 0.60;   // 0.72× .. 1.32×
+    const zToAlpha = z => 0.70 + z * 0.28;   // 0.70   .. 0.98
+
+    const HORIZON_Y_FRAC   = 0.90;   // launch from 90% down the canvas
+    const HORIZON_X_SPREAD = 0.22;   // ± 22% of canvas width
+    const APEX_MIN_FRAC    = 0.15;   // burst at most 15% from top
+    const APEX_MAX_FRAC    = 0.50;   // and no lower than 50% down
+
+    // Themes — adding more is zero-friction. `shape` pairs the burst geometry
+    // with the theme so the explosion reinforces the story: 💘 bursts into a
+    // heart, 🪄/⚡/🎄/🐉 into a star, 🎃 into a jack-o'-smiley, 🍾/👽 into a
+    // clean ring (champagne pop / UFO halo); everything else is the classic
+    // peony. Shapes are defined below in the SHAPES block.
+    const THEMES = [
+      { rocket: '🚀', debris: ['✨','💥','🌟','🎉'],       shape: 'peony'  },
+      { rocket: '💘', debris: ['💖','💕','❤️','💗','💝'],  shape: 'heart'  },
+      { rocket: '🪄', debris: ['✨','🌟','💫','⭐','✴️'],   shape: 'star'   },
+      { rocket: '🎃', debris: ['👻','🦇','🕸️','🕷️','🍬'],  shape: 'smiley' },
+      { rocket: '🍾', debris: ['🎉','🎊','🥂','🎈'],       shape: 'ring'   },
+      { rocket: '🌈', debris: ['🦄','💖','⭐','🌟','✨'],   shape: 'peony'  },
+      { rocket: '🌸', debris: ['🌼','🌺','🌷','🌻','🏵️'],  shape: 'peony'  },
+      { rocket: '👽', debris: ['🛸','⭐','🌙','🪐','💫'],   shape: 'ring'   },
+      { rocket: '🐙', debris: ['🐠','🐡','🐟','🐚','🌊'],   shape: 'peony'  },
+      { rocket: '🎊', debris: ['🎉','🎈','🥳','🪩','🍰'],   shape: 'peony'  },
+      { rocket: '🎄', debris: ['🎁','🎅','❄️','⛄','🎀'],   shape: 'star'   },
+      { rocket: '🍄', debris: ['🌿','🍃','🌳','🌱','☘️'],   shape: 'peony'  },
+      { rocket: '⚡', debris: ['⭐','✨','💫','🌟','☄️'],   shape: 'star'   },
+      { rocket: '🐉', debris: ['🔥','💥','✨','⚔️','🐲'],   shape: 'star'   },
+    ];
+
+    const rand = (min, max) => min + Math.random() * (max - min);
+    const pickTheme = () => THEMES[(Math.random() * THEMES.length) | 0];
+
+    // ─── Burst shapes ──────────────────────────────────────────────────────
+    // This is a velocity-field system: every particle launches from the burst
+    // center, so a "shape" is a function index → unit-ish launch-velocity
+    // vector (x,y). The engine multiplies it by per-particle speed and gravity
+    // takes over — the figure is legible at the bloom, then disperses like any
+    // firework. Canvas Y is screen-down. Vectors are normalized to mean
+    // radius ≈ 1 so swapping shapes never changes burst size.
+    //
+    // SHAPE_PARAMS tunes each shape: `spread` = radial magnitude jitter (a
+    // wide spread fills a disc — good for peony; a tight one holds a figure),
+    // `lift` = brief upward bias that fights gravity so the burst blooms
+    // before falling. Position-encoding shapes use tight spread + gentle lift
+    // to stay readable; peony keeps the loose, lofty classic bloom.
+    const TAU = Math.PI * 2;
+    const SHAPE_PARAMS = {
+      peony:  { spread: [0.60, 1.30], lift: [20, 80] },
+      ring:   { spread: [0.94, 1.06], lift: [16, 44] },
+      star:   { spread: [0.86, 1.05], lift: [14, 36] },
+      heart:  { spread: [0.90, 1.06], lift: [12, 30] },
+      smiley: { spread: [0.95, 1.05], lift: [10, 24] },
+    };
+
+    // Peony — uniform circle (the classic bloom). Small angular jitter keeps
+    // it from banding into a visible wheel. |v| ≈ 1.
+    function vPeony(i, count) {
+      const t = (i / count) * TAU + (Math.random() - 0.5) * 0.24;
+      return { x: Math.cos(t), y: Math.sin(t) };
+    }
+    // Ring — identical geometry; the thin shell comes from SHAPE_PARAMS.ring's
+    // tight spread, not the vector.
+    const vRing = vPeony;
+    // Star — rose-curve radius fluctuation. 5 spokes, depth 0.42 →
+    // multiplier ∈ [0.58, 1.42], mean 1 (comparable burst size to peony).
+    function vStar(i, count) {
+      const t = (i / count) * TAU;
+      const m = 1 + 0.42 * Math.sin(5 * t);
+      return { x: Math.cos(t) * m, y: Math.sin(t) * m };
+    }
+    // Heart — classic parametric heart curve. Raw extent ≈ ±16 in x and
+    // [-17,12] in y; divide by 15 so mean radius ≈ 1. The leading minus on y
+    // makes the heart point up in screen-down canvas coords.
+    function vHeart(i, count) {
+      const t = (i / count) * TAU;
+      const s = Math.sin(t);
+      const hx = 16 * s * s * s;
+      const hy = -(13 * Math.cos(t) - 5 * Math.cos(2 * t)
+                   - 2 * Math.cos(3 * t) - Math.cos(4 * t));
+      return { x: hx / 15, y: hy / 15 };
+    }
+    // Smiley — compound: outline (peony) + two eye clusters + a smile arc.
+    // The particle index is partitioned across the four features; each maps to
+    // a velocity toward its layout position relative to center (unit space:
+    // outline radius = 1). In screen-down coords −y is up, so eyes sit at
+    // negative y and the smile is the BOTTOM arc of a circle (positive y).
+    function vSmiley(i, count) {
+      const nOutline = Math.round(count * 0.52);
+      const nEye     = Math.max(3, Math.round(count * 0.11));
+      let j = i - nOutline;
+      if (i < nOutline) {                       // face outline
+        const t = (i / nOutline) * TAU;
+        return { x: Math.cos(t), y: Math.sin(t) };
+      }
+      if (j < nEye) {                           // left eye
+        const t = (j / nEye) * TAU;
+        return { x: -0.36 + Math.cos(t) * 0.10, y: -0.34 + Math.sin(t) * 0.10 };
+      }
+      j -= nEye;
+      if (j < nEye) {                           // right eye
+        const t = (j / nEye) * TAU;
+        return { x:  0.36 + Math.cos(t) * 0.10, y: -0.34 + Math.sin(t) * 0.10 };
+      }
+      j -= nEye;                                // smile (lower arc)
+      const nMouth = count - nOutline - 2 * nEye;
+      const denom  = nMouth > 1 ? nMouth - 1 : 1;
+      const a = 0.18 * Math.PI + (j / denom) * (0.64 * Math.PI);
+      return { x: Math.cos(a) * 0.64, y: 0.20 + Math.sin(a) * 0.52 };
+    }
+
+    const SHAPES = { peony: vPeony, ring: vRing, star: vStar,
+                     heart: vHeart, smiley: vSmiley };
+    const shapeVector = (shape, i, count) =>
+      (SHAPES[shape] || vPeony)(i, count);
+
+    const rockets   = [];
+    const particles = [];
+
+    // Canvas sizing — use lib/canvas-size.js if it loaded, else inline fallback.
+    // Fireworks has no pulse dependency; only canvas sizing is shared.
+    if (window.SJCanvas) {
+      window.SJCanvas.fit(canvas, ctx);
+    } else {
+      const resize = () => {
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width  = window.innerWidth  * dpr;
+        canvas.height = window.innerHeight * dpr;
+        canvas.style.width  = window.innerWidth  + 'px';
+        canvas.style.height = window.innerHeight + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      };
+      window.addEventListener('resize', resize);
+      resize();
+    }
+
+    // `forcedShape` (optional) overrides the theme's shape — used by the demo
+    // controls so any shape can be summoned on demand. When forced, prefer a
+    // theme whose debris already matches that shape so the burst still reads
+    // as thematically coherent.
+    function launch(forcedShape) {
+      const W = window.innerWidth, H = window.innerHeight;
+      if (W <= 1 || H <= 1) return;
+
+      const launchSpeed    = 7;
+      const explosionForce = 6;
+      const particleCount  = 50;
+      const yVariance      = 0.3;
+
+      const theme = forcedShape
+        ? (THEMES.find(t => t.shape === forcedShape) || pickTheme())
+        : pickTheme();
+      const shape = forcedShape || theme.shape;
+      const angleDeg = rand(90 - ANGLE_RANGE_DEG, 90 + ANGLE_RANGE_DEG);
+      const angleRad = angleDeg * Math.PI / 180;
+
+      // z-depth sampled once per launch — distant rockets move slower
+      // on screen for parallax consistency.
+      const z = Math.random();
+      const depthScale = zToScale(z);
+      const jitter = rand(0.85, 1.15) * depthScale;
+      const speed  = launchSpeed * LAUNCH_SPEED_UNIT * jitter;
+
+      const vx =  speed * Math.cos(angleRad);
+      const vy = -speed * Math.sin(angleRad);
+
+      const xSpread = HORIZON_X_SPREAD * (0.75 + z * 0.35);
+      const startX  = W * 0.5 + rand(-W * xSpread, W * xSpread);
+      const startY  = H * (HORIZON_Y_FRAC - (1 - z) * 0.03);
+
+      const apexMinY = H * APEX_MIN_FRAC;
+      const apexMaxY = H * APEX_MAX_FRAC;
+      const mid = (apexMinY + apexMaxY) * 0.5;
+      const half = (apexMaxY - apexMinY) * 0.5;
+      const explosionY = mid + rand(-1, 1) * half * yVariance;
+
+      rockets.push({
+        x: startX, y: startY, vx, vy,
+        explosionY, emoji: theme.rocket, theme, shape, z, depthScale,
+        force: explosionForce, count: particleCount,
+      });
+    }
+
+    function spawnBurst(cx, cy, force, count, emojis, z, depthScale, shape) {
+      const speed = force * EXPLOSION_UNIT * 0.1 * (0.80 + z * 0.35);
+      const sp    = SHAPE_PARAMS[shape] || SHAPE_PARAMS.peony;
+      for (let i = 0; i < count; i++) {
+        const v   = shapeVector(shape, i, count);
+        const mag = speed * rand(sp.spread[0], sp.spread[1]);
+        particles.push({
+          x: cx, y: cy,
+          vx: v.x * mag,
+          vy: v.y * mag - rand(sp.lift[0], sp.lift[1]),
+          age: 0, life: rand(1.2, 2.0),
+          emoji: emojis[(Math.random() * emojis.length) | 0],
+          size:  rand(26, 38) * depthScale,
+          z, depthScale,
+        });
+      }
+    }
+
+    let lastT = 0;
+    let lastAutoFireT = -999;
+    const IDLE_INTERVAL = 1.8;   // seconds between idle launches
+
+    function render(t) {
+      const W = window.innerWidth, H = window.innerHeight;
+      const dt = lastT === 0 ? (1 / 60) : Math.min(0.05, t - lastT);
+      lastT = t;
+
+      // Idle auto-fire. Hook your beat detector here: on isBeatNow, call
+      // launch() and set lastAutoFireT = t.
+      if (t - lastAutoFireT > IDLE_INTERVAL) {
+        launch();
+        lastAutoFireT = t;
+      }
+
+      // OPAQUE dark-sky clear every frame. The old translucent
+      // `rgba(4,6,16,0.60)` fill never decayed to true black on an 8-bit
+      // canvas: the per-channel recurrence round(old·0.4 + fill·0.6) has a
+      // fixed point at the non-black floor rgb(4,6,16), so faint emoji
+      // ghosts accumulated into a permanent haze (Fade Burn-In). Fireworks
+      // reads fine with a clean clear — one opaque pass, no trail, no
+      // additive streak (the additive pass regressed in musicplayer-viz's
+      // fireworks.js: bright flash at the burst origin + a doubled loop).
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#040610';
+      ctx.fillRect(0, 0, W, H);
+
+      // Rocket physics — true parabola via gravity accumulation.
+      for (let i = rockets.length - 1; i >= 0; i--) {
+        const r = rockets[i];
+        r.vy += GRAVITY * dt;
+        r.x  += r.vx * dt;
+        r.y  += r.vy * dt;
+        if (r.y <= r.explosionY) {
+          rockets.splice(i, 1);
+          spawnBurst(r.x, r.y, r.force, r.count, r.theme.debris, r.z, r.depthScale, r.shape);
+        }
+      }
+
+      // Particle physics — reduced gravity (0.65×) so embers hang longer.
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.age += dt;
+        if (p.age >= p.life) { particles.splice(i, 1); continue; }
+        p.vy += GRAVITY * dt * 0.65;
+        p.x  += p.vx * dt;
+        p.y  += p.vy * dt;
+      }
+      // Hard cap: idle auto-fire (and any beat-driven launches) can spawn
+      // bursts faster than particles age out. Bound the live set so the
+      // draw loop's per-frame cost can't run away — oldest debris dropped
+      // first. Mirrors musicplayer-viz/viz/fireworks.js.
+      if (particles.length > MAX_PARTICLES) {
+        particles.splice(0, particles.length - MAX_PARTICLES);
+      }
+
+      // Draw — z-sorted so far items render behind near items.
+      const drawList = rockets.concat(particles);
+      drawList.sort((a, b) => a.z - b.z);
+
+      for (const item of drawList) {
+        const isRocket = !('life' in item);
+        if (isRocket) {
+          const size = 36 * item.depthScale;
+          ctx.globalAlpha = zToAlpha(item.z);
+          drawEmoji(item.emoji, item.x, item.y, size);
+        } else {
+          const remaining = Math.max(0, 1 - item.age / item.life);
+          ctx.globalAlpha = remaining * remaining * zToAlpha(item.z);
+          drawEmoji(item.emoji, item.x, item.y, item.size);
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    let t0;
+    function frame(ts) {
+      if (!t0) t0 = ts;
+      render((ts - t0) / 1000);
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+
+    // ─── Demo controls ─────────────────────────────────────────────────────
+    // Click anywhere to launch on demand. Number keys 1–5 force the next
+    // burst's shape so every shape can be summoned deterministically:
+    //   1 peony · 2 ring · 3 star · 4 heart · 5 smiley
+    const SHAPE_KEYS = { '1': 'peony', '2': 'ring', '3': 'star',
+                         '4': 'heart', '5': 'smiley' };
+    addEventListener('click', () => launch());
+    addEventListener('keydown', (e) => {
+      const s = SHAPE_KEYS[e.key];
+      if (s) launch(s);
+    });
+  </script>
+</body>
+</html>
