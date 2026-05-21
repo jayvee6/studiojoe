@@ -276,6 +276,45 @@ const SPACE_ENV_STOPS = [
 ];
 
 // ===========================================================================
+// makeEnvTexture — builds an equirectangular CanvasTexture used as the
+// PMREM source. The gradient runs from a bright sky band at the top
+// (drives top-of-pipe highlights and clearcoat sheen) through a warm
+// horizon glow to a deep-violet ground. PMREMGenerator pre-filters it
+// for every roughness level, so MeshStandardMaterial gets proper IBL
+// without shipping an HDR file. Regenerated only at init — TOD changes
+// are reflected through the per-tick light rig, not the env map.
+// ===========================================================================
+function makeEnvTexture() {
+  const W = 512, H = 256;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0.00, '#9fb6d8');   // sky band — drives top speculars
+  grad.addColorStop(0.30, '#5e6f99');   // upper haze
+  grad.addColorStop(0.55, '#7e5a86');   // horizon glow (matches sunset TOD)
+  grad.addColorStop(0.78, '#3a2a4a');   // ground transition
+  grad.addColorStop(1.00, '#181225');   // deep ground
+  g.fillStyle = grad;
+  g.fillRect(0, 0, W, H);
+  // A few warm sun-disc smudges so reflections aren't a smooth band.
+  for (let i = 0; i < 4; i++) {
+    const cx = (0.15 + i * 0.23) * W;
+    const cy = (0.18 + (i % 2) * 0.06) * H;
+    const r  = 28 + i * 6;
+    const sun = g.createRadialGradient(cx, cy, 0, cx, cy, r);
+    sun.addColorStop(0, 'rgba(255,235,200,0.85)');
+    sun.addColorStop(1, 'rgba(255,235,200,0)');
+    g.fillStyle = sun;
+    g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.encoding = THREE.sRGBEncoding;
+  return tex;
+}
+
+// ===========================================================================
 // initScene
 // ===========================================================================
 function initScene() {
@@ -286,7 +325,12 @@ function initScene() {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.85;  // matches cam.exposureOffset = -0.4 (slight underexposure)
+  // P15: lifted from 0.85 → 1.20. The Swift original was a -0.4 EV
+  // underexposure to compensate for SCNCamera HDR bloom. r128 has no
+  // bloom pass on this page, so the same underexposure read as drab in
+  // every TOD keyframe. A small positive bias gives speculars room to
+  // pop without clipping mid-tones.
+  renderer.toneMappingExposure = 1.20;
   renderer.outputEncoding = THREE.sRGBEncoding;
 
   // ---- Scene ----
@@ -379,13 +423,26 @@ function initScene() {
   fillLight.castShadow = false;
   scene.add(fillLight);
 
-  // Ambient — tiny base so shadowed areas aren't pure black
-  const ambientLight = new THREE.AmbientLight(0x111111, 0.15);
+  // P15: ambient lifted from a near-black 0x111111@0.15 to a real cool-grey
+  // base. The TOD hemisphere light is intensity-modulated and at night dips
+  // to ~0.3 — without a real ambient floor the shadow side of every pipe
+  // crushed to black and the scene read as drab silhouettes.
+  const ambientLight = new THREE.AmbientLight(0x6f7a8f, 0.35);
   scene.add(ambientLight);
 
-  // physicallyCorrectLights: required for MeshPhysicalMaterial transmission
-  // to behave correctly in r128. Matches SceneKit's PBR pipeline intent.
   renderer.physicallyCorrectLights = true;
+
+  // P15: procedural PMREM environment map. MeshStandardMaterial /
+  // MeshPhysicalMaterial need an env map to render proper specular
+  // reflections — without one, metalness and clearcoat surfaces render
+  // matte and the chrome/painted-steel look reads as flat plastic.
+  // PMREMGenerator builds a pre-filtered cubemap from any Texture; we
+  // give it a gradient procedural source built with CanvasTexture so we
+  // don't ship an HDR file. The result is bound to scene.environment so
+  // every PBR material picks it up automatically.
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  pmrem.compileEquirectangularShader();
+  scene.environment = pmrem.fromEquirectangular(makeEnvTexture()).texture;
 
   // P7: EXT_color_buffer_float is required for MeshPhysicalMaterial transmission
   // to render correctly (HDR framebuffer path). Apple Silicon Chrome supports it.
@@ -755,64 +812,80 @@ function makeMaterial(style, color) {
   let mat;
   switch (style) {
     case 'obsidian': {
-      // Painted weathered steel — metalness mid, mid roughness, diffuse tint
-      const jitter = (Math.random() - 0.5) * 0.30;
-      mat = new THREE.MeshStandardMaterial({
-        color: new THREE.Color(0.55, 0.55, 0.55),
-        roughness: Math.max(0.05, 0.35 + jitter),
-        metalness: 0.45,
+      // P15: painted enamel steel — bumped metalness, dropped roughness,
+      // added clearcoat for the wet-paint gloss. With scene.environment
+      // now bound, this finally reads as a real glossy material instead
+      // of flat plastic.
+      const jitter = (Math.random() - 0.5) * 0.18;
+      mat = new THREE.MeshPhysicalMaterial({
+        color: new THREE.Color(0.62, 0.62, 0.62),
+        roughness: Math.max(0.05, 0.22 + jitter),
+        metalness: 0.55,
+        clearcoat: 0.7,
+        clearcoatRoughness: 0.18,
+        envMapIntensity: 1.15,
         emissive: col,
-        emissiveIntensity: 0.04,
+        emissiveIntensity: 0.05,
       });
-      // Multiply tint via 'color' — mix between white and chain color
-      mat.color.lerp(col, 0.6);
+      mat.color.lerp(col, 0.72);
       break;
     }
     case 'crystal': {
-      // Translucent tinted glass — low roughness, transparent
-      // P4: r128 ignores `ior` (added r129+). Use refractionRatio = 1/ior.
-      // Swift: fresnelExponent=2.5, transparency=0.30 → transmission≈0.35, opacity≈0.78
-      const jitter = (Math.random() - 0.5) * 0.10;
+      // P15: r128 MeshPhysicalMaterial.transmission is unreliable and the
+      // simultaneous `transparent + opacity` produced double-blending —
+      // chains rendered murky and showed every internal joint sphere
+      // through the wall. Switched to a saturated tinted glass: alpha
+      // transparency only, low roughness, clearcoat for sheen, env map
+      // driving the specular. No transmission pass means no order-
+      // dependent artifacts and no console `thickness` warning spam.
+      const jitter = (Math.random() - 0.5) * 0.08;
       mat = new THREE.MeshPhysicalMaterial({
-        color: col,
-        roughness: Math.max(0, 0.08 + jitter),
+        color: col.clone(),
+        roughness: Math.max(0.0, 0.10 + jitter),
         metalness: 0.0,
-        transmission: 0.35,         // transmission approximates transparency
-        thickness: 0.5,             // Beer-Lambert path length
-        refractionRatio: 1.0 / 1.5, // ior=1.5 → 0.6667 (r128-compatible)
+        clearcoat: 0.85,
+        clearcoatRoughness: 0.10,
+        envMapIntensity: 1.3,
         transparent: true,
-        opacity: 0.78,
+        opacity: 0.68,
+        depthWrite: false,
         emissive: col,
-        emissiveIntensity: 0.06,
+        emissiveIntensity: 0.10,
       });
       break;
     }
     case 'glass': {
-      // Clear refractive glass — nearly fully transparent
-      // P4: r128 ignores `ior` (added r129+). Use refractionRatio = 1/ior.
-      // Swift: roughness=0.02, transparency=0.10 → near-fully transparent with fresnel
+      // P15: same as crystal — drop the transmission pass, use clean
+      // alpha + clearcoat. Slightly more transparent, slightly cooler
+      // tint so glass and crystal read as different families.
       mat = new THREE.MeshPhysicalMaterial({
-        color: new THREE.Color(0.95, 0.95, 0.95),
-        roughness: 0.02,
+        color: new THREE.Color(0.92, 0.96, 1.00),
+        roughness: 0.04,
         metalness: 0.0,
-        transmission: 0.90,
-        refractionRatio: 1.0 / 1.52, // ior=1.52 → 0.6579 (r128-compatible)
+        clearcoat: 1.0,
+        clearcoatRoughness: 0.04,
+        envMapIntensity: 1.5,
         transparent: true,
-        opacity: 0.92,
+        opacity: 0.55,
+        depthWrite: false,
         emissive: col,
-        emissiveIntensity: 0.05,
+        emissiveIntensity: 0.08,
       });
       break;
     }
     case 'tracer':
     default: {
-      // Frosted dark with animated emissive pulse
-      mat = new THREE.MeshStandardMaterial({
+      // Frosted dark with animated emissive pulse — bump env intensity
+      // so the unlit side still reads sculptural between pulses.
+      mat = new THREE.MeshPhysicalMaterial({
         color: col,
-        roughness: 0.18,
+        roughness: 0.16,
         metalness: 0.0,
+        clearcoat: 0.4,
+        clearcoatRoughness: 0.20,
+        envMapIntensity: 1.0,
         emissive: col,
-        emissiveIntensity: 0.0,  // driven per-frame
+        emissiveIntensity: 0.0,
       });
       mat._isTracer    = true;
       mat._pulseColor  = [cR, cG, cB];
