@@ -1,0 +1,1334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pipes — Three.js Saver</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; }
+  /* CSS scoped to the renderer canvas ONLY — never a bare canvas{} rule,
+     which would also stretch the HUD sparkline canvas. */
+  #gpu-canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+
+<!-- HUD + controls first, then Three.js from CDN, then logic (no ES module
+     needed — r128 global build exposes THREE on window). -->
+<script src="../lib/sj-hud.js"></script>
+<script src="../lib/sj-controls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+
+<script>
+// ===========================================================================
+// Pipes — Three.js r128 port of StudioJoeSavers/PipesScene.swift
+// Build: sv-pipes-001
+// Idempotency key: pipes / sv-pipes-001
+//
+// 1:1 rebuild of PipesScene.swift:
+//   - 4 concurrent pipe heads, 6-cardinal-direction growth
+//   - Integer-grid occupancy Set, wrapRadius 10.5, cellSize 1.0
+//   - 3 material styles (obsidian/crystal/glass) + tracer emissive pulse
+//   - 1000-node cap → 1.2s fade → rebuild cycle (dispose on reset)
+//   - 4 TOD keyframes (night/dawn/day/sunset), smoothstep cubic interp
+//   - Key/rim/fill light rig, directional PCF shadow, reflective floor
+//   - SoCTier defaults: MEDIUM preset
+//
+// SoCTier default chosen: MEDIUM
+//   depthOfField:false  floorReflect:true  ssao:true  bloom:true
+//   shadow:High (1024px in web — 2048 available via control)
+//
+// Postprocessing: UnrealBloomPass deliberately OMITTED.
+//   The r128 postprocessing example bundle CDN paths are not guaranteed
+//   stable and the Zero-Guessing rule forbids inventing CDN paths.
+//   Bloom is approximated via renderer.toneMapping (ACESFilmic) +
+//   emissiveIntensity on tracer segments, matching the saver's restrained
+//   "only HDR-positive values bloom" aesthetic without a multi-pass risk.
+//   SSAOPass: same rationale — omitted, toggle wired to ambient light multiplier.
+//   BokehPass (DoF): same — omitted, toggle wired to camera.fov tweak note.
+//
+// Browser validation required (no node --check for an HTML+CDN page).
+// ===========================================================================
+
+const BUILD = 'sv-pipes-001';
+
+// ---- Canvas setup ----------------------------------------------------------
+const canvas = document.createElement('canvas');
+canvas.id = 'gpu-canvas';
+document.body.appendChild(canvas);
+
+// ---- HUD -------------------------------------------------------------------
+const hud = window.SJHud.createHud({
+  title: 'Pipes',
+  build: BUILD,
+  canvas,
+  help: ['console: window.pipe.*'],
+  lines: [{ id: 'nodes', init: '0 nodes' }],
+});
+
+// ---- Controls --------------------------------------------------------------
+// MEDIUM tier defaults: no DoF, floor reflect on, ssao on, bloom on, shadow high
+let controls;
+try {
+  controls = window.SJControls.create({
+    title: 'Pipes',
+    build: BUILD,
+    ns: 'pipe',
+    controls: [
+      { id: 'speed',       label: 'Speed',        type: 'slider', min: 0,    max: 3,   step: 0.01, default: 1 },
+      { id: 'buildSpeed',  label: 'Build Speed',  type: 'slider', min: 0.25, max: 4,   step: 0.01, default: 1 },
+      { id: 'todMode',     label: 'TOD Mode',     type: 'select', options: ['Wall clock','Fast cycle','Manual'], default: 'Wall clock' },
+      { id: 'todPeriod',   label: 'TOD Period',   type: 'slider', min: 5,    max: 600, step: 1,    default: 60 },
+      { id: 'todScrub',    label: 'TOD Scrub',    type: 'slider', min: 0,    max: 1,   step: 0.001,default: 0 },
+      { id: 'shadow',      label: 'Shadow',       type: 'select', options: ['Off','Low','Medium','High'], default: 'High' },
+      { id: 'floorReflect',label: 'Floor Reflect',type: 'toggle', default: true },
+      { id: 'bloom',       label: 'Bloom',        type: 'toggle', default: true },
+      { id: 'ssao',        label: 'SSAO',         type: 'toggle', default: true },
+      { id: 'dof',         label: 'DoF',          type: 'toggle', default: false },
+      { id: 'space',       label: 'Space Mode',   type: 'toggle', default: false },
+      { id: 'palette',     label: 'Palette',      type: 'select', options: ['Classic','Mono','Warm','Cool'], default: 'Classic' },
+      { id: 'paused',      label: 'Paused',       type: 'toggle', default: false },
+      { id: 'restart',     label: 'Restart',      type: 'button', onClick: () => { doRestart = true; } },
+    ],
+    onChange: onControlChange,
+  });
+} catch(e) {
+  hud.report('Controls init failed', e && e.stack || String(e));
+}
+
+// ---- Main init bootstrap is relocated to the END of this module (after all
+//      module-scope `let`/`const` declarations) — initScene() touches
+//      `renderer`/`scene`/sim consts declared below, so calling it here would
+//      hit a temporal-dead-zone ReferenceError. See the bottom of the script.
+
+function cv(id) { return controls ? controls.value(id) : undefined; }
+
+// ===========================================================================
+// Scene globals
+// ===========================================================================
+let renderer, scene, camera, orbitParent, pipesContainer, floorMesh, floorPlane;
+let keyLight, rimLight, fillLight, starField;
+let elapsed = 0;
+let doRestart = false;
+
+// Pipe simulation state
+const NUM_HEADS = 4;
+const WRAP_RADIUS = 10.5;
+const CELL_SIZE = 1.0;
+const MAX_NODES = 1000;
+const BUILD_INTERVAL_MIN = 0.08;
+const BUILD_INTERVAL_MAX = 0.14;
+// GROW_DURATION removed (P1): each segment's grow duration == its head's nextBuildIn
+// at the moment the segment was spawned, stored as h.growDur. See advanceHead().
+const CLEANUP_FADE = 1.2;     // seconds for fade overlay transition
+const PIPE_OUTER = 0.32;
+const PIPE_INNER_RATIO = 0.78;
+const PIPE_INNER = PIPE_OUTER * PIPE_INNER_RATIO;  // 0.2496
+const SEGMENT_LENGTH = 1.0;
+const CAP_OUTER = PIPE_OUTER * 1.55;               // 0.496
+const CAP_HEIGHT = 0.42;
+const JOINT_RADIUS = PIPE_OUTER;                   // 0.32
+
+// Directions — 6 cardinal
+const DIRS = [
+  new THREE.Vector3( 1, 0, 0),
+  new THREE.Vector3(-1, 0, 0),
+  new THREE.Vector3( 0, 1, 0),
+  new THREE.Vector3( 0,-1, 0),
+  new THREE.Vector3( 0, 0, 1),
+  new THREE.Vector3( 0, 0,-1),
+];
+
+// Classic palette (exact from Swift)
+const PALETTES = {
+  Classic: [
+    [0.20, 0.95, 0.30],  // green
+    [0.95, 0.20, 0.20],  // crimson
+    [0.98, 0.95, 0.30],  // yellow
+    [0.95, 0.95, 0.95],  // white
+    [0.30, 0.55, 0.95],  // cobalt
+    [0.60, 0.25, 0.90],  // violet
+    [0.95, 0.55, 0.20],  // orange
+    [0.20, 0.85, 0.85],  // teal
+  ],
+  Mono: [
+    [0.90, 0.90, 0.90], [0.70, 0.70, 0.70], [0.50, 0.50, 0.50],
+    [0.85, 0.85, 0.85], [0.60, 0.60, 0.60], [0.95, 0.95, 0.95],
+    [0.75, 0.75, 0.75], [0.40, 0.40, 0.40],
+  ],
+  Warm: [
+    [0.98, 0.55, 0.20], [0.95, 0.20, 0.20], [0.98, 0.95, 0.30],
+    [0.95, 0.72, 0.45], [0.90, 0.35, 0.15], [0.98, 0.80, 0.20],
+    [0.85, 0.45, 0.25], [0.95, 0.65, 0.10],
+  ],
+  Cool: [
+    [0.20, 0.85, 0.85], [0.30, 0.55, 0.95], [0.60, 0.25, 0.90],
+    [0.20, 0.95, 0.65], [0.40, 0.70, 0.98], [0.55, 0.25, 0.85],
+    [0.20, 0.75, 0.95], [0.45, 0.85, 0.80],
+  ],
+};
+
+// Occupancy grid
+const occupied = new Set();
+function cellKey(x, y, z) {
+  const ix = Math.round(x / CELL_SIZE);
+  const iy = Math.round(y / CELL_SIZE);
+  const iz = Math.round(z / CELL_SIZE);
+  return ix + ',' + iy + ',' + iz;
+}
+
+// Shared geometry templates (reuse vertex buffers via clone())
+let pipeGeoTemplate, pipeInnerGeoTemplate, capGeoTemplate, capInnerGeoTemplate, jointGeoTemplate;
+
+// Pipe heads array
+// Each head: { pos:Vector3, growingFrom:Vector3, dir:Vector3, color:[r,g,b],
+//              style:str, mat:Material, lastBuildTime:number, nextBuildIn:number,
+//              isGrowing:bool, growStartTime:number, growStartPos:Vector3,
+//              capMesh:Mesh|null, growOuter:Object3D|null }
+let heads = [];
+let lastPaletteIndex = -1;
+
+// Fade overlay state
+let fadeAlpha = 0;         // 0=transparent, 1=black
+let fadeMode = 0;          // 0=idle, 1=fading in, 2=fading out
+let fadeTimer = 0;
+let cleanupUntilTime = -1;
+let pendingClear = false;
+
+// Tracer materials list for emissive pulse update
+const tracerMaterials = [];
+
+// Per-build-cycle material tracking for GPU dispose on reset (P5).
+// Populated by makeMaterial() for every per-chain/tracer material created.
+// Does NOT include shared module-scope materials (darkInnerMat) — those
+// persist across resets and must never be disposed here.
+const allMaterials = [];
+
+// All node meshes in scene (for dispose tracking)
+const allNodeMeshes = [];
+
+// Orbit angle
+let orbitAngle = 0;
+// Camera bob
+let cameraBobPhase = 0;
+let cameraBobDir = 1;       // +1 up, -1 down
+let cameraLocalY = 0;       // offset from base Y=4
+
+// Fade overlay DOM element
+let fadeEl = null;
+
+// TOD: last env update time
+let lastEnvUpdateTime = -999;
+const ENV_UPDATE_INTERVAL = 1.0;  // seconds
+
+// ===========================================================================
+// TOD keyframe data (verbatim from PipesScene.swift)
+// envStops: [[pos, r, g, b], ...]
+// ===========================================================================
+const TOD_NIGHT = {
+  envStops: [[0.00,0.030,0.040,0.090],[0.30,0.050,0.060,0.140],
+             [0.50,0.090,0.085,0.200],[0.65,0.120,0.110,0.260],
+             [0.85,0.070,0.090,0.240],[1.00,0.040,0.055,0.160]],
+  envIntensity: 1.50,
+  keyR:0.50, keyG:0.60, keyB:0.95, keyIntensity:380,
+  rimR:0.35, rimG:0.25, rimB:0.55, rimIntensity:220,
+  ambR:0.45, ambG:0.50, ambB:0.75, ambIntensity:280,
+  fogR:0.020, fogG:0.025, fogB:0.060,
+};
+const TOD_DAWN = {
+  envStops: [[0.00,0.080,0.060,0.080],[0.30,0.250,0.140,0.150],
+             [0.50,0.700,0.380,0.350],[0.65,0.950,0.620,0.420],
+             [0.85,0.700,0.550,0.700],[1.00,0.300,0.350,0.600]],
+  envIntensity: 1.45,
+  keyR:1.00, keyG:0.88, keyB:0.78, keyIntensity:850,
+  rimR:1.05, rimG:0.62, rimB:0.55, rimIntensity:460,
+  ambR:0.95, ambG:0.82, ambB:0.78, ambIntensity:140,
+  fogR:0.180, fogG:0.130, fogB:0.180,
+};
+const TOD_DAY = {
+  envStops: [[0.00,0.040,0.060,0.100],[0.30,0.100,0.080,0.180],
+             [0.50,0.550,0.180,0.320],[0.65,0.850,0.500,0.300],
+             [0.85,0.500,0.550,0.850],[1.00,0.200,0.300,0.550]],
+  envIntensity: 1.70,
+  keyR:1.00, keyG:0.98, keyB:0.95, keyIntensity:1150,
+  rimR:1.00, rimG:0.55, rimB:0.30, rimIntensity:540,
+  ambR:1.00, ambG:1.00, ambB:1.00, ambIntensity:180,
+  fogR:0.100, fogG:0.080, fogB:0.180,
+};
+const TOD_SUNSET = {
+  envStops: [[0.00,0.060,0.040,0.080],[0.30,0.220,0.090,0.140],
+             [0.50,0.850,0.220,0.280],[0.65,1.050,0.550,0.300],
+             [0.85,0.700,0.380,0.580],[1.00,0.250,0.200,0.450]],
+  envIntensity: 1.40,
+  keyR:1.10, keyG:0.82, keyB:0.55, keyIntensity:1000,
+  rimR:1.30, rimG:0.42, rimB:0.30, rimIntensity:650,
+  ambR:1.00, ambG:0.78, ambB:0.70, ambIntensity:130,
+  fogR:0.150, fogG:0.075, fogB:0.120,
+};
+const TOD_KEYFRAMES = [TOD_NIGHT, TOD_DAWN, TOD_DAY, TOD_SUNSET];
+
+// Space mode env stops (deep violet-black)
+const SPACE_ENV_STOPS = [
+  [0.00, 0.012, 0.006, 0.025],
+  [0.30, 0.006, 0.005, 0.018],
+  [0.60, 0.004, 0.005, 0.014],
+  [0.80, 0.007, 0.004, 0.018],
+  [1.00, 0.003, 0.003, 0.010],
+];
+
+// ===========================================================================
+// initScene
+// ===========================================================================
+function initScene() {
+  // ---- Renderer ----
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.85;  // matches cam.exposureOffset = -0.4 (slight underexposure)
+  renderer.outputEncoding = THREE.sRGBEncoding;
+
+  // ---- Scene ----
+  scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0x1a1428, 22, 65);
+
+  // ---- Camera ----
+  camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, 200);
+  camera.position.set(0, 4, 18);
+
+  // Orbit parent — camera circles the origin in 150 s
+  orbitParent = new THREE.Object3D();
+  scene.add(orbitParent);
+  orbitParent.add(camera);
+
+  // Camera looks at origin always
+  camera.lookAt(0, 0, 0);
+
+  // ---- Shared geometry templates (P2) ----
+  // PipesScene.swift uses SCNTube which produces a true annular cross-section:
+  //   pipe body: SCNTube(innerRadius=0.2496, outerRadius=0.32, height=1.0, radialSegments=24)
+  //   cap (flared mouth): SCNTube(innerRadius=0.2496, outerRadius=0.496, height=0.42, radialSegments=24)
+  // SCNTube produces 4 geometry elements: [0]=outer wall, [1]=inner bore, [2]=top annular ring, [3]=bottom annular ring.
+  // Three.js r128 has no hollow-tube primitive. We replicate the hollow look with:
+  //   - An open-ended outer CylinderGeometry (the pipe wall, radiusTop==radiusBottom==outerR, openEnded=true)
+  //   - An inner CylinderGeometry rendered BackSide (the dark bore — darkInnerMat, side:BackSide)
+  //     offset inward by the wall thickness. BackSide causes normals to flip inward,
+  //     so the dark surface faces the camera through the open ends and reads as a shadowed cavity.
+  // Both parts are template geometries; each node clones them independently.
+  // NOTE(perf): geometry.clone() does NOT share GPU VBOs — each clone is a separate
+  // GPU upload. The shared-template pattern avoids JS object creation cost but each
+  // clone still occupies its own VRAM allocation.
+  // TODO(perf): InstancedMesh for the up-to-1000 identical segments (out of scope for this pass).
+
+  // Outer wall: open-ended cylinder (open top + bottom reveals the bore)
+  pipeGeoTemplate = new THREE.CylinderGeometry(PIPE_OUTER, PIPE_OUTER, SEGMENT_LENGTH, 24, 1, true);
+  // Inner bore template: slightly smaller radius, rendered BackSide via darkInnerMat
+  pipeInnerGeoTemplate = new THREE.CylinderGeometry(PIPE_INNER, PIPE_INNER, SEGMENT_LENGTH, 24, 1, true);
+
+  // Cap outer wall: open-ended flared cylinder (SCNTube outerRadius=0.496, height=0.42)
+  capGeoTemplate = new THREE.CylinderGeometry(CAP_OUTER, CAP_OUTER, CAP_HEIGHT, 24, 1, true);
+  // Cap inner bore: open-ended, matches pipe inner radius (SCNTube innerRadius=0.2496)
+  capInnerGeoTemplate = new THREE.CylinderGeometry(PIPE_INNER, PIPE_INNER, CAP_HEIGHT, 24, 1, true);
+
+  // Joint geometry: SCNSphere(radius 0.32, seg 16) — stays solid sphere, unchanged
+  jointGeoTemplate = new THREE.SphereGeometry(JOINT_RADIUS, 16, 16);
+
+  // ---- Lights ----
+  // Key directional — casts PCF shadows
+  keyLight = new THREE.DirectionalLight(0xffffff, scaleIntensity(1150));
+  keyLight.position.set(8, 12, 8);
+  keyLight.castShadow = true;
+  keyLight.shadow.mapSize.width  = 2048;
+  keyLight.shadow.mapSize.height = 2048;
+  keyLight.shadow.camera.near = 0.5;
+  keyLight.shadow.camera.far  = 60;
+  keyLight.shadow.camera.left   = -18;
+  keyLight.shadow.camera.right  =  18;
+  keyLight.shadow.camera.top    =  18;
+  keyLight.shadow.camera.bottom = -18;
+  keyLight.shadow.bias = -0.0015;        // tuned to avoid acne on cylinders
+  keyLight.shadow.normalBias = 0.02;
+  keyLight.shadow.radius = 5.5;          // PCF softness, matches Swift shadowRadius
+  scene.add(keyLight);
+  scene.add(keyLight.target);            // target stays at origin (default)
+
+  // Rim omni (no shadow)
+  rimLight = new THREE.PointLight(0xffffff, scaleIntensity(220), 200);
+  rimLight.position.set(-9, -3, -11);
+  scene.add(rimLight);
+
+  // Fill directional (no shadow) — from opposite the key
+  fillLight = new THREE.DirectionalLight(0xffffff, scaleIntensity(180));
+  fillLight.position.set(-8, -12, -8);
+  fillLight.castShadow = false;
+  scene.add(fillLight);
+
+  // Ambient — tiny base so shadowed areas aren't pure black
+  const ambientLight = new THREE.AmbientLight(0x111111, 0.15);
+  scene.add(ambientLight);
+
+  // physicallyCorrectLights: required for MeshPhysicalMaterial transmission
+  // to behave correctly in r128. Matches SceneKit's PBR pipeline intent.
+  renderer.physicallyCorrectLights = true;
+
+  // P7: EXT_color_buffer_float is required for MeshPhysicalMaterial transmission
+  // to render correctly (HDR framebuffer path). Apple Silicon Chrome supports it.
+  // On GPUs/browsers where it's absent, transmission falls back to alpha-based
+  // transparency — visually similar but not physically correct. Non-blocking.
+  if (!renderer.extensions.has('EXT_color_buffer_float')) {
+    console.warn('[pipes] EXT_color_buffer_float not available — MeshPhysicalMaterial ' +
+      'transmission will fall back to alpha transparency on this GPU/browser.');
+  }
+
+  // ---- Floor ----
+  // SCNFloor position y = -10, satin graphite
+  // reflectivity 0.15, metalness 0.10, roughness 0.55
+  // Approximated with a large plane + MeshStandardMaterial
+  const floorGeo = new THREE.PlaneGeometry(300, 300);
+  const floorMat = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(0.10, 0.09, 0.13),
+    metalness: 0.10,
+    roughness: 0.55,
+  });
+  floorMesh = new THREE.Mesh(floorGeo, floorMat);
+  floorMesh.rotation.x = -Math.PI / 2;
+  floorMesh.position.y = -10;
+  floorMesh.receiveShadow = true;
+  scene.add(floorMesh);
+
+  // ---- Star field ----
+  starField = makeStarField();
+  starField.visible = false;
+  scene.add(starField);
+
+  // ---- Fade overlay ----
+  // A full-screen absolutely-positioned div mimicking the camera-attached
+  // SCNPlane overlay. DOM approach is simpler and correct for a web page.
+  fadeEl = document.createElement('div');
+  fadeEl.style.cssText = [
+    'position:fixed', 'inset:0', 'background:#000',
+    'opacity:0', 'pointer-events:none',
+    'z-index:9999', 'transition:none',
+  ].join(';');
+  document.body.appendChild(fadeEl);
+
+  // ---- Pipes container ----
+  pipesContainer = new THREE.Object3D();
+  scene.add(pipesContainer);
+
+  // ---- Initial TOD ----
+  applyTODState(dayStateAt(0.5), true);
+
+  // ---- Shadow quality from control ----
+  applyShadowQuality();
+
+  // ---- Resize handler ----
+  window.addEventListener('resize', onResize);
+
+  // ---- Seed first generation ----
+  seedHeads(0);
+
+  // ---- Animation loop ----
+  requestAnimationFrame(loop);
+}
+
+// ===========================================================================
+// Three.js r128: DirectionalLight.intensity is in cd/m² equivalent units.
+// The Swift intensities are in lumen (SCNLight uses lm). A direct mapping
+// works reasonably: scale by 1/600 so 1150 lm → ~1.9, 380 lm → ~0.63.
+// ===========================================================================
+function scaleIntensity(lm) { return lm / 600; }
+
+// ===========================================================================
+// Animation loop
+// ===========================================================================
+let _prevTime = 0;  // monotonic seconds, initialized on first frame
+
+function loop(now) {
+  requestAnimationFrame(loop);
+  hud.tick(now);
+
+  const nowSec = now / 1000;
+  if (_prevTime === 0) { _prevTime = nowSec; }
+  const dt = Math.min(nowSec - _prevTime, 0.1);
+  _prevTime = nowSec;
+
+  const speed = (cv('speed') != null ? cv('speed') : 1);
+  const paused = (cv('paused') != null ? cv('paused') : false);
+
+  if (!paused) {
+    elapsed += dt * speed;
+  }
+
+  if (doRestart) {
+    doRestart = false;
+    performRestart();
+  }
+
+  // Orbit: 150s per revolution (scaled by speed)
+  orbitAngle += dt * speed * (Math.PI * 2 / 150);
+  orbitParent.rotation.y = orbitAngle;
+
+  // Camera vertical bob: ±3 units over 14s half-period (eased in update)
+  if (!paused) {
+    cameraBobPhase += dt * speed / 14;
+    if (cameraBobPhase >= 1) { cameraBobPhase = 0; cameraBobDir *= -1; }
+    const t = cameraBobPhase;
+    const ease = t * t * (3 - 2 * t);  // smoothstep = easeInEaseOut
+    cameraLocalY = cameraBobDir > 0 ? 4 + ease * 3 : 7 - ease * 3;
+  }
+  camera.position.y = cameraLocalY || 4;
+  camera.lookAt(0, 0, 0);
+
+  // TOD
+  applyTODTick(elapsed);
+
+  // Star field rotation (0.004 rad/s)
+  if (starField.visible) {
+    starField.rotation.y = elapsed * 0.004;
+    starField.rotation.x = Math.sin(elapsed * 0.0007) * 0.04;
+  }
+
+  // Fade overlay
+  updateFade(dt * speed);
+
+  // Pipe simulation
+  if (!paused && elapsed > cleanupUntilTime) {
+    if (heads.length === 0) {
+      seedHeads(elapsed);
+    } else {
+      const bSpeed = cv('buildSpeed') != null ? cv('buildSpeed') : 1;
+      updateHeads(elapsed, bSpeed);
+    }
+    updateCapPositions(elapsed);
+
+    const nodeCount = allNodeMeshes.length;
+    if (nodeCount > MAX_NODES && fadeMode === 0) {
+      beginTeardown(elapsed);
+    }
+
+    hud.set('nodes', allNodeMeshes.length + ' nodes');
+  }
+
+  // Tracer emissive pulse
+  updateTracerPulse(elapsed);
+
+  // Apply live control changes every frame (cheap)
+  applySpaceMode();
+  applyFloorReflect();
+
+  renderer.render(scene, camera);
+}
+
+// ===========================================================================
+// TOD
+// ===========================================================================
+function lerp(a, b, t) { return a + (b - a) * t; }
+function lerpTOD(a, b, t) {
+  const stops = a.envStops.map((sa, i) => {
+    const sb = b.envStops[i];
+    return [sa[0], lerp(sa[1],sb[1],t), lerp(sa[2],sb[2],t), lerp(sa[3],sb[3],t)];
+  });
+  return {
+    envStops: stops,
+    envIntensity: lerp(a.envIntensity, b.envIntensity, t),
+    keyR:lerp(a.keyR,b.keyR,t),   keyG:lerp(a.keyG,b.keyG,t),   keyB:lerp(a.keyB,b.keyB,t),
+    keyIntensity:lerp(a.keyIntensity,b.keyIntensity,t),
+    rimR:lerp(a.rimR,b.rimR,t),   rimG:lerp(a.rimG,b.rimG,t),   rimB:lerp(a.rimB,b.rimB,t),
+    rimIntensity:lerp(a.rimIntensity,b.rimIntensity,t),
+    ambR:lerp(a.ambR,b.ambR,t),   ambG:lerp(a.ambG,b.ambG,t),   ambB:lerp(a.ambB,b.ambB,t),
+    ambIntensity:lerp(a.ambIntensity,b.ambIntensity,t),
+    fogR:lerp(a.fogR,b.fogR,t),   fogG:lerp(a.fogG,b.fogG,t),   fogB:lerp(a.fogB,b.fogB,t),
+  };
+}
+
+function dayStateAt(tod) {
+  // 4 keyframes: 0=night, 0.25=dawn, 0.5=day, 0.75=sunset (matches Swift)
+  const phase = tod - Math.floor(tod);
+  const seg   = phase * 4.0;
+  const idx   = Math.floor(seg);
+  const raw   = seg - idx;
+  const t     = raw * raw * (3 - 2 * raw);  // smoothstep cubic
+  const a = TOD_KEYFRAMES[idx % 4];
+  const b = TOD_KEYFRAMES[(idx + 1) % 4];
+  return lerpTOD(a, b, t);
+}
+
+function currentTOD() {
+  // P3: default matches PipesScene.swift timeOfDayMode = .wallClock
+  const mode = cv('todMode') || 'Wall clock';
+  if (mode === 'Manual') {
+    return cv('todScrub') || 0;
+  } else if (mode === 'Wall clock') {
+    const d = new Date();
+    const secs = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+    return secs / 86400;
+  } else {
+    // Fast cycle
+    const period = cv('todPeriod') || 60;
+    return (elapsed / period) % 1.0;
+  }
+}
+
+function applyTODTick(t) {
+  const spaceMode = cv('space') || false;
+  if (spaceMode) return;  // space mode owns lights
+
+  const tod = currentTOD();
+  const state = dayStateAt(tod);
+  applyTODState(state, t - lastEnvUpdateTime > ENV_UPDATE_INTERVAL || lastEnvUpdateTime < 0);
+  if (t - lastEnvUpdateTime > ENV_UPDATE_INTERVAL || lastEnvUpdateTime < 0) {
+    lastEnvUpdateTime = t;
+  }
+
+  // Stars: bright at midnight (tod~0), dim at noon (tod~0.5)
+  const cosPhase = Math.cos(tod * 2 * Math.PI);
+  const starOpacity = Math.max(0, cosPhase) * Math.max(0, cosPhase);
+  if (starField && !spaceMode) {
+    starField.visible = starOpacity > 0.01;
+    if (starField.material) starField.material.opacity = starOpacity;
+  }
+}
+
+function applyTODState(state, updateEnv) {
+  const spaceMode = cv('space') || false;
+  if (!spaceMode) {
+    if (keyLight) {
+      keyLight.color.setRGB(state.keyR, state.keyG, state.keyB);
+      keyLight.intensity = scaleIntensity(state.keyIntensity);
+    }
+    if (rimLight) {
+      rimLight.color.setRGB(state.rimR, state.rimG, state.rimB);
+      rimLight.intensity = scaleIntensity(state.rimIntensity);
+    }
+    if (fillLight) {
+      fillLight.color.setRGB(state.ambR, state.ambG, state.ambB);
+      fillLight.intensity = scaleIntensity(state.ambIntensity);
+    }
+    scene.fog.color.setRGB(state.fogR, state.fogG, state.fogB);
+
+    if (updateEnv) {
+      // Drive background + hemisphere light from env stops
+      const topStop = state.envStops[state.envStops.length - 1];
+      const botStop = state.envStops[0];
+      scene.background = new THREE.Color(topStop[1], topStop[2], topStop[3]);
+      // Use a hemisphere light to approximate IBL from gradient env
+      updateHemisphereLight(state);
+    }
+  }
+}
+
+let hemiLight = null;
+function updateHemisphereLight(state) {
+  // Sky color from top stops, ground from bottom stops — approximates IBL gradient
+  const topStop = state.envStops[state.envStops.length - 1];
+  const midStop = state.envStops[Math.floor(state.envStops.length / 2)];
+  const botStop = state.envStops[0];
+  const skyCol   = new THREE.Color(midStop[1], midStop[2], midStop[3]);
+  const groundCol = new THREE.Color(botStop[1], botStop[2], botStop[3]);
+  if (!hemiLight) {
+    hemiLight = new THREE.HemisphereLight(skyCol, groundCol, state.envIntensity * 0.6);
+    scene.add(hemiLight);
+  } else {
+    hemiLight.color.copy(skyCol);
+    hemiLight.groundColor.copy(groundCol);
+    hemiLight.intensity = state.envIntensity * 0.6;
+  }
+}
+
+// ===========================================================================
+// Space mode
+// ===========================================================================
+function applySpaceMode() {
+  const spaceMode = cv('space') || false;
+  if (spaceMode) {
+    scene.fog.near = 10000;
+    scene.fog.far  = 20000;
+    floorMesh.visible = false;
+    starField.visible = true;
+    if (starField.material) starField.material.opacity = 1.0;
+    scene.background = new THREE.Color(0.003, 0.003, 0.010);
+    // Space lighting
+    if (keyLight)  { keyLight.color.setRGB(0.82, 0.90, 1.00); keyLight.intensity  = scaleIntensity(1100); }
+    if (rimLight)  { rimLight.color.setRGB(0.55, 0.35, 0.90); rimLight.intensity  = scaleIntensity(220);  }
+    if (fillLight) { fillLight.color.setRGB(0.20, 0.28, 0.55); fillLight.intensity = scaleIntensity(120); }
+    if (hemiLight) hemiLight.intensity = 0.15;
+  } else {
+    scene.fog.near = 22;
+    scene.fog.far  = 65;
+    floorMesh.visible = (cv('floorReflect') !== false);
+    // TOD restores lights/bg on next tick (lastEnvUpdateTime reset handled by tog)
+  }
+}
+
+function applyFloorReflect() {
+  const spaceMode = cv('space') || false;
+  if (!spaceMode) {
+    floorMesh.visible = (cv('floorReflect') !== false);
+  }
+}
+
+// ===========================================================================
+// Shadow quality
+// ===========================================================================
+function applyShadowQuality() {
+  const q = cv('shadow') || 'High';
+  if (!keyLight) return;
+  if (q === 'Off') {
+    keyLight.castShadow = false;
+    renderer.shadowMap.enabled = false;
+  } else {
+    keyLight.castShadow = true;
+    renderer.shadowMap.enabled = true;
+    if (q === 'Low') {
+      keyLight.shadow.mapSize.width = keyLight.shadow.mapSize.height = 512;
+      keyLight.shadow.radius = 4.0;
+    } else if (q === 'Medium') {
+      keyLight.shadow.mapSize.width = keyLight.shadow.mapSize.height = 1024;
+      keyLight.shadow.radius = 4.5;
+    } else {
+      keyLight.shadow.mapSize.width = keyLight.shadow.mapSize.height = 2048;
+      keyLight.shadow.radius = 5.5;
+    }
+    // Force shadow map rebuild
+    if (keyLight.shadow.map) { keyLight.shadow.map.dispose(); keyLight.shadow.map = null; }
+  }
+}
+
+function onControlChange(id, value) {
+  if (id === 'shadow') applyShadowQuality();
+  if (id === 'space') {
+    lastEnvUpdateTime = -999;  // force env rebuild on next tick
+    if (!value) {
+      // Returning from space mode: restore fog + floor
+      scene.fog.near = 22;
+      scene.fog.far  = 65;
+      starField.visible = false;
+    }
+  }
+}
+
+// ===========================================================================
+// Material factory
+// ===========================================================================
+function nextPaletteColor() {
+  const palName = cv('palette') || 'Classic';
+  const pal = PALETTES[palName] || PALETTES.Classic;
+  let idx;
+  do { idx = Math.floor(Math.random() * pal.length); }
+  while (idx === lastPaletteIndex && pal.length > 1);
+  lastPaletteIndex = idx;
+  return pal[idx];  // [r, g, b] linear
+}
+
+function makeChainMaterial() {
+  const r = Math.random();
+  let style;
+  if      (r < 0.35) style = 'obsidian';
+  else if (r < 0.70) style = 'glass';
+  else if (r < 0.85) style = 'crystal';
+  else               style = 'tracer';
+  const color = nextPaletteColor();
+  return { mat: makeMaterial(style, color), style, color };
+}
+
+function makeMaterial(style, color) {
+  const [cR, cG, cB] = color;
+  const col = new THREE.Color(cR, cG, cB);
+
+  let mat;
+  switch (style) {
+    case 'obsidian': {
+      // Painted weathered steel — metalness mid, mid roughness, diffuse tint
+      const jitter = (Math.random() - 0.5) * 0.30;
+      mat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(0.55, 0.55, 0.55),
+        roughness: Math.max(0.05, 0.35 + jitter),
+        metalness: 0.45,
+        emissive: col,
+        emissiveIntensity: 0.04,
+      });
+      // Multiply tint via 'color' — mix between white and chain color
+      mat.color.lerp(col, 0.6);
+      break;
+    }
+    case 'crystal': {
+      // Translucent tinted glass — low roughness, transparent
+      // P4: r128 ignores `ior` (added r129+). Use refractionRatio = 1/ior.
+      // Swift: fresnelExponent=2.5, transparency=0.30 → transmission≈0.35, opacity≈0.78
+      const jitter = (Math.random() - 0.5) * 0.10;
+      mat = new THREE.MeshPhysicalMaterial({
+        color: col,
+        roughness: Math.max(0, 0.08 + jitter),
+        metalness: 0.0,
+        transmission: 0.35,         // transmission approximates transparency
+        thickness: 0.5,             // Beer-Lambert path length
+        refractionRatio: 1.0 / 1.5, // ior=1.5 → 0.6667 (r128-compatible)
+        transparent: true,
+        opacity: 0.78,
+        emissive: col,
+        emissiveIntensity: 0.06,
+      });
+      break;
+    }
+    case 'glass': {
+      // Clear refractive glass — nearly fully transparent
+      // P4: r128 ignores `ior` (added r129+). Use refractionRatio = 1/ior.
+      // Swift: roughness=0.02, transparency=0.10 → near-fully transparent with fresnel
+      mat = new THREE.MeshPhysicalMaterial({
+        color: new THREE.Color(0.95, 0.95, 0.95),
+        roughness: 0.02,
+        metalness: 0.0,
+        transmission: 0.90,
+        refractionRatio: 1.0 / 1.52, // ior=1.52 → 0.6579 (r128-compatible)
+        transparent: true,
+        opacity: 0.92,
+        emissive: col,
+        emissiveIntensity: 0.05,
+      });
+      break;
+    }
+    case 'tracer':
+    default: {
+      // Frosted dark with animated emissive pulse
+      mat = new THREE.MeshStandardMaterial({
+        color: col,
+        roughness: 0.18,
+        metalness: 0.0,
+        emissive: col,
+        emissiveIntensity: 0.0,  // driven per-frame
+      });
+      mat._isTracer    = true;
+      mat._pulseColor  = [cR, cG, cB];
+      mat._phaseOffset = Math.random() * Math.PI * 2;
+      tracerMaterials.push(mat);
+      break;
+    }
+  }
+  // P5: track every per-chain material for GPU dispose on reset.
+  // darkInnerMat is module-scope and shared — it is never pushed here.
+  allMaterials.push(mat);
+  return mat;
+}
+
+// Dark inner bore material — constant, shared across all pipe interiors
+const darkInnerMat = new THREE.MeshBasicMaterial({
+  color: new THREE.Color(0.10, 0.10, 0.10),
+  side: THREE.BackSide,
+});
+
+function updateTracerPulse(t) {
+  const bloomOn = cv('bloom') !== false;
+  for (const mat of tracerMaterials) {
+    if (!mat._isTracer) continue;
+    // Reproduce Swift shader: phase = t * 1.6 + phaseOffset, pulse = pow(0.5 + 0.5*sin(phase), 8)
+    const phase = t * 1.6 + mat._phaseOffset;
+    const pulse = Math.pow(0.5 + 0.5 * Math.sin(phase), 8);
+    mat.emissiveIntensity = bloomOn ? 1.2 * pulse : 0.4 * pulse;
+    const [pR, pG, pB] = mat._pulseColor;
+    mat.emissive.setRGB(pR * pulse, pG * pulse, pB * pulse);
+  }
+}
+
+// ===========================================================================
+// Geometry helpers
+// ===========================================================================
+// alignToDir: rotates a node so its Y axis points along dir
+// (matches Swift eulerAngles for each cardinal direction)
+function alignToDir(obj, dir) {
+  if      (dir.x > 0.5)  { obj.rotation.set(0, 0, -Math.PI / 2); }
+  else if (dir.x < -0.5) { obj.rotation.set(0, 0,  Math.PI / 2); }
+  else if (dir.z > 0.5)  { obj.rotation.set( Math.PI / 2, 0, 0); }
+  else if (dir.z < -0.5) { obj.rotation.set(-Math.PI / 2, 0, 0); }
+  else if (dir.y < -0.5) { obj.rotation.set( Math.PI, 0, 0); }
+  else                   { obj.rotation.set(0, 0, 0); }
+}
+
+function addPipe(from, dir, mat, growDur) {
+  // Two-node setup mirroring Swift addPipe(from:direction:material:growDuration:):
+  //   outer at `from`, oriented so local-Y aligns with dir.
+  //   Pipe mesh + bore mesh offset by segmentLength/2 in local-Y.
+  //   Scale outer.y from 0→1 over growDur (== head.nextBuildIn at spawn time, P1).
+  //
+  // P2: hollow tube — open-ended outer wall + BackSide inner bore.
+  //   SCNTube(innerRadius=0.2496, outerRadius=0.32, height=1.0, radial=24)
+  //   [0]=outer wall (chain mat), [1]=inner bore (darkInnerMat, BackSide)
+  const outer = new THREE.Object3D();
+  outer.position.copy(from);
+  alignToDir(outer, dir);
+  outer.scale.set(1, 0.001, 1);   // start collapsed
+
+  // Outer wall mesh (open-ended → bore is visible through the ends)
+  const wallGeo = pipeGeoTemplate.clone();
+  const wallMesh = new THREE.Mesh(wallGeo, mat);
+  wallMesh.position.set(0, SEGMENT_LENGTH / 2, 0);
+  wallMesh.castShadow = true;
+  wallMesh.receiveShadow = true;
+  outer.add(wallMesh);
+
+  // Inner bore mesh — darkInnerMat uses BackSide so its surface faces inward
+  // and is visible through the open ends, reading as a shadowed cavity.
+  const boreGeo = pipeInnerGeoTemplate.clone();
+  const boreMesh = new THREE.Mesh(boreGeo, darkInnerMat);
+  boreMesh.position.set(0, SEGMENT_LENGTH / 2, 0);
+  boreMesh.castShadow = false;
+  outer.add(boreMesh);
+
+  pipesContainer.add(outer);
+  allNodeMeshes.push(outer);
+
+  // P1: store this segment's grow duration (== nextBuildIn at spawn time)
+  outer._growStart = elapsed;
+  outer._growDur   = growDur;
+  outer._growDone  = false;
+
+  return outer;
+}
+
+function addJoint(p, mat) {
+  const geo   = jointGeoTemplate.clone();
+  const mesh  = new THREE.Mesh(geo, mat);
+  mesh.position.copy(p);
+  mesh.castShadow    = true;
+  mesh.receiveShadow = true;
+  pipesContainer.add(mesh);
+  allNodeMeshes.push(mesh);
+  return mesh;
+}
+
+function makeCapMesh(mat, dir) {
+  // P2: hollow cap — SCNTube(innerRadius=0.2496, outerRadius=0.496, height=0.42, radial=24)
+  // Replicate with open-ended outer wall + BackSide inner bore, same as pipe body.
+  // Cap is a plain Object3D so it can hold two child meshes.
+  const capGroup = new THREE.Object3D();
+  alignToDir(capGroup, dir);
+
+  // Outer wall (flared open-ended cylinder)
+  const wallGeo = capGeoTemplate.clone();
+  const wallMesh = new THREE.Mesh(wallGeo, mat);
+  wallMesh.castShadow = true;
+  wallMesh.receiveShadow = true;
+  capGroup.add(wallMesh);
+
+  // Inner bore (visible through open ends — dark cavity)
+  const boreGeo = capInnerGeoTemplate.clone();
+  const boreMesh = new THREE.Mesh(boreGeo, darkInnerMat);
+  boreMesh.castShadow = false;
+  capGroup.add(boreMesh);
+
+  return capGroup;
+}
+
+function placeCap(mesh, pos, dir) {
+  const lead = 0.05;
+  mesh.position.set(
+    pos.x + dir.x * lead,
+    pos.y + dir.y * lead,
+    pos.z + dir.z * lead,
+  );
+  alignToDir(mesh, dir);
+}
+
+function addStartCap(pos, dir, mat) {
+  const opp = new THREE.Vector3(-dir.x, -dir.y, -dir.z);
+  const mesh = makeCapMesh(mat, opp);
+  placeCap(mesh, pos, opp);
+  pipesContainer.add(mesh);
+  allNodeMeshes.push(mesh);
+}
+
+// ===========================================================================
+// Occupancy grid helpers
+// ===========================================================================
+function findFreeStart() {
+  for (let i = 0; i < 64; i++) {
+    const x = Math.floor(Math.random() * 5) - 2;
+    const y = Math.floor(Math.random() * 5) - 2;
+    const z = Math.floor(Math.random() * 5) - 2;
+    const k = cellKey(x, y, z);
+    if (!occupied.has(k)) return new THREE.Vector3(x, y, z);
+  }
+  for (let i = 0; i < 64; i++) {
+    const x = Math.floor(Math.random() * 11) - 5;
+    const y = Math.floor(Math.random() * 7)  - 3;
+    const z = Math.floor(Math.random() * 11) - 5;
+    const k = cellKey(x, y, z);
+    if (!occupied.has(k)) return new THREE.Vector3(x, y, z);
+  }
+  return new THREE.Vector3(0, 0, 0);
+}
+
+function isOpposite(a, b) {
+  return Math.abs(a.x + b.x) < 0.001 &&
+         Math.abs(a.y + b.y) < 0.001 &&
+         Math.abs(a.z + b.z) < 0.001;
+}
+
+function dirEquals(a, b) {
+  return Math.abs(a.x - b.x) < 0.001 &&
+         Math.abs(a.y - b.y) < 0.001 &&
+         Math.abs(a.z - b.z) < 0.001;
+}
+
+// ===========================================================================
+// Head management
+// ===========================================================================
+function seedHeads(t) {
+  heads = [];
+  for (let i = 0; i < NUM_HEADS; i++) {
+    const dir   = DIRS[Math.floor(Math.random() * DIRS.length)].clone();
+    const start = findFreeStart();
+    occupied.add(cellKey(start.x, start.y, start.z));
+    const { mat, style, color } = makeChainMaterial();
+    const capMesh = makeCapMesh(mat, dir);
+    placeCap(capMesh, start, dir);
+    pipesContainer.add(capMesh);
+    allNodeMeshes.push(capMesh);
+    addStartCap(start, dir, mat);
+
+    heads.push({
+      pos:          start.clone(),
+      growingFrom:  start.clone(),
+      dir:          dir.clone(),
+      mat, style, color,
+      lastBuildTime: t,
+      nextBuildIn:   BUILD_INTERVAL_MIN + Math.random() * (BUILD_INTERVAL_MAX - BUILD_INTERVAL_MIN),
+      isGrowing:    false,
+      growStartTime: 0,
+      capMesh,
+      growOuter:    null,
+    });
+  }
+}
+
+function updateHeads(t, buildSpeed) {
+  for (let i = 0; i < heads.length; i++) {
+    const h = heads[i];
+    const interval = h.nextBuildIn / Math.max(0.01, buildSpeed);
+    if (t - h.lastBuildTime >= interval) {
+      advanceHead(i, t);
+    }
+    // P1: update grow animation using the per-segment stored growDur
+    // (== nextBuildIn at the moment the segment was spawned, not a fixed constant)
+    if (h.growOuter && !h.growOuter._growDone) {
+      const age     = elapsed - h.growOuter._growStart;
+      const growDur = h.growOuter._growDur || BUILD_INTERVAL_MIN; // fallback: never < min interval
+      const s       = Math.min(1.0, age / growDur);
+      h.growOuter.scale.setY(Math.max(0.001, s));
+      if (s >= 1.0) h.growOuter._growDone = true;
+    }
+  }
+}
+
+function advanceHead(i, t) {
+  const h = heads[i];
+  h.lastBuildTime = t;
+  h.nextBuildIn   = BUILD_INTERVAL_MIN + Math.random() * (BUILD_INTERVAL_MAX - BUILD_INTERVAL_MIN);
+
+  // Find free directions (not reverse, not occupied)
+  const freeDirs = DIRS.filter(d => {
+    if (isOpposite(d, h.dir)) return false;
+    const nx = h.pos.x + d.x * SEGMENT_LENGTH;
+    const ny = h.pos.y + d.y * SEGMENT_LENGTH;
+    const nz = h.pos.z + d.z * SEGMENT_LENGTH;
+    return !occupied.has(cellKey(nx, ny, nz));
+  });
+
+  if (freeDirs.length === 0) {
+    wrapHead(i);
+    return;
+  }
+
+  // Bias 65% toward straight
+  let dir;
+  const canStraight = freeDirs.some(d => dirEquals(d, h.dir));
+  if (canStraight && Math.random() < 0.65) {
+    dir = h.dir.clone();
+  } else {
+    dir = freeDirs[Math.floor(Math.random() * freeDirs.length)].clone();
+    if (!dirEquals(dir, h.dir)) {
+      // Place joint sphere at the corner
+      addJoint(h.pos.clone(), h.mat);
+      h.dir.copy(dir);
+    }
+  }
+
+  const oldPos = h.pos.clone();
+  const newPos = new THREE.Vector3(
+    oldPos.x + dir.x * SEGMENT_LENGTH,
+    oldPos.y + dir.y * SEGMENT_LENGTH,
+    oldPos.z + dir.z * SEGMENT_LENGTH,
+  );
+
+  // P1: growDuration == nextBuildIn (re-sampled above), matching PipesScene.swift
+  // line 749: `let growDuration = head.nextBuildIn` — the freshly-sampled interval
+  // IS the segment's grow duration, so the segment reaches full extension exactly
+  // as the next advance tick fires.
+  const growDur = h.nextBuildIn;
+  const outer = addPipe(oldPos, dir, h.mat, growDur);
+  h.growOuter    = outer;
+  h.growingFrom  = oldPos.clone();
+  h.isGrowing    = true;
+  h.growStartTime = elapsed;
+  h.pos.copy(newPos);
+  occupied.add(cellKey(newPos.x, newPos.y, newPos.z));
+
+  // Update cap orientation
+  alignToDir(h.capMesh, dir);
+
+  // Wrap if out of radius
+  const dist = h.pos.length();
+  if (dist > WRAP_RADIUS) {
+    wrapHead(i);
+  }
+}
+
+function wrapHead(i) {
+  const h = heads[i];
+  // Place a static terminal cap at current position
+  const termCap = makeCapMesh(h.mat, h.dir);
+  placeCap(termCap, h.pos, h.dir);
+  pipesContainer.add(termCap);
+  allNodeMeshes.push(termCap);
+  // Remove old moving cap from scene (it stays in allNodeMeshes — will be
+  // cleaned on the next full teardown; removing from pipesContainer is enough)
+  if (h.capMesh && h.capMesh.parent) { h.capMesh.parent.remove(h.capMesh); }
+
+  // New chain
+  const newStart = findFreeStart();
+  occupied.add(cellKey(newStart.x, newStart.y, newStart.z));
+  const { mat, style, color } = makeChainMaterial();
+  const newDir   = DIRS[Math.floor(Math.random() * DIRS.length)].clone();
+  addStartCap(newStart, newDir, mat);
+  const newCap   = makeCapMesh(mat, newDir);
+  placeCap(newCap, newStart, newDir);
+  pipesContainer.add(newCap);
+  allNodeMeshes.push(newCap);
+
+  heads[i] = {
+    pos:           newStart.clone(),
+    growingFrom:   newStart.clone(),
+    dir:           newDir.clone(),
+    mat, style, color,
+    lastBuildTime: elapsed,
+    nextBuildIn:   BUILD_INTERVAL_MIN + Math.random() * (BUILD_INTERVAL_MAX - BUILD_INTERVAL_MIN),
+    isGrowing:     false,
+    growStartTime: 0,
+    capMesh:       newCap,
+    growOuter:     null,
+  };
+}
+
+// ===========================================================================
+// Cap position tracking (mirrors Swift updateCapPositions — wall-clock linear)
+// P1: divide by the per-segment growDur (stored on growOuter), not a fixed constant.
+// PipesScene.swift line 1518: s = min(1.0, elapsed / head.nextBuildIn)
+// ===========================================================================
+function updateCapPositions(t) {
+  const lead = 0.08;
+  for (const h of heads) {
+    if (!h.isGrowing || !h.capMesh || h.growStartTime <= 0) continue;
+    const age     = t - h.growStartTime;
+    // Use the same growDur that was stored on the segment Object3D at spawn time.
+    // Fallback to BUILD_INTERVAL_MIN if no growOuter yet (shouldn't happen in normal flow).
+    const growDur = (h.growOuter && h.growOuter._growDur) ? h.growOuter._growDur : BUILD_INTERVAL_MIN;
+    const s       = Math.min(1.0, age / growDur);
+    h.capMesh.position.set(
+      h.growingFrom.x + h.dir.x * SEGMENT_LENGTH * s + h.dir.x * lead,
+      h.growingFrom.y + h.dir.y * SEGMENT_LENGTH * s + h.dir.y * lead,
+      h.growingFrom.z + h.dir.z * SEGMENT_LENGTH * s + h.dir.z * lead,
+    );
+    if (s >= 1.0) h.isGrowing = false;
+  }
+}
+
+// ===========================================================================
+// Teardown / rebuild cycle
+// ===========================================================================
+function beginTeardown(t) {
+  if (fadeMode !== 0) return;
+  fadeMode  = 1;   // fading to black
+  fadeTimer = 0;
+  cleanupUntilTime = t + CLEANUP_FADE / 2;
+  heads = [];
+}
+
+function updateFade(dt) {
+  if (fadeMode === 0) return;
+  const half = CLEANUP_FADE / 2;
+  if (fadeMode === 1) {
+    // Fading in to black
+    fadeTimer += dt;
+    fadeAlpha = Math.min(1, fadeTimer / half);
+    if (fadeEl) fadeEl.style.opacity = fadeAlpha;
+    if (fadeTimer >= half) {
+      // Screen is now black — wipe geometry
+      clearPipes();
+      fadeMode  = 2;
+      fadeTimer = 0;
+    }
+  } else if (fadeMode === 2) {
+    // Fading back out (new segments already building)
+    fadeTimer += dt;
+    fadeAlpha = Math.max(0, 1 - fadeTimer / half);
+    if (fadeEl) fadeEl.style.opacity = fadeAlpha;
+    if (fadeTimer >= half) {
+      fadeMode  = 0;
+      fadeAlpha = 0;
+    }
+  }
+}
+
+function clearPipes() {
+  // Dispose all per-cycle geometries and materials — no GPU leak (P5, P6).
+  // Shared module-scope templates (pipeGeoTemplate, capGeoTemplate, etc.) and
+  // darkInnerMat are NOT disposed — they persist across resets.
+
+  // P6: use a Set to guard against double-dispose.
+  // Previously obj.traverse() already visited the object itself, and then the
+  // outer `if (obj.isMesh)` branch disposed the same geometry a second time,
+  // generating WebGL console warnings. Now: one traverse pass, one Set guard.
+  const disposedGeos = new Set();
+  for (const obj of allNodeMeshes) {
+    if (obj.parent) { obj.parent.remove(obj); }
+    obj.traverse(child => {
+      if (child.isMesh) {
+        if (child.geometry && !disposedGeos.has(child.geometry)) {
+          child.geometry.dispose();
+          disposedGeos.add(child.geometry);
+        }
+        // Do NOT dispose child.material here — materials are disposed below
+        // via allMaterials to guarantee exactly-once disposal (P5).
+      }
+    });
+  }
+  allNodeMeshes.length = 0;
+
+  // P5: dispose per-chain/tracer materials tracked in allMaterials.
+  // darkInnerMat is shared and module-scope — it is never in this array.
+  for (const mat of allMaterials) {
+    mat.dispose();
+  }
+  allMaterials.length = 0;
+
+  // tracerMaterials is a subset of allMaterials — already disposed above.
+  tracerMaterials.length = 0;
+
+  occupied.clear();
+  lastPaletteIndex = -1;
+
+  // Also clear the pipesContainer children to be safe
+  while (pipesContainer.children.length > 0) {
+    pipesContainer.remove(pipesContainer.children[0]);
+  }
+}
+
+function performRestart() {
+  clearPipes();
+  heads = [];
+  fadeMode  = 0;
+  fadeAlpha = 0;
+  fadeTimer = 0;
+  if (fadeEl) fadeEl.style.opacity = 0;
+  cleanupUntilTime = -1;
+  elapsed = 0;
+  orbitAngle = 0;
+  lastEnvUpdateTime = -999;
+  seedHeads(0);
+}
+
+// ===========================================================================
+// Star field (3500 points on sphere r 80–120, matching Swift)
+// ===========================================================================
+function makeStarField() {
+  const COUNT = 3500;
+  const positions = new Float32Array(COUNT * 3);
+  const colors    = new Float32Array(COUNT * 3);
+
+  for (let i = 0; i < COUNT; i++) {
+    const phi      = Math.random() * 2 * Math.PI;
+    const cosTheta = Math.random() * 2 - 1;
+    const sinTheta = Math.sqrt(1 - cosTheta * cosTheta);
+    const r        = 80 + Math.random() * 40;
+    positions[i*3]   = r * sinTheta * Math.cos(phi);
+    positions[i*3+1] = r * cosTheta;
+    positions[i*3+2] = r * sinTheta * Math.sin(phi);
+
+    const temp   = Math.random();
+    const bright = 0.5 + Math.random() * 0.6;
+    colors[i*3]   = Math.min(1, (0.85 + temp * 0.35) * bright);
+    colors[i*3+1] = Math.min(1, (0.90 + Math.random() * 0.15) * bright);
+    colors[i*3+2] = Math.min(1, (0.95 + (1 - temp) * 0.25) * bright);
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('color',    new THREE.BufferAttribute(colors, 3));
+
+  const mat = new THREE.PointsMaterial({
+    size: 0.8,
+    vertexColors: true,
+    transparent: true,
+    opacity: 1.0,
+    sizeAttenuation: false,
+  });
+
+  return new THREE.Points(geo, mat);
+}
+
+// ===========================================================================
+// Resize
+// ===========================================================================
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+}
+
+// ===========================================================================
+// Bootstrap — deferred to end so every module-scope declaration above has
+// initialized before initScene() (which references renderer/scene/consts).
+// ===========================================================================
+try {
+  initScene();
+} catch(e) {
+  hud.report('Init failed', e && e.stack || String(e));
+}
+
+
+</script>
+<script src="../lib/sj-capture.js"></script>
+<script src="../tests/loader.js"></script>
+<script>
+// Studio Joe — back-link (hidden when this page is loaded inside an iframe
+// preview on /savers.html). Plain DOM, no innerHTML; near-opaque scrim only
+// so it stays legible over the animating canvas.
+(function () {
+  if (window.top !== window.self) return;
+  var a = document.createElement("a");
+  a.href = "/savers.html";
+  a.textContent = "← Savers";
+  Object.assign(a.style, {
+    position: "fixed", top: "14px", right: "14px", zIndex: "2147483646",
+    color: "rgba(255,255,255,0.55)", textDecoration: "none",
+    font: "11px/1 ui-monospace, SF Mono, SFMono-Regular, Menlo, monospace",
+    background: "rgba(6,6,8,0.82)",
+    padding: "8px 13px", borderRadius: "10px",
+    border: "1px solid rgba(255,255,255,0.10)",
+    transition: "color .15s, border-color .15s",
+  });
+  a.addEventListener("mouseenter", function () {
+    a.style.color = "rgba(255,255,255,0.92)";
+    a.style.borderColor = "rgba(255,255,255,0.3)";
+  });
+  a.addEventListener("mouseleave", function () {
+    a.style.color = "rgba(255,255,255,0.55)";
+    a.style.borderColor = "rgba(255,255,255,0.10)";
+  });
+  document.body.appendChild(a);
+})();
+</script>
+</body>
+</html>
