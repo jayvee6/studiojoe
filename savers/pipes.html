@@ -177,7 +177,7 @@ function cellKey(x, y, z) {
 }
 
 // Shared geometry templates (reuse vertex buffers via clone())
-let pipeGeoTemplate, pipeGeoTemplateOpen, capGeoTemplate, capInnerGeoTemplate, capBackDiscGeoTemplate, jointGeoTemplate;
+let pipeGeoTemplate, pipeBoreTemplate, capGeoTemplate, capInnerGeoTemplate, capBackDiscGeoTemplate, jointGeoTemplate;
 
 // Pipe heads array
 // Each head: { pos:Vector3, growingFrom:Vector3, dir:Vector3, color:[r,g,b],
@@ -321,15 +321,18 @@ function initScene() {
   // clone still occupies its own VRAM allocation.
   // TODO(perf): InstancedMesh for the up-to-1000 identical segments (out of scope for this pass).
 
-  // P10: body segments come in two flavours, picked per-material at build:
-  //   - closed: built-in end discs; used for opaque materials (obsidian, tracer)
-  //     so the camera can never peek through a junction into the cavity.
-  //   - open:   no end discs; used for transmissive materials (crystal, glass)
-  //     so light passes through cleanly — closed discs render as visible
-  //     internal cross-sections when transmission > 0 and turn every junction
-  //     into a "stack of pucks inside the tube".
-  pipeGeoTemplate     = new THREE.CylinderGeometry(PIPE_OUTER, PIPE_OUTER, SEGMENT_LENGTH, 24, 1, false);
-  pipeGeoTemplateOpen = new THREE.CylinderGeometry(PIPE_OUTER, PIPE_OUTER, SEGMENT_LENGTH, 24, 1, true);
+  // P11: all body segments are open-ended cylinders for the outer wall.
+  //   Closed-ended cylinders were the source of the visible dark "seam ring"
+  //   at every segment junction: when two consecutive 1.0-unit cylinders meet,
+  //   their end discs occupy the exact same world plane and z-fight, producing
+  //   the puck-stack appearance on every straight run.
+  //   Opening both ends removes the discs entirely; the chain start and
+  //   terminal are already capped by flared cap meshes (addStartCap / wrapHead).
+  pipeGeoTemplate    = new THREE.CylinderGeometry(PIPE_OUTER, PIPE_OUTER, SEGMENT_LENGTH, 24, 1, true);
+  // Inner bore template — only attached to transmissive segments so the
+  // camera sees a shadowed cavity rather than empty world space inside the
+  // glass/crystal wall.
+  pipeBoreTemplate   = new THREE.CylinderGeometry(PIPE_INNER, PIPE_INNER, SEGMENT_LENGTH, 24, 1, true);
 
   // Cap outer wall: open-ended flared cylinder (SCNTube outerRadius=0.496, height=0.42)
   // Kept open-ended so the cap reads as a real flared mouth — the BackSide
@@ -871,18 +874,26 @@ function addPipe(from, dir, mat, growDur) {
   alignToDir(outer, dir);
   outer.scale.set(1, 0.001, 1);   // start collapsed
 
-  // P10: pick the template per-material. Opaque materials get closed-ended
-  // cylinders (junctions invisibly z-fight on identical discs). Transmissive
-  // materials get open-ended cylinders so light passes through cleanly
-  // instead of rendering every internal end disc as a visible cross-section.
-  const isTransmissive = mat && mat.transmission > 0;
-  const template = isTransmissive ? pipeGeoTemplateOpen : pipeGeoTemplate;
-  const wallGeo = template.clone();
+  // P11: every body segment is an open-ended cylinder for the outer wall —
+  // no end discs means no z-fighting seam between consecutive segments.
+  // Transmissive materials additionally get a BackSide inner bore so the
+  // visible cavity reads as a shadowed interior rather than empty space.
+  const wallGeo = pipeGeoTemplate.clone();
   const wallMesh = new THREE.Mesh(wallGeo, mat);
   wallMesh.position.set(0, SEGMENT_LENGTH / 2, 0);
   wallMesh.castShadow = true;
   wallMesh.receiveShadow = true;
   outer.add(wallMesh);
+
+  const isTransmissive = mat && mat.transmission > 0;
+  if (isTransmissive) {
+    const boreGeo = pipeBoreTemplate.clone();
+    const boreMesh = new THREE.Mesh(boreGeo, darkInnerMat);
+    boreMesh.position.set(0, SEGMENT_LENGTH / 2, 0);
+    boreMesh.castShadow = false;
+    boreMesh.receiveShadow = false;
+    outer.add(boreMesh);
+  }
 
   pipesContainer.add(outer);
   allNodeMeshes.push(outer);
@@ -1045,6 +1056,17 @@ function updateHeads(t, buildSpeed) {
 
 function advanceHead(i, t) {
   const h = heads[i];
+
+  // P12: snap the previous growing segment to fully extended BEFORE we lose
+  // the reference. Without this, the grow loop's last sampled `s` (e.g. 0.92)
+  // sticks on the segment forever — leaving a visible gap between it and the
+  // new segment that's about to be spawned. With open-ended cylinders that
+  // gap reads as a hard dark band at every segment boundary on every chain.
+  if (h.growOuter && !h.growOuter._growDone) {
+    h.growOuter.scale.setY(1);
+    h.growOuter._growDone = true;
+  }
+
   h.lastBuildTime = t;
   h.nextBuildIn   = BUILD_INTERVAL_MIN + Math.random() * (BUILD_INTERVAL_MAX - BUILD_INTERVAL_MIN);
 
