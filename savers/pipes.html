@@ -177,8 +177,7 @@ function cellKey(x, y, z) {
 }
 
 // Shared geometry templates (reuse vertex buffers via clone())
-let pipeGeoTemplate, pipeInnerGeoTemplate, capGeoTemplate, capInnerGeoTemplate, jointGeoTemplate;
-let pipeRingGeoTemplate, capRingGeoTemplate;
+let pipeGeoTemplate, capGeoTemplate, capInnerGeoTemplate, capBackDiscGeoTemplate, jointGeoTemplate;
 
 // Pipe heads array
 // Each head: { pos:Vector3, growingFrom:Vector3, dir:Vector3, color:[r,g,b],
@@ -322,28 +321,28 @@ function initScene() {
   // clone still occupies its own VRAM allocation.
   // TODO(perf): InstancedMesh for the up-to-1000 identical segments (out of scope for this pass).
 
-  // Outer wall: open-ended cylinder (open top + bottom reveals the bore)
-  pipeGeoTemplate = new THREE.CylinderGeometry(PIPE_OUTER, PIPE_OUTER, SEGMENT_LENGTH, 24, 1, true);
-  // Inner bore template: slightly smaller radius, rendered BackSide via darkInnerMat
-  pipeInnerGeoTemplate = new THREE.CylinderGeometry(PIPE_INNER, PIPE_INNER, SEGMENT_LENGTH, 24, 1, true);
+  // P10: body segments are CLOSED-ENDED solid cylinders. The SCNTube's
+  // open-pipe-with-bore look is reserved for cap meshes (flared mouths) where
+  // it's actually visible. Body segments butt end-to-end with identical
+  // material at every junction — the two coplanar disc end-caps z-fight on
+  // identical geometry, which the GPU resolves invisibly. No more rings, no
+  // more dark bore peeking through every segment boundary.
+  pipeGeoTemplate = new THREE.CylinderGeometry(PIPE_OUTER, PIPE_OUTER, SEGMENT_LENGTH, 24, 1, false);
 
   // Cap outer wall: open-ended flared cylinder (SCNTube outerRadius=0.496, height=0.42)
+  // Kept open-ended so the cap reads as a real flared mouth — the BackSide
+  // inner bore + a closed back end provide the "looking into the pipe" effect.
   capGeoTemplate = new THREE.CylinderGeometry(CAP_OUTER, CAP_OUTER, CAP_HEIGHT, 24, 1, true);
-  // Cap inner bore: open-ended, matches pipe inner radius (SCNTube innerRadius=0.2496)
+  // Cap inner bore: matches pipe inner radius (SCNTube innerRadius=0.2496),
+  // rendered BackSide via darkInnerMat — visible only through the cap's open
+  // forward mouth, where it reads as a shadowed cavity.
   capInnerGeoTemplate = new THREE.CylinderGeometry(PIPE_INNER, PIPE_INNER, CAP_HEIGHT, 24, 1, true);
+  // Disc to close the BACK of every cap mesh (the side that touches the pipe
+  // body). Without this the camera could see "through" the cap from behind.
+  capBackDiscGeoTemplate = new THREE.CircleGeometry(CAP_OUTER, 24);
 
   // Joint geometry: SCNSphere(radius 0.32, seg 16) — stays solid sphere, unchanged
   jointGeoTemplate = new THREE.SphereGeometry(JOINT_RADIUS, 16, 16);
-
-  // P9: annular end-ring templates — close the open ends of every pipe segment
-  // and cap. Without these, the dark BackSide bore is visible through each
-  // segment's open ends, reading as dark "gaps" all along every pipe run.
-  // RingGeometry sits in the XY plane with +Z normal by default; the meshes
-  // get rotated 90° around X to lie perpendicular to the cylinder's local Y
-  // axis (its length axis). 24 thetaSegments match the cylinders' 24 radial
-  // samples so the ring's outer edge weld-aligns with the wall.
-  pipeRingGeoTemplate = new THREE.RingGeometry(PIPE_INNER, PIPE_OUTER, 24);
-  capRingGeoTemplate  = new THREE.RingGeometry(PIPE_INNER, CAP_OUTER,  24);
 
   // ---- Lights ----
   // Key directional — casts PCF shadows
@@ -870,42 +869,17 @@ function addPipe(from, dir, mat, growDur) {
   alignToDir(outer, dir);
   outer.scale.set(1, 0.001, 1);   // start collapsed
 
-  // Outer wall mesh (open-ended → bore is visible through the ends)
+  // P10: single closed-ended cylinder — built-in top + bottom discs replace
+  // the open-ended-wall + BackSide-bore + ring-cap stack. At every interior
+  // junction, segment N's top disc and segment N+1's bottom disc are coplanar
+  // with identical wall material; z-fighting between identical surfaces is
+  // visually invisible. No more annular gap into a dark bore.
   const wallGeo = pipeGeoTemplate.clone();
   const wallMesh = new THREE.Mesh(wallGeo, mat);
   wallMesh.position.set(0, SEGMENT_LENGTH / 2, 0);
   wallMesh.castShadow = true;
   wallMesh.receiveShadow = true;
   outer.add(wallMesh);
-
-  // Inner bore mesh — darkInnerMat uses BackSide so its surface faces inward
-  // and is visible through the open ends, reading as a shadowed cavity.
-  const boreGeo = pipeInnerGeoTemplate.clone();
-  const boreMesh = new THREE.Mesh(boreGeo, darkInnerMat);
-  boreMesh.position.set(0, SEGMENT_LENGTH / 2, 0);
-  boreMesh.castShadow = false;
-  outer.add(boreMesh);
-
-  // P9: annular end-rings — close the open ends with the wall material so
-  // adjacent segments weld visually instead of reading as dark gaps where
-  // the BackSide bore peeks through. Two rings per segment (bottom at y=0,
-  // top at y=SEGMENT_LENGTH); at a straight junction these two coplanar rings
-  // from neighbouring segments overlap with identical material, no z-fight.
-  const ringBotGeo = pipeRingGeoTemplate.clone();
-  const ringBotMesh = new THREE.Mesh(ringBotGeo, mat);
-  ringBotMesh.position.set(0, 0, 0);
-  ringBotMesh.rotation.x = Math.PI / 2;     // RingGeometry +Z normal -> -Y
-  ringBotMesh.castShadow = true;
-  ringBotMesh.receiveShadow = true;
-  outer.add(ringBotMesh);
-
-  const ringTopGeo = pipeRingGeoTemplate.clone();
-  const ringTopMesh = new THREE.Mesh(ringTopGeo, mat);
-  ringTopMesh.position.set(0, SEGMENT_LENGTH, 0);
-  ringTopMesh.rotation.x = -Math.PI / 2;    // RingGeometry +Z normal -> +Y
-  ringTopMesh.castShadow = true;
-  ringTopMesh.receiveShadow = true;
-  outer.add(ringTopMesh);
 
   pipesContainer.add(outer);
   allNodeMeshes.push(outer);
@@ -943,30 +917,24 @@ function makeCapMesh(mat, dir) {
   wallMesh.receiveShadow = true;
   capGroup.add(wallMesh);
 
-  // Inner bore (visible through open ends — dark cavity)
+  // Inner bore (visible through the cap's forward open mouth — dark cavity)
   const boreGeo = capInnerGeoTemplate.clone();
   const boreMesh = new THREE.Mesh(boreGeo, darkInnerMat);
   boreMesh.castShadow = false;
   capGroup.add(boreMesh);
 
-  // P9: annular end-rings — same purpose as on the body, but using the
-  // wider cap-radius ring so the flared mouth's open ends are closed too.
-  // capGeoTemplate is centered on origin so it spans y=-CAP_HEIGHT/2..+CAP_HEIGHT/2.
-  const capRingBotGeo = capRingGeoTemplate.clone();
-  const capRingBotMesh = new THREE.Mesh(capRingBotGeo, mat);
-  capRingBotMesh.position.set(0, -CAP_HEIGHT / 2, 0);
-  capRingBotMesh.rotation.x = Math.PI / 2;
-  capRingBotMesh.castShadow = true;
-  capRingBotMesh.receiveShadow = true;
-  capGroup.add(capRingBotMesh);
-
-  const capRingTopGeo = capRingGeoTemplate.clone();
-  const capRingTopMesh = new THREE.Mesh(capRingTopGeo, mat);
-  capRingTopMesh.position.set(0, CAP_HEIGHT / 2, 0);
-  capRingTopMesh.rotation.x = -Math.PI / 2;
-  capRingTopMesh.castShadow = true;
-  capRingTopMesh.receiveShadow = true;
-  capGroup.add(capRingTopMesh);
+  // P10: close the BACK end of the cap with a solid disc (FrontSide, wall
+  // material) so the cap reads as a real flared mouth — open forward, sealed
+  // toward the pipe body. The forward end stays open so the camera can see
+  // down into the dark bore. Disc sits in the XZ plane (rotated -π/2 around X
+  // so its +Z normal becomes -Y, pointing away from the pipe body).
+  const backDiscGeo = capBackDiscGeoTemplate.clone();
+  const backDisc = new THREE.Mesh(backDiscGeo, mat);
+  backDisc.position.set(0, -CAP_HEIGHT / 2, 0);
+  backDisc.rotation.x = Math.PI / 2;
+  backDisc.castShadow = true;
+  backDisc.receiveShadow = true;
+  capGroup.add(backDisc);
 
   return capGroup;
 }
