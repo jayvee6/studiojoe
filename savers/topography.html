@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Topography — StudioJoe Savers Web</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; }
+  /* Scope to the WebGPU canvas ONLY — bare canvas{} also matches HUD sparkline. */
+  #gpu-canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<canvas id="gpu-canvas"></canvas>
+
+<script src="../lib/sj-hud.js?v=sv-topography-001"></script>
+<script src="../lib/sj-controls.js?v=sv-topography-001"></script>
+<script type="module">
+// ===========================================================================
+// Topography — StudioJoe Savers Web port.
+//
+// Strict 1:1 visual port of StudioJoeSavers/Sources/SaverCore/Shaders/Topography.metal.
+// Shader math is the contract: domain-warped FBM terrain, fwidth-driven 1px
+// contour lines, hypsometric 3-stop color ramp with 60s palette cycling
+// (Obsidian / Dark Silicon / Vellum), curvature AO, anisotropic specular.
+//
+// Idempotency key: topography / sv-topography-001
+//
+// Uniform layout (WGSL struct U — 80 bytes total, %16==0):
+//   offset  0 : time       f32
+//   offset  4 : resolution vec2<f32>  (8-byte aligned; preceded by 1 f32)
+//              NOTE: Metal ABI is time@0, res@4 (float2 gets 8-byte align after 1 float).
+//              WGSL requires vec2 at 8-byte boundary: pad with _pad0 before res,
+//              or put time first and rely on natural layout. Metal has time(4)+float2(8)=12+pad=16.
+//              To match: time@0, _pad0@4(unused), res@8, then controls.
+//              Actually Metal: float(4) + float2(8, aligned to 8) + float(4) = 16 bytes.
+//              time is at byte 0 (4 bytes), float2 resolution must be 8-byte aligned -> at byte 8,
+//              so _pad is at bytes 4-7, resolution at 8-11, _pad at 12-15. Total=16.
+//              WGSL struct must match exactly for binding 0.
+// Final layout (80 bytes):
+//   byte  0 : time        f32      // matches Metal time@0
+//   byte  4 : _pad0       f32      // matches Metal _pad that aligns float2
+//   byte  8 : resolution  vec2<f32>// matches Metal resolution@8
+//   byte 16 : speed       f32      // control: time multiplier
+//   byte 20 : contours    f32      // control: number of contour levels
+//   byte 24 : warp        f32      // control: domain-warp scale
+//   byte 28 : paletteIdx  f32      // control: 0=Obsidian,1=DarkSilicon,2=Vellum (manual)
+//   byte 32 : autoCycle   f32      // control: 1.0=auto-cycle on, 0.0=off
+//   byte 36 : cyclePeriod f32      // control: seconds per palette
+//   byte 40 : lightAz     f32      // control: light azimuth (rad)
+//   byte 44 : lightEl     f32      // control: light elevation (rad)
+//   byte 48 : aniso       f32      // control: anisotropic specular gain
+//   byte 52 : haze        f32      // control: distance-haze strength
+//   byte 56 : vignette    f32      // control: vignette strength
+//   byte 60 : _pad1       f32      // padding to 64 bytes -- but need %16==0
+//   byte 64 : crossfadeT  f32      // internal: pre-computed crossfade t (not used -- keep pad)
+//   ... pad to 80 bytes
+// Simpler final layout (64 bytes, %16==0):
+//   0  time f32
+//   4  _pad0 f32
+//   8  resolution vec2<f32>
+//   16 speed f32
+//   20 contours f32
+//   24 warp f32
+//   28 paletteIdx f32
+//   32 autoCycle f32
+//   36 cyclePeriod f32
+//   40 lightAz f32
+//   44 lightEl f32
+//   48 aniso f32
+//   52 haze f32
+//   56 vignette f32
+//   60 _pad1 f32
+//   Total: 64 bytes. 64 % 16 == 0. DONE.
+// JS Float32Array index = byte / 4.
+// ===========================================================================
+
+const BUILD = 'sv-topography-001';
+const UNIFORM_BYTES = 64;
+
+const canvas = document.getElementById('gpu-canvas');
+
+// ---- WGSL -----------------------------------------------------------------
+// NOTE: this whole string is a JS template literal. No backtick characters
+// anywhere inside (including comments) or the build dies. Single quotes only
+// in WGSL comments. All floats have decimal points (WGSL requirement).
+const WGSL = /* wgsl */`
+
+// Uniform buffer — 64 bytes, %16==0.
+// Byte layout documented in JS header above.
+struct U {
+    time       : f32,         // byte  0
+    _pad0      : f32,         // byte  4  (aligns resolution to 8-byte boundary)
+    resolution : vec2<f32>,   // byte  8
+    speed      : f32,         // byte 16
+    contours   : f32,         // byte 20
+    warp       : f32,         // byte 24
+    paletteIdx : f32,         // byte 28  0=Obsidian 1=DarkSilicon 2=Vellum
+    autoCycle  : f32,         // byte 32  1=auto 0=manual
+    cyclePeriod: f32,         // byte 36  seconds per palette
+    lightAz    : f32,         // byte 40  light azimuth rad
+    lightEl    : f32,         // byte 44  light elevation rad
+    aniso      : f32,         // byte 48  anisotropic specular gain
+    haze       : f32,         // byte 52  haze strength
+    vignette   : f32,         // byte 56  vignette strength
+    _pad1      : f32,         // byte 60
+}
+@group(0) @binding(0) var<uniform> u: U;
+
+struct VSOut {
+    @builtin(position) pos : vec4<f32>,
+    @location(0)       uv  : vec2<f32>,
+}
+
+@vertex fn vs_main(@builtin(vertex_index) vid: u32) -> VSOut {
+    var p = array<vec2<f32>, 3>(
+        vec2<f32>(-1.0, -1.0),
+        vec2<f32>( 3.0, -1.0),
+        vec2<f32>(-1.0,  3.0),
+    );
+    var uvs = array<vec2<f32>, 3>(
+        vec2<f32>(0.0, 0.0),
+        vec2<f32>(2.0, 0.0),
+        vec2<f32>(0.0, 2.0),
+    );
+    var o: VSOut;
+    o.pos = vec4<f32>(p[vid], 0.0, 1.0);
+    o.uv  = uvs[vid];
+    return o;
+}
+
+// ---- Hash / noise (verbatim port of SharedUtilities.h) --------------------
+
+fn hash21(p_in: vec2<f32>) -> f32 {
+    var p = fract(p_in * vec2<f32>(123.34, 456.21));
+    p = p + vec2<f32>(dot(p, p + vec2<f32>(34.345)));
+    return fract(p.x * p.y);
+}
+
+fn noise2(p: vec2<f32>) -> f32 {
+    let i = floor(p);
+    let f = fract(p);
+    let u = f * f * (vec2<f32>(3.0) - 2.0 * f);
+    let a = hash21(i);
+    let b = hash21(i + vec2<f32>(1.0, 0.0));
+    let c = hash21(i + vec2<f32>(0.0, 1.0));
+    let d = hash21(i + vec2<f32>(1.0, 1.0));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+// ---- Ridge transform (verbatim from Topography.metal) ---------------------
+// 1 - |2n - 1| produces sharp knife-edge ridges. Squaring amplifies ridges.
+fn ridge(n: f32) -> f32 {
+    let r = 1.0 - abs(2.0 * n - 1.0);
+    return r * r;
+}
+
+// ---- Geological silk FBM (verbatim from Topography.metal) ----------------
+// Domain-warped multifractal: low-freq warp displacement, then 5-octave
+// hybrid fractal (2 ridged + 3 smooth). warp control scales the 0.55 factor.
+fn fbmTerrain(p_in: vec2<f32>, warpScale: f32) -> f32 {
+    var p = p_in;
+    var warp = vec2<f32>(
+        noise2(p),
+        noise2(p + vec2<f32>(5.2, 1.3))
+    ) * 2.0 - vec2<f32>(1.0);
+    p += warp * (0.55 * warpScale);
+
+    var v = 0.0;
+    var a = 0.55;
+    for (var i = 0i; i < 5i; i = i + 1) {
+        var n = noise2(p);
+        if (i < 2i) { n = ridge(n); }
+        v += a * n;
+        p = p * 2.07 + vec2<f32>(1.7, 9.2);
+        a *= 0.5;
+    }
+    return v;
+}
+
+// ---- 3-octave FBM for curvature AO (verbatim from Topography.metal) ------
+fn fbmLite(p_in: vec2<f32>) -> f32 {
+    var p = p_in;
+    var v = 0.0;
+    var a = 0.55;
+    for (var i = 0i; i < 3i; i = i + 1) {
+        v += a * noise2(p);
+        p = p * 2.07 + vec2<f32>(1.7, 9.2);
+        a *= 0.5;
+    }
+    return v;
+}
+
+// ---- Palette struct and palette data (verbatim from Topography.metal) -----
+struct Palette {
+    lowBase    : vec3<f32>,
+    midTint    : vec3<f32>,
+    highBase   : vec3<f32>,
+    lineColor  : vec3<f32>,
+    bloomScale : f32,
+}
+
+fn paletteAt(idx: i32) -> Palette {
+    var pa: Palette;
+    if (idx == 0i) {
+        // Obsidian: deep slate/midnight blue, pale-silver crests, cyan contours.
+        pa.lowBase    = vec3<f32>(0.020, 0.030, 0.060);
+        pa.midTint    = vec3<f32>(0.080, 0.115, 0.180);
+        pa.highBase   = vec3<f32>(0.62,  0.66,  0.72 );
+        pa.lineColor  = vec3<f32>(0.30,  1.10,  1.55 );
+        pa.bloomScale = 1.00;
+    } else if (idx == 1i) {
+        // Dark Silicon: charcoal-blue valleys, silver-gold peaks, gold contours.
+        pa.lowBase    = vec3<f32>(0.018, 0.028, 0.052);
+        pa.midTint    = vec3<f32>(0.070, 0.100, 0.155);
+        pa.highBase   = vec3<f32>(0.60,  0.55,  0.42 );
+        pa.lineColor  = vec3<f32>(1.45,  1.05,  0.40 );
+        pa.bloomScale = 1.00;
+    } else {
+        // Vellum: warm off-white paper, soft beige, dark graphite contours, no bloom.
+        pa.lowBase    = vec3<f32>(0.78, 0.74, 0.66);
+        pa.midTint    = vec3<f32>(0.90, 0.88, 0.83);
+        pa.highBase   = vec3<f32>(0.97, 0.96, 0.94);
+        pa.lineColor  = vec3<f32>(0.20, 0.22, 0.26);
+        pa.bloomScale = 0.00;
+    }
+    return pa;
+}
+
+// ---- Fragment shader -------------------------------------------------------
+@fragment fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
+    // Normalized screen coords: p in [-aspect, aspect] x [-1, 1]
+    var p = in.uv * 2.0 - vec2<f32>(1.0);
+    p.x *= u.resolution.x / max(u.resolution.y, 1.0);
+
+    // Slow drift across noise field (verbatim drift rates from Metal).
+    // speed control scales the time argument uniformly.
+    let t = u.time;
+    var q = p * 0.70 + vec2<f32>(t * 0.020, t * 0.014);
+    let h = fbmTerrain(q, u.warp);
+
+    // Screen-space gradient for contour AA (fwidth = real derivative, not approx).
+    let gradLen = length(vec2<f32>(dpdx(h), dpdy(h)));
+
+    // World-space gradient via central differences for normal + AO.
+    let aoR = 0.06;
+    let h_l = fbmLite(q + vec2<f32>(-aoR, 0.0));
+    let h_r = fbmLite(q + vec2<f32>( aoR, 0.0));
+    let h_u = fbmLite(q + vec2<f32>(0.0,  aoR));
+    let h_d = fbmLite(q + vec2<f32>(0.0, -aoR));
+
+    let dhdx_ws = (h_r - h_l) * (0.5 / aoR);
+    let dhdy_ws = (h_u - h_d) * (0.5 / aoR);
+    let grad2D  = vec2<f32>(dhdx_ws, dhdy_ws);
+    let gradWS  = length(grad2D);
+
+    // Curvature AO from ring samples.
+    let aoAvg    = (h_l + h_r + h_u + h_d) * 0.25;
+    let curv     = h - aoAvg;
+    // saturate -> clamp(x, 0.0, 1.0)
+    let ao        = 1.0 - clamp(-curv * 4.5, 0.0, 1.0) * 0.55;
+    let ridgeLift = clamp( curv * 4.5, 0.0, 1.0) * 0.30;
+
+    // Smooth hillshading via world-space normal.
+    let normalScale = 0.85;
+    let normal = normalize(vec3<f32>(-dhdx_ws * normalScale,
+                                     -dhdy_ws * normalScale,
+                                      1.0));
+
+    // Light direction from az/el controls. Metal hardcode: normalize(-0.50, 0.65, 0.60).
+    // Default az=-0.6947, el=0.6897 reproduces that exactly.
+    let lightAz = u.lightAz;
+    let lightEl = u.lightEl;
+    let lightDir = normalize(vec3<f32>(
+        cos(lightEl) * sin(lightAz),
+        sin(lightEl),
+        cos(lightEl) * cos(lightAz)
+    ));
+
+    let ndotl   = clamp(dot(normal, lightDir), 0.0, 1.0);
+    let diffuse = ndotl * 0.50 + 0.55;
+
+    // Anisotropic specular (verbatim from Metal, aniso control scales gain).
+    let viewDir = vec3<f32>(0.0, 0.0, 1.0);
+    let halfV   = normalize(lightDir + viewDir);
+    let NdotH   = clamp(dot(normal, halfV), 0.0, 1.0);
+    // Metal ternary: (gradWS > 0.001) ? a : b -> select(b, a, cond)
+    let ridgeDir = select(vec2<f32>(1.0, 0.0), vec2<f32>(-grad2D.y, grad2D.x) / gradWS, gradWS > 0.001);
+    let perpDir  = select(vec2<f32>(0.0, 1.0), grad2D / gradWS,                          gradWS > 0.001);
+    let hLat   = halfV.xy - normal.xy * NdotH;
+    let hRidge = dot(hLat, ridgeDir);
+    let hPerp  = dot(hLat, perpDir);
+    let anisoH = NdotH - hRidge * hRidge * 0.3 - hPerp * hPerp * 4.5;
+    // aniso control scales the 0.30 gain factor
+    let specular = pow(clamp(anisoH, 0.0, 1.0), 38.0) * 0.30 * u.aniso;
+
+    // Architectural contour lines (verbatim AA logic from Metal).
+    // contours control replaces the hardcoded LEVELS=8.
+    let LEVELS = u.contours;
+    let nearestDist = abs(fract(h * LEVELS) - 0.5) / LEVELS;
+    let fw = max(fwidth(h), 0.00001);
+    // Core: 1px sharp line with smoothstep AA.
+    let coreMask0 = 1.0 - smoothstep(fw * 0.4, fw * 1.0, nearestDist);
+    // Glow: ~10px soft halo.
+    var glowMask = smoothstep(fw * 10.0, fw * 1.0, nearestDist);
+    glowMask = glowMask * glowMask;
+
+    // Slope-aware boldness.
+    let boldness = mix(1.10, 0.55, smoothstep(0.0004, 0.0050, gradLen));
+    // Slow energy pulse along contour.
+    let pulse = 0.85 + 0.15 * sin(h * 38.0 - t * 1.0);
+    let coreMask = coreMask0 * boldness * pulse;
+
+    // ---- Palette cycling/selection ----------------------------------------
+    // autoCycle==1: 60s/palette with 5s smoothstep crossfade (verbatim Metal).
+    // autoCycle==0: use paletteIdx directly, no crossfade.
+    var lowBase    : vec3<f32>;
+    var midTint    : vec3<f32>;
+    var highBase   : vec3<f32>;
+    var lineCol    : vec3<f32>;
+    var bloomScale : f32;
+
+    if (u.autoCycle > 0.5) {
+        let cycleDuration    = u.cyclePeriod;
+        let crossfadeDuration = 5.0;
+        let cycleT  = t / cycleDuration;
+        let phase   = fract(cycleT);
+        // floor(cycleT) mod 3, always non-negative
+        var idxA = i32(floor(cycleT)) % 3i;
+        if (idxA < 0i) { idxA += 3i; }
+        let idxB = (idxA + 1i) % 3i;
+        let crossfadeStart = 1.0 - (crossfadeDuration / cycleDuration);
+        let crossfade = smoothstep(crossfadeStart, 1.0, phase);
+
+        let pa = paletteAt(idxA);
+        let pb = paletteAt(idxB);
+        lowBase    = mix(pa.lowBase,    pb.lowBase,    crossfade);
+        midTint    = mix(pa.midTint,    pb.midTint,    crossfade);
+        highBase   = mix(pa.highBase,   pb.highBase,   crossfade);
+        lineCol    = mix(pa.lineColor,  pb.lineColor,  crossfade);
+        bloomScale = mix(pa.bloomScale, pb.bloomScale, crossfade);
+    } else {
+        // Manual palette selection, no crossfade.
+        let idx = i32(clamp(round(u.paletteIdx), 0.0, 2.0));
+        let pa  = paletteAt(idx);
+        lowBase    = pa.lowBase;
+        midTint    = pa.midTint;
+        highBase   = pa.highBase;
+        lineCol    = pa.lineColor;
+        bloomScale = pa.bloomScale;
+    }
+
+    // Hypsometric tint — 3-stop ramp (verbatim Metal).
+    var base: vec3<f32>;
+    if (h < 0.5) {
+        base = mix(lowBase, midTint, smoothstep(0.0, 0.5, h));
+    } else {
+        base = mix(midTint, highBase, smoothstep(0.5, 1.0, h));
+    }
+
+    // AO + ridge lift + hillshading (verbatim Metal).
+    base *= ao;
+    base += highBase * ridgeLift * 0.5;
+    base *= diffuse;
+    base += vec3<f32>(specular) * 0.22;
+
+    // Height-based valley occlusion (verbatim Metal).
+    base *= mix(0.55, 1.05, smoothstep(0.05, 0.65, h));
+
+    // Atmospheric distance fade (haze control scales depth factors).
+    let depth = 1.0 - clamp(h, 0.0, 1.0);
+    {
+        let lum = dot(base, vec3<f32>(0.2126, 0.7152, 0.0722));
+        base = mix(base, vec3<f32>(lum), depth * 0.30 * u.haze);
+        let hazeCol = mix(highBase, lowBase, 0.75) * 0.45;
+        base = mix(base, hazeCol, depth * 0.55 * u.haze);
+    }
+
+    // Composite: glow beneath, sharp line on top (verbatim Metal).
+    var col = base + lineCol * glowMask * 0.55 * bloomScale;
+    col = mix(col, lineCol, coreMask);
+
+    // Triangular dither (verbatim Metal, using builtin pos).
+    let fc  = in.pos.xy;
+    let n1  = fract(sin(dot(fc, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+    let n2  = fract(sin(dot(fc, vec2<f32>(45.123,  89.456)) + 0.7) * 27182.818);
+    let dither = (n1 + n2) - 1.0;
+    col += dither * (1.0 / 255.0);
+
+    // Vignette (vignette control scales the 0.34 factor).
+    let vig = 1.0 - 0.34 * u.vignette * smoothstep(1.20, 2.05, length(p));
+    return vec4<f32>(max(col * vig, vec3<f32>(0.0)), 1.0);
+}
+`;
+
+// ---- Light az/el defaults reproducing Metal normalize(-0.50, 0.65, 0.60) --
+// magnitude = sqrt(0.25+0.4225+0.36) = sqrt(1.0325) ~= 1.01613
+// normalized: (-0.49208, 0.63968, 0.59051)
+// el = asin(0.63968) ~= 0.6897 rad
+// az = atan2(-0.49208, 0.59051) ~= -0.6947 rad
+const LIGHT_AZ_DEFAULT = -0.6947;
+const LIGHT_EL_DEFAULT =  0.6897;
+
+// ---- Controls -------------------------------------------------------------
+const controls = window.SJControls.create({
+  title:    'Topography',
+  build:    BUILD,
+  ns:       'topo',
+  controls: [
+    { id: 'speed',       label: 'Speed',       type: 'slider', min: 0,     max: 3,     step: 0.01, default: 1 },
+    { id: 'contours',    label: 'Contours',    type: 'slider', min: 2,     max: 24,    step: 1,    default: 8 },
+    { id: 'warp',        label: 'Warp',        type: 'slider', min: 0,     max: 2,     step: 0.01, default: 1 },
+    { id: 'palette',     label: 'Palette',     type: 'select', options: ['Obsidian', 'Dark Silicon', 'Vellum'], default: 'Obsidian' },
+    { id: 'autoCycle',   label: 'Auto Cycle',  type: 'toggle', default: true },
+    { id: 'cyclePeriod', label: 'Cycle (s)',   type: 'slider', min: 5,     max: 180,   step: 1,    default: 60 },
+    { id: 'lightAz',     label: 'Light Az',    type: 'slider', min: 0,     max: 6.283, step: 0.01, default: LIGHT_AZ_DEFAULT + 2 * Math.PI },
+    { id: 'lightEl',     label: 'Light El',    type: 'slider', min: 0,     max: 1.57,  step: 0.01, default: LIGHT_EL_DEFAULT },
+    { id: 'aniso',       label: 'Aniso',       type: 'slider', min: 0,     max: 2,     step: 0.01, default: 1 },
+    { id: 'haze',        label: 'Haze',        type: 'slider', min: 0,     max: 2,     step: 0.01, default: 1 },
+    { id: 'vignette',    label: 'Vignette',    type: 'slider', min: 0,     max: 1.5,   step: 0.01, default: 1 },
+    { id: 'paused',      label: 'Paused',      type: 'toggle', default: false },
+    { id: 'restart',     label: 'Restart',     type: 'button', onClick: () => { elapsed = 0; } },
+  ],
+});
+
+// lightAz is stored in [0, 2pi] range for slider convenience; convert back to
+// the equivalent signed angle when packing uniforms.
+function getLightAz() {
+  let az = controls.value('lightAz');
+  // Normalize to [-pi, pi] for trigonometry consistency with the Metal default.
+  // The default stored is LIGHT_AZ_DEFAULT + 2*PI which sits in [0, 2pi].
+  // The shader uses sin/cos so any equivalent angle works — pass as-is.
+  return az;
+}
+
+// Palette name -> index
+const PAL_MAP = { 'Obsidian': 0, 'Dark Silicon': 1, 'Vellum': 2 };
+
+// ---- HUD ------------------------------------------------------------------
+const hud = window.SJHud.createHud({
+  title:  'Topography',
+  build:  BUILD,
+  canvas: canvas,
+  help:   ['console: window.topo.*'],
+  lines:  [],
+});
+const report = hud.report;
+
+// ---- Boot -----------------------------------------------------------------
+let elapsed = 0;
+
+async function main() {
+  if (!navigator.gpu) {
+    report('WebGPU unavailable',
+      'navigator.gpu is undefined. Needs Chrome/Edge 113+, Safari 18+, or Firefox Nightly with WebGPU enabled.');
+    return;
+  }
+  let adapter = null;
+  try { adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }); }
+  catch (e) { report('requestAdapter() threw', (e && e.stack) || String(e)); return; }
+  if (!adapter) {
+    report('No GPU adapter',
+      'navigator.gpu.requestAdapter() returned null. The GPU may be blocklisted or unavailable.');
+    return;
+  }
+  let device;
+  try { device = await adapter.requestDevice(); }
+  catch (e) { report('requestDevice() failed', (e && e.stack) || String(e)); return; }
+  device.lost.then(info => report('GPU device lost', info.reason + ' — ' + info.message));
+  device.addEventListener('uncapturederror', ev => {
+    console.error('[topography] uncaptured GPU error:', ev.error);
+    report('GPU validation error', String((ev.error && ev.error.message) || ev.error));
+  });
+
+  const ctx = canvas.getContext('webgpu');
+  if (!ctx) { report('No WebGPU canvas context', "canvas.getContext('webgpu') returned null."); return; }
+  const format = navigator.gpu.getPreferredCanvasFormat();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  function resize() {
+    canvas.width  = Math.floor(window.innerWidth  * dpr);
+    canvas.height = Math.floor(window.innerHeight * dpr);
+    ctx.configure({ device, format, alphaMode: 'opaque' });
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // Compile shader.
+  const module = device.createShaderModule({ label: 'Topography', code: WGSL });
+  // Chrome renamed compilationInfo() -> getCompilationInfo(); support both.
+  const ciFn = module.getCompilationInfo ? module.getCompilationInfo.bind(module)
+             : module.compilationInfo    ? module.compilationInfo.bind(module)
+             : null;
+  if (ciFn) {
+    const info = await ciFn();
+    const msgs = (info && info.messages) || [];
+    const errs = msgs.filter(m => m.type === 'error');
+    if (msgs.length) {
+      console[errs.length ? 'error' : 'warn']('[topography] WGSL messages:\n' +
+        msgs.map(m => m.type + ' L' + m.lineNum + ':' + m.linePos + '  ' + m.message).join('\n'));
+    }
+    if (errs.length) {
+      report('WGSL compile error',
+        errs.map(m => 'L' + m.lineNum + ':' + m.linePos + '  ' + m.message).join('\n'));
+      return;
+    }
+  }
+
+  // Uniform buffer: 64 bytes, 16 f32 slots.
+  const uni = new Float32Array(UNIFORM_BYTES / 4);
+  const uniformBuf = device.createBuffer({
+    size: UNIFORM_BYTES,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+  const bgl = device.createBindGroupLayout({
+    entries: [{ binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } }],
+  });
+  const bindGroup = device.createBindGroup({
+    layout: bgl, entries: [{ binding: 0, resource: { buffer: uniformBuf } }],
+  });
+  const pipeline = device.createRenderPipeline({
+    label: 'Topography',
+    layout: device.createPipelineLayout({ bindGroupLayouts: [bgl] }),
+    vertex:   { module, entryPoint: 'vs_main' },
+    fragment: { module, entryPoint: 'fs_main', targets: [{ format }] },
+    primitive: { topology: 'triangle-list' },
+  });
+
+  let lastT = performance.now();
+
+  function renderFrame(now) {
+    const dt = Math.min(0.05, (now - lastT) / 1000);
+    lastT = now;
+    const paused = controls.value('paused');
+    const speed  = controls.value('speed');
+    if (!paused) elapsed += dt * speed;
+
+    // Pack uniforms in exact field order (see layout comment at top).
+    // index = byte / 4
+    uni[0]  = elapsed;                          // byte  0: time
+    uni[1]  = 0;                                // byte  4: _pad0
+    uni[2]  = canvas.width;                     // byte  8: resolution.x
+    uni[3]  = canvas.height;                    // byte 12: resolution.y
+    uni[4]  = speed;                            // byte 16: speed
+    uni[5]  = controls.value('contours');       // byte 20: contours
+    uni[6]  = controls.value('warp');           // byte 24: warp
+    uni[7]  = PAL_MAP[controls.value('palette')] || 0; // byte 28: paletteIdx
+    uni[8]  = controls.value('autoCycle') ? 1.0 : 0.0; // byte 32: autoCycle
+    uni[9]  = controls.value('cyclePeriod');    // byte 36: cyclePeriod
+    uni[10] = getLightAz();                     // byte 40: lightAz
+    uni[11] = controls.value('lightEl');        // byte 44: lightEl
+    uni[12] = controls.value('aniso');          // byte 48: aniso
+    uni[13] = controls.value('haze');           // byte 52: haze
+    uni[14] = controls.value('vignette');       // byte 56: vignette
+    uni[15] = 0;                                // byte 60: _pad1
+
+    device.queue.writeBuffer(uniformBuf, 0, uni);
+
+    const enc  = device.createCommandEncoder();
+    const pass = enc.beginRenderPass({
+      colorAttachments: [{
+        view:       ctx.getCurrentTexture().createView(),
+        loadOp:     'clear',
+        storeOp:    'store',
+        clearValue: { r: 0, g: 0, b: 0, a: 1 },
+      }],
+    });
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.draw(3);
+    pass.end();
+    device.queue.submit([enc.finish()]);
+
+    hud.tick(now);
+  }
+
+  function frame(now) {
+    try { renderFrame(now); }
+    catch (e) { report('Render-loop exception', (e && e.stack) || String(e)); return; }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+// Expose for console debugging.
+window.topo = window.topo || {};
+
+main().catch(err => {
+  console.error('[topography] init failed:', err);
+  report('Init exception', (err && err.stack) || String(err));
+});
+</script>
+<script src="../lib/sj-capture.js"></script>
+<script src="../tests/loader.js"></script>
+<script>
+// Studio Joe — back-link (hidden when this page is loaded inside an iframe
+// preview on /savers.html). Plain DOM, no innerHTML; near-opaque scrim only
+// so it stays legible over the animating canvas.
+(function () {
+  if (window.top !== window.self) return;
+  var a = document.createElement("a");
+  a.href = "/savers.html";
+  a.textContent = "← Savers";
+  Object.assign(a.style, {
+    position: "fixed", bottom: "14px", left: "14px", zIndex: "2147483646",
+    color: "rgba(255,255,255,0.55)", textDecoration: "none",
+    font: "11px/1 ui-monospace, SF Mono, SFMono-Regular, Menlo, monospace",
+    background: "rgba(6,6,8,0.82)",
+    padding: "8px 13px", borderRadius: "10px",
+    border: "1px solid rgba(255,255,255,0.10)",
+    transition: "color .15s, border-color .15s",
+  });
+  a.addEventListener("mouseenter", function () {
+    a.style.color = "rgba(255,255,255,0.92)";
+    a.style.borderColor = "rgba(255,255,255,0.3)";
+  });
+  a.addEventListener("mouseleave", function () {
+    a.style.color = "rgba(255,255,255,0.55)";
+    a.style.borderColor = "rgba(255,255,255,0.10)";
+  });
+  document.body.appendChild(a);
+})();
+</script>
+</body>
+</html>

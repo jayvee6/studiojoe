@@ -21,13 +21,21 @@ jobs:
       - name: Check links
         uses: lycheeverse/lychee-action@v2
         with:
+          # --root-dir resolves absolute internal paths (/savers.html,
+          # /savers/foo.html, /resume.html) against the local checkout
+          # instead of hitting production. Previously --base-url forced
+          # lychee to fetch https://studiojoe.dev for every internal
+          # link, which made any new page a chicken-and-egg problem:
+          # it couldn't pass CI until it was already deployed, and it
+          # couldn't deploy until CI passed.
           args: >-
             --verbose
             --no-progress
-            --base-url https://studiojoe.dev
+            --root-dir ${{ github.workspace }}
             --exclude "https://cdnjs.cloudflare.com"
             --exclude "https://fonts.googleapis.com"
             --exclude "https://fonts.gstatic.com"
             --exclude "https://www.linkedin.com"
             '*.html'
+            'savers/*.html'
           fail: true

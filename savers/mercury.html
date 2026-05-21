@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mercury — StudioJoe Savers Web</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; }
+  /* Scope canvas style to #gpu-canvas ONLY.
+     A bare canvas{} rule also matches the HUD sparkline canvas and
+     stretches its 150x28 bitmap to full viewport (blackhole lesson 3). */
+  #gpu-canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<canvas id="gpu-canvas"></canvas>
+
+<script src="../lib/sj-hud.js"></script>
+<script src="../lib/sj-controls.js"></script>
+<script type="module">
+// ===========================================================================
+// Mercury — standalone WebGPU / WGSL port of Mercury.metal
+// idempotency key: mercury / sv-mercury-001
+//
+// Shader math is a strict 1:1 transcription of Mercury.metal +
+// SharedUtilities.h. Feature flags, uniform layout, camera/ray derivation,
+// SDF, IBL, DayPalette (8 keyframes), two-pass refraction, 9-tap spectral
+// dispersion, Beer-Lambert absorption, Fresnel, AO, anisotropic glints —
+// all verbatim from the Metal sources.
+//
+// Uniform ABI (48 bytes, documented offsets match Metal layout):
+//   offset  0  time        f32
+//   offset  4  _pad0       f32  (alignment pad before vec2)
+//   offset  8  resolution  vec2<f32>   (8-byte aligned, matches MSL float2)
+//   offset 16  flags       u32   bit0=dispersion, bit1=twoPass, bit2=absorption
+//   offset 20  timeOfDay   f32
+//   offset 24  ior         f32   base glass IOR (etaG = 1/ior)
+//   offset 28  dispSpread  f32   wavelength IOR half-spread
+//   offset 32  blobSpeed   f32   scales blob animation time
+//   offset 36  vignette    f32   vignette strength multiplier
+//   offset 40  stepsI      i32   primary march cap (32..96, def 70)
+//   offset 44  _pad1       i32
+//   Total: 48 bytes (multiple of 16)
+//
+// JS packing: ArrayBuffer(48), DataView for flags(u32,@16) and stepsI(i32,@40),
+// Float32Array view for all f32 fields.
+// ===========================================================================
+
+const BUILD  = 'sv-mercury-001';
+const canvas = document.getElementById('gpu-canvas');
+
+// ---------------------------------------------------------------------------
+// WGSL — no backtick characters inside this string (blackhole lesson 4).
+// Zero backticks including in comments. Use single/double quotes only.
+// ---------------------------------------------------------------------------
+const WGSL = /* wgsl */`
+// Compile-time cap for the bounded primary march loop.
+// The actual per-frame cap is stepsI from uniforms (32..96).
+override MAX_PRIMARY_STEPS: i32 = 96;
+
+// ---- Uniform struct -------------------------------------------------------
+// Byte offsets match the Metal MercuryUniforms layout plus appended controls.
+// See file header comment for full ABI documentation.
+struct U {
+    time:       f32,        // 0
+    _pad0:      f32,        // 4
+    resolution: vec2<f32>,  // 8  (8-byte aligned, matches MSL float2 alignment)
+    flags:      u32,        // 16
+    timeOfDay:  f32,        // 20
+    ior:        f32,        // 24
+    dispSpread: f32,        // 28
+    blobSpeed:  f32,        // 32
+    vignette:   f32,        // 36
+    stepsI:     i32,        // 40
+    _pad1:      i32,        // 44
+}
+@group(0) @binding(0) var<uniform> u: U;
+
+// ---- VS / FS I/O ----------------------------------------------------------
+struct VSOut {
+    @builtin(position) pos: vec4<f32>,
+    @location(0)       uv:  vec2<f32>,
+}
+
+// Full-screen triangle — verbatim from blackhole.html vs_main.
+@vertex fn vs_main(@builtin(vertex_index) vid: u32) -> VSOut {
+    var p = array<vec2<f32>, 3>(
+        vec2<f32>(-1.0, -1.0), vec2<f32>(3.0, -1.0), vec2<f32>(-1.0, 3.0),
+    );
+    var uvs = array<vec2<f32>, 3>(
+        vec2<f32>(0.0, 0.0), vec2<f32>(2.0, 0.0), vec2<f32>(0.0, 2.0),
+    );
+    var o: VSOut;
+    o.pos = vec4<f32>(p[vid], 0.0, 1.0);
+    o.uv  = uvs[vid];
+    return o;
+}
+
+// ---- SharedUtilities.h : hash33 ------------------------------------------
+// Transcribed verbatim from SharedUtilities.h.
+fn hash33(p: vec3<f32>) -> vec3<f32> {
+    var q = vec3<f32>(
+        dot(p, vec3<f32>(127.1, 311.7,  74.7)),
+        dot(p, vec3<f32>(269.5, 183.3, 246.1)),
+        dot(p, vec3<f32>(113.5, 271.9, 124.6))
+    );
+    return -1.0 + 2.0 * fract(sin(q) * 43758.5453);
+}
+
+// ---- SDF ------------------------------------------------------------------
+// Verbatim from Mercury.metal smin / sdSphere / scene / estimateNormal.
+
+fn smin(a: f32, b: f32, k: f32) -> f32 {
+    let h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+    return mix(b, a, h) - k * h * (1.0 - h);
+}
+
+fn sdSphere(p: vec3<f32>, c: vec3<f32>, r: f32) -> f32 {
+    return length(p - c) - r;
+}
+
+// blobT = u.time * u.blobSpeed — the animation time for the blob SDF.
+fn scene(p: vec3<f32>, t: f32) -> f32 {
+    var d = sdSphere(p, vec3<f32>(sin(t * 0.22) * 0.95,
+                                   cos(t * 0.31) * 0.55,
+                                   3.2 + sin(t * 0.15) * 0.30), 0.70);
+    d = smin(d, sdSphere(p, vec3<f32>(cos(t * 0.18) * 0.80,
+                                       sin(t * 0.27) * 0.70,
+                                       3.1 + cos(t * 0.12) * 0.25), 0.55), 0.85);
+    d = smin(d, sdSphere(p, vec3<f32>(sin(t * 0.13 + 1.7) * 1.1,
+                                       cos(t * 0.21 + 0.6) * 0.45,
+                                       3.4 + sin(t * 0.09) * 0.35), 0.50), 0.85);
+    d = smin(d, sdSphere(p, vec3<f32>(0.0, sin(t * 0.16) * 0.4, 3.2), 0.45), 0.85);
+    return d;
+}
+
+fn estimateNormal(p: vec3<f32>, t: f32) -> vec3<f32> {
+    let h = 0.0015;
+    let grad = vec3<f32>(
+        scene(p + vec3<f32>(h, 0.0, 0.0), t) - scene(p - vec3<f32>(h, 0.0, 0.0), t),
+        scene(p + vec3<f32>(0.0, h, 0.0), t) - scene(p - vec3<f32>(0.0, h, 0.0), t),
+        scene(p + vec3<f32>(0.0, 0.0, h), t) - scene(p - vec3<f32>(0.0, 0.0, h), t)
+    );
+    let gradLen = length(grad);
+    // Guard against degenerate zero-gradient (NaN from normalize(vec3(0))).
+    return select(normalize(grad), vec3<f32>(0.0, 1.0, 0.0), gradLen <= 1e-4);
+}
+
+// ---- Procedural IBL environment -------------------------------------------
+// Verbatim from Mercury.metal sampleEnv / slat / srgbToLinear.
+
+fn slat(dirY: f32, y0: f32, halfWidth: f32) -> f32 {
+    let d = (dirY - y0) / halfWidth;
+    return exp(-d * d);
+}
+
+fn srgbToLinear(c: vec3<f32>) -> vec3<f32> {
+    return pow(c, vec3<f32>(2.2));
+}
+
+fn sampleEnv(dir: vec3<f32>) -> vec3<f32> {
+    let y = clamp(dir.y, -1.0, 1.0);
+
+    let zenith   = srgbToLinear(vec3<f32>(0.32, 0.46, 0.78));
+    let horizon  = srgbToLinear(vec3<f32>(0.92, 0.78, 0.62));
+    let floorCol = srgbToLinear(vec3<f32>(0.04, 0.05, 0.08));
+
+    var col: vec3<f32>;
+    // Metal: if(y >= 0) ... else ...
+    // WGSL: select(false_val, true_val, cond)
+    let skyBlend   = mix(horizon, zenith,   smoothstep(0.0,  0.65, y));
+    let floorBlend = mix(horizon, floorCol, smoothstep(0.0, -0.4,  y));
+    col = select(floorBlend, skyBlend, y >= 0.0);
+
+    // Studio softbox slats.
+    let ceiling = slat(dir.y, 0.78, 0.06)
+                + slat(dir.y, 0.55, 0.04) * 0.7
+                + slat(dir.y, 0.32, 0.05) * 0.5;
+    col = col + vec3<f32>(1.00, 0.96, 0.90) * ceiling * 4.5;
+
+    // Vertical side slat.
+    let sideDir = normalize(vec3<f32>(0.65, 0.20, -0.50));
+    let side = pow(clamp(dot(dir, sideDir), 0.0, 1.0), 16.0);
+    col = col + vec3<f32>(0.95, 0.92, 1.00) * side * 2.2;
+
+    // Pinpoint key.
+    let keyDir = normalize(vec3<f32>(0.45, 0.62, -0.35));
+    let kd = clamp(dot(dir, keyDir), 0.0, 1.0);
+    col = col + vec3<f32>(1.00, 0.97, 0.90) * smoothstep(0.998, 1.0, kd) * 18.0;
+    col = col + vec3<f32>(1.00, 0.92, 0.78) * pow(kd, 40.0) * 0.40;
+
+    // Cool fill.
+    let fillDir = normalize(vec3<f32>(-0.55, 0.35, -0.40));
+    let fd = clamp(dot(dir, fillDir), 0.0, 1.0);
+    col = col + vec3<f32>(0.75, 0.88, 1.05) * pow(fd, 16.0) * 1.4;
+
+    // Warm rim.
+    let rimDir = normalize(vec3<f32>(0.05, -0.25, -0.85));
+    let rim = clamp(dot(dir, rimDir), 0.0, 1.0);
+    col = col + vec3<f32>(1.00, 0.55, 0.30) * pow(rim, 12.0) * 0.55;
+
+    return col;
+}
+
+// ---- Time-of-day palette --------------------------------------------------
+// Verbatim from Mercury.metal DayPalette / makeDayPalette.
+
+struct DayPalette {
+    warm:       vec3<f32>,
+    cool:       vec3<f32>,
+    bloom1:     vec3<f32>,
+    bloom2:     vec3<f32>,
+    bloom3:     vec3<f32>,
+    brightness: f32,
+}
+
+fn makeDayPalette(tod: f32) -> DayPalette {
+    // 8 palettes: night/dawn/day/sunset/emerald/violet/rosegold/arctic.
+    // Each occupies 1/8 of the 0..1 tod range.
+
+    // 1. night
+    var night: DayPalette;
+    night.warm       = vec3<f32>(0.16, 0.10, 0.32);
+    night.cool       = vec3<f32>(0.05, 0.05, 0.18);
+    night.bloom1     = vec3<f32>(0.55, 0.30, 0.85);
+    night.bloom2     = vec3<f32>(0.20, 0.40, 0.85);
+    night.bloom3     = vec3<f32>(0.75, 0.55, 0.30);
+    night.brightness = 0.55;
+
+    // 2. dawn
+    var dawn: DayPalette;
+    dawn.warm       = vec3<f32>(1.15, 0.65, 0.55);
+    dawn.cool       = vec3<f32>(0.55, 0.45, 0.75);
+    dawn.bloom1     = vec3<f32>(1.10, 0.55, 0.70);
+    dawn.bloom2     = vec3<f32>(0.55, 0.65, 0.95);
+    dawn.bloom3     = vec3<f32>(1.20, 0.85, 0.55);
+    dawn.brightness = 0.95;
+
+    // 3. day
+    var day: DayPalette;
+    day.warm       = vec3<f32>(0.95, 0.85, 0.78);
+    day.cool       = vec3<f32>(0.45, 0.65, 0.95);
+    day.bloom1     = vec3<f32>(1.00, 0.50, 0.75);
+    day.bloom2     = vec3<f32>(0.40, 0.85, 1.00);
+    day.bloom3     = vec3<f32>(1.00, 0.85, 0.40);
+    day.brightness = 1.00;
+
+    // 4. sunset
+    var sunset: DayPalette;
+    sunset.warm       = vec3<f32>(1.25, 0.45, 0.40);
+    sunset.cool       = vec3<f32>(0.45, 0.25, 0.55);
+    sunset.bloom1     = vec3<f32>(1.20, 0.35, 0.55);
+    sunset.bloom2     = vec3<f32>(0.50, 0.45, 0.85);
+    sunset.bloom3     = vec3<f32>(1.30, 0.70, 0.30);
+    sunset.brightness = 0.92;
+
+    // 5. emerald
+    var emerald: DayPalette;
+    emerald.warm       = vec3<f32>(0.08, 0.40, 0.30);
+    emerald.cool       = vec3<f32>(0.02, 0.14, 0.22);
+    emerald.bloom1     = vec3<f32>(0.25, 0.90, 0.55);
+    emerald.bloom2     = vec3<f32>(0.15, 0.65, 0.55);
+    emerald.bloom3     = vec3<f32>(0.80, 0.88, 0.30);
+    emerald.brightness = 0.70;
+
+    // 6. violet
+    var violet: DayPalette;
+    violet.warm       = vec3<f32>(0.55, 0.10, 0.90);
+    violet.cool       = vec3<f32>(0.14, 0.04, 0.44);
+    violet.bloom1     = vec3<f32>(0.75, 0.30, 1.00);
+    violet.bloom2     = vec3<f32>(0.20, 0.50, 1.00);
+    violet.bloom3     = vec3<f32>(1.00, 0.35, 0.80);
+    violet.brightness = 0.72;
+
+    // 7. rosegold
+    var rosegold: DayPalette;
+    rosegold.warm       = vec3<f32>(1.05, 0.58, 0.52);
+    rosegold.cool       = vec3<f32>(0.62, 0.32, 0.48);
+    rosegold.bloom1     = vec3<f32>(1.10, 0.72, 0.42);
+    rosegold.bloom2     = vec3<f32>(0.95, 0.42, 0.65);
+    rosegold.bloom3     = vec3<f32>(0.78, 0.55, 0.88);
+    rosegold.brightness = 0.88;
+
+    // 8. arctic
+    var arctic: DayPalette;
+    arctic.warm       = vec3<f32>(0.42, 0.78, 0.90);
+    arctic.cool       = vec3<f32>(0.04, 0.10, 0.34);
+    arctic.bloom1     = vec3<f32>(0.22, 0.95, 0.72);
+    arctic.bloom2     = vec3<f32>(0.52, 0.84, 1.00);
+    arctic.bloom3     = vec3<f32>(0.86, 0.96, 1.00);
+    arctic.brightness = 0.78;
+
+    let seg  = fract(tod) * 8.0;
+    let idx  = floor(seg);
+    let fr   = seg - idx;
+    // S-curve: hold ~30%, crossfade ~40%, hold into next.
+    let t    = smoothstep(0.30, 0.70, fr);
+
+    // Select palette pair — WGSL does not support select() on user structs,
+    // so we replicate Metal's if/else chain using if statements.
+    // Metal: if(idx<1){a=night;b=dawn;} else if(idx<2){a=dawn;b=day;} ...
+    var a: DayPalette;
+    var b: DayPalette;
+
+    if (idx < 1.0) {
+        a = night;    b = dawn;
+    } else if (idx < 2.0) {
+        a = dawn;     b = day;
+    } else if (idx < 3.0) {
+        a = day;      b = sunset;
+    } else if (idx < 4.0) {
+        a = sunset;   b = emerald;
+    } else if (idx < 5.0) {
+        a = emerald;  b = violet;
+    } else if (idx < 6.0) {
+        a = violet;   b = rosegold;
+    } else if (idx < 7.0) {
+        a = rosegold; b = arctic;
+    } else {
+        a = arctic;   b = night;
+    }
+
+    var p: DayPalette;
+    p.warm       = mix(a.warm,       b.warm,       t);
+    p.cool       = mix(a.cool,       b.cool,       t);
+    p.bloom1     = mix(a.bloom1,     b.bloom1,     t);
+    p.bloom2     = mix(a.bloom2,     b.bloom2,     t);
+    p.bloom3     = mix(a.bloom3,     b.bloom3,     t);
+    p.brightness = mix(a.brightness, b.brightness, t);
+    return p;
+}
+
+// ---- Background color (screen-space) --------------------------------------
+// Verbatim from Mercury.metal backgroundColor.
+
+fn backgroundColor(uv: vec2<f32>, t: f32, aspect: f32, p: DayPalette) -> vec3<f32> {
+    let diag = clamp((uv.x + uv.y) * 0.5, 0.0, 1.0);
+    var base = mix(p.warm, p.cool, diag) * 0.55 * p.brightness;
+
+    let horizonMask = smoothstep(0.30, 0.70, uv.y);
+    base = mix(base * 0.55, base, horizonMask);
+
+    let c1 = vec2<f32>(0.30 + 0.12 * sin(t * 0.07),
+                       0.35 + 0.10 * cos(t * 0.05));
+    let b1 = exp(-dot(uv - c1, uv - c1) * 12.0);
+    base = base + p.bloom1 * b1 * 0.30 * p.brightness;
+
+    let c2 = vec2<f32>(0.72 + 0.10 * cos(t * 0.06),
+                       0.65 + 0.12 * sin(t * 0.04));
+    let b2 = exp(-dot(uv - c2, uv - c2) * 12.0);
+    base = base + p.bloom2 * b2 * 0.30 * p.brightness;
+
+    let c3 = vec2<f32>(0.55 + 0.08 * sin(t * 0.03 + 1.7),
+                       0.20 + 0.07 * cos(t * 0.05 + 2.3));
+    let b3 = exp(-dot(uv - c3, uv - c3) * 14.0);
+    base = base + p.bloom3 * b3 * 0.24 * p.brightness;
+
+    return base;
+}
+
+// ---- Blurred background (multi-tap) ---------------------------------------
+// Verbatim from Mercury.metal blurBg.
+
+fn blurBg(uv: vec2<f32>, t: f32, aspect: f32, p: DayPalette) -> vec3<f32> {
+    let j0 = vec2<f32>( 0.005,  0.000);
+    let j1 = vec2<f32>(-0.005,  0.000);
+    let j2 = vec2<f32>( 0.000,  0.005);
+    let j3 = vec2<f32>( 0.000, -0.005);
+    var s = backgroundColor(uv, t, aspect, p);
+    s = s + backgroundColor(clamp(uv + j0, vec2<f32>(0.0), vec2<f32>(1.0)), t, aspect, p);
+    s = s + backgroundColor(clamp(uv + j1, vec2<f32>(0.0), vec2<f32>(1.0)), t, aspect, p);
+    s = s + backgroundColor(clamp(uv + j2, vec2<f32>(0.0), vec2<f32>(1.0)), t, aspect, p);
+    s = s + backgroundColor(clamp(uv + j3, vec2<f32>(0.0), vec2<f32>(1.0)), t, aspect, p);
+    return s / 5.0;
+}
+
+// ---- Two-pass refraction: march inside the glass --------------------------
+// Verbatim from Mercury.metal marchInside.
+// Returns true if exit found; writes exitPoint, exitNormal, pathLen via ptr.
+
+fn marchInside(
+    entryPoint: vec3<f32>,
+    inDir:      vec3<f32>,
+    t:          f32,
+    exitPoint:  ptr<function, vec3<f32>>,
+    exitNormal: ptr<function, vec3<f32>>,
+    pathLen:    ptr<function, f32>
+) -> bool {
+    var td = 0.005;
+    for (var i: i32 = 0; i < 32; i = i + 1) {
+        let q = entryPoint + inDir * td;
+        let d = scene(q, t);
+        if (d > 0.0) {
+            *exitPoint  = q;
+            *exitNormal = -estimateNormal(q, t);
+            *pathLen    = td;
+            return true;
+        }
+        td = td + max(-d * 0.85, 0.005);
+        if (td > 4.0) { break; }
+    }
+    return false;
+}
+
+// ---- Schlick Fresnel (tuned) ----------------------------------------------
+// Verbatim from Mercury.metal schlickTuned.
+// power param kept for API compatibility (always x^5 internally).
+
+fn schlickTuned(cosTheta: f32, f0: f32, power: f32) -> f32 {
+    let x = clamp(1.0 - cosTheta, 0.0, 1.0);
+    return f0 + (1.0 - f0) * (x * x * x * x * x);
+}
+
+// ---- Surface AO -----------------------------------------------------------
+// Verbatim from Mercury.metal surfaceAO.
+
+fn surfaceAO(p: vec3<f32>, n: vec3<f32>, t: f32) -> f32 {
+    var ao: f32 = 0.0;
+    var weight: f32 = 1.0;
+    for (var i: i32 = 0; i < 3; i = i + 1) {
+        let h = 0.05 + 0.22 * f32(i);
+        let d = scene(p + n * h, t);
+        ao = ao + (h - d) * weight;
+        weight = weight * 0.65;
+    }
+    return clamp(1.0 - 0.55 * ao, 0.0, 1.0);
+}
+
+// ---- Fragment shader -------------------------------------------------------
+// Verbatim port of Mercury.metal mercury_fragment.
+
+@fragment fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
+    let useDispersion = (u.flags & 1u) != 0u;
+    let useTwoPass    = (u.flags & 2u) != 0u;
+    let useAbsorption = (u.flags & 4u) != 0u;
+
+    let aspect = u.resolution.x / max(u.resolution.y, 1.0);
+    let ndc2   = in.uv * 2.0 - 1.0;
+    let ndc    = vec2<f32>(ndc2.x * aspect, ndc2.y);
+
+    // Hoist makeDayPalette — once per pixel (Metal comment verbatim).
+    let dayPal = makeDayPalette(u.timeOfDay);
+
+    // blobSpeed scales the SDF animation time.
+    let blobT = u.time * u.blobSpeed;
+
+    let ro = vec3<f32>(0.0, 0.0, 0.0);
+    // WGSL does not allow vec3<f32>(vec2, scalar) shorthand — expand components.
+    let rd = normalize(vec3<f32>(ndc.x, ndc.y, 1.6));
+
+    let bg = backgroundColor(in.uv, u.time, aspect, dayPal);
+
+    // ---- Primary raymarch (bounded-loop idiom) ----------------------------
+    // Compile-time cap MAX_PRIMARY_STEPS (96); runtime cap u.stepsI (32..96).
+    // Metal uses 70 fixed steps; default stepsI = 70 reproduces that exactly.
+    var mt: f32 = 0.0;
+    var hit: bool = false;
+    var hitP: vec3<f32> = vec3<f32>(0.0);
+    for (var i: i32 = 0; i < MAX_PRIMARY_STEPS; i = i + 1) {
+        if (i >= u.stepsI) { break; }
+        let p = ro + rd * mt;
+        let d = scene(p, blobT);
+        if (d < 0.001) { hit = true; hitP = p; break; }
+        if (mt > 8.0) { break; }
+        mt = mt + d * 0.85;
+    }
+
+    if (!hit) {
+        // Miss path — background + dither.
+        let dbgD = fract(sin(dot(in.pos.xy, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+        return vec4<f32>(bg + (dbgD - 0.5) / 255.0, 1.0);
+    }
+
+    let n    = estimateNormal(hitP, blobT);
+    let ao   = surfaceAO(hitP, n, blobT);
+    let viewDir = -rd;
+    let NdotV   = clamp(dot(n, viewDir), 0.0, 1.0);
+
+    // Schlick Fresnel — F0=0.04, power=4.5 (Metal: "schlickPower = 4.5").
+    let schlickPower: f32 = 4.5;
+    let fresnel = schlickTuned(NdotV, 0.04, schlickPower);
+
+    // ---- IOR / dispersion setup ------------------------------------------
+    // Metal: baseIOR=1.500, etaG=1/baseIOR. Dispersion: R=1/1.485, B=1/1.515.
+    // Here: ior uniform replaces 1.500; dispSpread replaces the 0.015 delta.
+    // Metal dispSpread is implicit: 1.500 - 1.485 = 0.015.
+    // Uniform dispSpread default = 0.030 (matches Metal's exaggerated spread).
+    // Wait — Metal uses etaR = 1/(baseIOR - 0.015) = 1/1.485 and
+    //         etaB = 1/(baseIOR + 0.015) = 1/1.515.
+    // So the spread in IOR is +-0.015 around 1.500, total spread = 0.030.
+    // Control dispSpread maps to the +-half-delta in IOR.
+    let baseIOR    = u.ior;
+    let halfSpread = u.dispSpread * 0.5;
+    let etaR = select(1.0 / baseIOR, 1.0 / (baseIOR - halfSpread), useDispersion);
+    let etaG = 1.0 / baseIOR;
+    let etaB = select(1.0 / baseIOR, 1.0 / (baseIOR + halfSpread), useDispersion);
+
+    var refractedSample: vec3<f32>;
+    var pathThickness: f32 = 0.6;
+
+    if (useTwoPass) {
+        let inDirG = refract(rd, n, etaG);
+        var exitPG: vec3<f32>;
+        var exitNG: vec3<f32>;
+        var pLG: f32 = 0.0;
+        let gotG = marchInside(hitP, inDirG, blobT, &exitPG, &exitNG, &pLG);
+        if (gotG) { pathThickness = pLG; }
+
+        // Surface grain — fine procedural perturbation on refraction dirs.
+        let grain = hash33(hitP * 60.0 + u.time * 0.25) * 0.012;
+
+        if (useDispersion) {
+            // 9-tap spectral integration.
+            // Metal: minIOR=1.485, maxIOR=1.515 (+-0.015 around 1.500, total=0.030).
+            // halfSpread = dispSpread*0.5 = 0.015 at default, so:
+            //   minIOR = 1.500 - 0.015 = 1.485  maxIOR = 1.500 + 0.015 = 1.515. Exact match.
+            let minIOR = baseIOR - halfSpread;
+            let maxIOR = baseIOR + halfSpread;
+            var spectralAcc: vec3<f32> = vec3<f32>(0.0);
+            var weightAcc:   vec3<f32> = vec3<f32>(0.0);
+
+            // Per-pixel jitter.
+            let jitter = fract(sin(dot(in.pos.xy, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+            let jOff   = (jitter - 0.5) * (1.0 / 8.0);   // 1/(NSPEC-1) = 1/8
+
+            // 9-tap loop — fixed count, not user-controllable (Metal default).
+            for (var s: i32 = 0; s < 9; s = s + 1) {
+                let w   = clamp(f32(s) / 8.0 + jOff, 0.0, 1.0);
+                let ior2 = mix(minIOR, maxIOR, w);
+                let inDir2 = refract(rd, n, 1.0 / ior2);
+                var outDir: vec3<f32>;
+                if (gotG) {
+                    outDir = refract(inDir2, exitNG, ior2);
+                } else {
+                    outDir = vec3<f32>(0.0);
+                }
+
+                let exitMag = length(outDir);
+                let tirSoft = smoothstep(0.05, 0.40, exitMag);
+
+                // TIR fallback — IBL in inward-reflected direction.
+                let tirRefl = sampleEnv(normalize(reflect(inDir2, exitNG))) * 0.55;
+
+                // Per-tap wavelength jitter.
+                let perTapJitter = hash33(hitP * 75.0
+                                         + vec3<f32>(w * 17.3, jitter, 0.0)) * 0.006;
+                let outDirJ = outDir + grain + perTapJitter;
+                let uvS = clamp(in.uv + outDirJ.xy * 0.20, vec2<f32>(0.0), vec2<f32>(1.0));
+                let bgS = blurBg(uvS, u.time, aspect, dayPal);
+
+                let sampleV = mix(tirRefl, bgS, tirSoft);
+
+                // Wavelength -> RGB sensitivity (wider Gaussians x2.0).
+                var cw: vec3<f32>;
+                cw.r = exp(-pow((w - 0.00) * 2.0, 2.0));
+                cw.g = exp(-pow((w - 0.50) * 2.0, 2.0));
+                cw.b = exp(-pow((w - 1.00) * 2.0, 2.0));
+
+                spectralAcc = spectralAcc + sampleV * cw;
+                weightAcc   = weightAcc   + cw;
+            }
+
+            refractedSample = spectralAcc / max(weightAcc, vec3<f32>(0.001));
+
+        } else {
+            // Two-pass, no dispersion.
+            var outG = vec3<f32>(0.0);
+            if (gotG) { outG = refract(inDirG, exitNG, baseIOR); }
+            let exitMagG = length(outG);
+            let tirSoft  = smoothstep(0.05, 0.40, exitMagG);
+            let tirRefl  = sampleEnv(normalize(reflect(inDirG, exitNG))) * 0.55;
+            outG = outG + grain;
+            let uvG = clamp(in.uv + outG.xy * 0.20, vec2<f32>(0.0), vec2<f32>(1.0));
+            let bgG = blurBg(uvG, u.time, aspect, dayPal);
+            refractedSample = mix(tirRefl, bgG, tirSoft);
+        }
+
+    } else {
+        // Cheap single-pass screen-space refraction.
+        let dG = refract(rd, n, etaG);
+        refractedSample = backgroundColor(
+            clamp(in.uv + dG.xy * 0.10, vec2<f32>(0.0), vec2<f32>(1.0)),
+            u.time, aspect, dayPal);
+
+        if (useDispersion) {
+            let dR = refract(rd, n, etaR);
+            let dB = refract(rd, n, etaB);
+            let sR = backgroundColor(
+                clamp(in.uv + dR.xy * 0.10, vec2<f32>(0.0), vec2<f32>(1.0)),
+                u.time, aspect, dayPal);
+            let sB = backgroundColor(
+                clamp(in.uv + dB.xy * 0.10, vec2<f32>(0.0), vec2<f32>(1.0)),
+                u.time, aspect, dayPal);
+            refractedSample = vec3<f32>(sR.r, refractedSample.g, sB.b);
+        }
+    }
+
+    // ---- Beer-Lambert absorption ------------------------------------------
+    // Verbatim from Mercury.metal.
+    if (useAbsorption) {
+        let thickness = select(
+            0.6 * NdotV + 0.18,
+            pathThickness,
+            useTwoPass
+        );
+        let depth = thickness * thickness;
+        let sigma_a = vec3<f32>(0.18, 0.10, 0.075);
+        let transmittance = exp(-sigma_a * depth * 2.4);
+        refractedSample = refractedSample * transmittance;
+
+        // Internal volume scatter.
+        let scatter = 1.0 - exp(-thickness * 0.5);
+        refractedSample = refractedSample + vec3<f32>(0.20, 0.26, 0.34) * scatter * 0.16;
+    }
+
+    // ---- Fake internal caustic -------------------------------------------
+    {
+        let caustic = pow(NdotV, 10.0)
+                    * smoothstep(0.35, 1.0, pathThickness);
+        refractedSample = refractedSample + vec3<f32>(1.00, 0.94, 0.78) * caustic * 0.55;
+    }
+
+    // ---- Environment vibrancy boost (~22%) --------------------------------
+    {
+        let lum = dot(refractedSample, vec3<f32>(0.2126, 0.7152, 0.0722));
+        refractedSample = mix(vec3<f32>(lum), refractedSample, 1.22);
+    }
+
+    // ---- Surface AO on refracted sample ----------------------------------
+    refractedSample = refractedSample * mix(0.45, 1.0, ao);
+
+    // ---- IBL specular reflection -----------------------------------------
+    let reflDir   = reflect(rd, n);
+    let sharpRefl = sampleEnv(reflDir);
+
+    // 3-tap clearcoat blur (120-degree spacing).
+    // Metal: t1 = normalize(cross(n, abs(n.y)<0.95 ? float3(0,1,0) : float3(1,0,0)))
+    // WGSL select on vec3 is fine; the up-ref vector selects between world-up
+    // and world-right to avoid degeneracy when n is nearly vertical.
+    let upRef = select(vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), abs(n.y) < 0.95);
+    let t1 = normalize(cross(n, upRef));
+    let t2 = cross(n, t1);
+    let coatJitter: f32 = 0.10;
+    var blurRefl: vec3<f32> = vec3<f32>(0.0);
+    for (var i: i32 = 0; i < 3; i = i + 1) {
+        let a = f32(i) * (6.2831853 / 3.0);
+        let j = (cos(a) * t1 + sin(a) * t2) * coatJitter;
+        blurRefl = blurRefl + sampleEnv(normalize(reflDir + j));
+    }
+    blurRefl = blurRefl / 3.0;
+    var reflectedColor = mix(sharpRefl, blurRefl, 0.18);
+
+    // EDR specular flare.
+    {
+        let reflLum  = dot(reflectedColor, vec3<f32>(0.2126, 0.7152, 0.0722));
+        let edrBoost = smoothstep(0.7, 1.6, reflLum) * 1.5;
+        reflectedColor = reflectedColor * (1.0 + edrBoost);
+    }
+
+    // Smooth TIR-Fresnel integration.
+    let testRefract   = refract(rd, n, etaG);
+    let refractMag    = length(testRefract);
+    let tirSmooth     = 1.0 - smoothstep(0.05, 0.40, refractMag);
+    let effectiveFresnel = clamp(fresnel + tirSmooth * 0.55, 0.0, 1.0);
+
+    var col = mix(refractedSample, reflectedColor, effectiveFresnel);
+
+    // ---- Anisotropic specular glints -------------------------------------
+    // Verbatim from Mercury.metal (flow tangent derivation).
+    var flowT: vec3<f32>;
+    if (abs(n.y) > 0.95) {
+        flowT = normalize(vec3<f32>(0.0, 0.0, 1.0) - n * n.z);
+    } else {
+        flowT = normalize(vec3<f32>(0.0, 1.0, 0.0) - n * n.y);
+    }
+    let flowB   = normalize(cross(n, flowT));
+    let microN  = normalize(n + hash33(hitP * 80.0) * 0.022);
+    let fresnelGlint = 0.4 + 0.6 * fresnel;
+
+    // Key glint.
+    {
+        let keyDir2 = normalize(vec3<f32>(0.45, 0.62, -0.35));
+        let halfV   = normalize(keyDir2 + viewDir);
+        let NdotH   = clamp(dot(microN, halfV), 0.0, 1.0);
+        let HdotT   = dot(halfV, flowT);
+        let HdotB   = dot(halfV, flowB);
+        let anisoH  = NdotH - HdotT * HdotT * 0.02 - HdotB * HdotB * 3.0;
+        let glint   = smoothstep(0.997, 1.0, clamp(anisoH, 0.0, 1.0));
+        col = col + vec3<f32>(2.4, 2.3, 2.1) * glint * fresnelGlint;
+    }
+
+    // Fill glint.
+    {
+        let fillDir2 = normalize(vec3<f32>(-0.55, 0.35, -0.40));
+        let halfV    = normalize(fillDir2 + viewDir);
+        let NdotH    = clamp(dot(microN, halfV), 0.0, 1.0);
+        let HdotT    = dot(halfV, flowT);
+        let HdotB    = dot(halfV, flowB);
+        let anisoH   = NdotH - HdotT * HdotT * 0.04 - HdotB * HdotB * 3.5;
+        let glint    = pow(clamp(anisoH, 0.0, 1.0), 64.0);
+        col = col + vec3<f32>(0.85, 0.95, 1.10) * glint * 0.7 * fresnelGlint;
+    }
+
+    // Micro-specular sheen.
+    {
+        let sheenDir = normalize(vec3<f32>(0.30, 0.55, -0.30));
+        let halfV    = normalize(sheenDir + viewDir);
+        let NdotH    = clamp(dot(n, halfV), 0.0, 1.0);
+        let sheen    = pow(NdotH, 28.0);
+        col = col + vec3<f32>(0.92, 0.98, 1.10) * sheen * 0.20 * fresnelGlint;
+    }
+
+    // Zero-roughness clearcoat hot-spots.
+    {
+        let keyDir2 = normalize(vec3<f32>(0.45, 0.62, -0.35));
+        let halfV   = normalize(keyDir2 + viewDir);
+        let NdotH   = clamp(dot(n, halfV), 0.0, 1.0);
+        let coat    = smoothstep(0.9993, 1.0, NdotH);
+        col = col + vec3<f32>(3.0, 2.95, 2.7) * coat;
+    }
+    {
+        let fillDir2 = normalize(vec3<f32>(-0.55, 0.35, -0.40));
+        let halfV    = normalize(fillDir2 + viewDir);
+        let NdotH    = clamp(dot(n, halfV), 0.0, 1.0);
+        let coat     = smoothstep(0.9990, 1.0, NdotH);
+        col = col + vec3<f32>(2.6, 2.7, 2.9) * coat * 0.5;
+    }
+
+    // No clamp — let HDR highlights ride above 1.0 (EDR).
+    col = max(col, vec3<f32>(0.0));
+
+    // Subtle S-curve grade on [0,1] LDR portion only.
+    {
+        let ldrPart = min(col, vec3<f32>(1.0));
+        let sCurved = ldrPart * ldrPart * (vec3<f32>(3.0) - 2.0 * ldrPart);
+        let hdrPart = max(col - vec3<f32>(1.0), vec3<f32>(0.0));
+        col = mix(ldrPart, sCurved, 0.18) + hdrPart;
+    }
+
+    // Output dither.
+    let dither = fract(sin(dot(in.pos.xy, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+    col = col + (dither - 0.5) / 255.0;
+
+    // Vignette (u.vignette scales strength; Metal default effective 0.42 comes
+    // from 0.42 * smoothstep(0.85, 2.10, ...) with vignette=1.0).
+    let vig = 1.0 - 0.42 * u.vignette * smoothstep(0.85, 2.10, length(ndc));
+    return vec4<f32>(col * vig, 1.0);
+}
+`;
+
+// ---------------------------------------------------------------------------
+// HUD
+// ---------------------------------------------------------------------------
+const hud = window.SJHud.createHud({
+  title:  'Mercury',
+  build:  BUILD,
+  canvas: canvas,
+  help:   ['console: window.merc.*'],
+  lines:  [{ id: 'steps', init: '70 steps' }],
+});
+
+// ---------------------------------------------------------------------------
+// Controls
+// Prefs.swift defaults: useDispersion=true, useTwoPassRefraction=true,
+//   useAbsorption=true, timeOfDayMode=.fastCycle, fastCyclePeriodSeconds=240.
+// Metal defaults: baseIOR=1.500, dispSpread implied=0.030, vignette@0.42*1.0=1.0.
+// ---------------------------------------------------------------------------
+let elapsed  = 0.0;
+let lastStepsReported = -1;
+
+const ctrl = window.SJControls.create({
+  title: 'Mercury',
+  build: BUILD,
+  ns:    'merc',
+  controls: [
+    { id: 'speed',      label: 'Speed',      type: 'slider',  min: 0,    max: 3,   step: 0.01, default: 1 },
+    { id: 'blobSpeed',  label: 'Blob Speed', type: 'slider',  min: 0,    max: 3,   step: 0.01, default: 1 },
+    { id: 'ior',        label: 'IOR',        type: 'slider',  min: 1.2,  max: 2.0, step: 0.005, default: 1.5 },
+    { id: 'dispSpread', label: 'Disp Spread',type: 'slider',  min: 0,    max: 0.08,step: 0.001, default: 0.030 },
+    { id: 'vignette',   label: 'Vignette',   type: 'slider',  min: 0,    max: 1.5, step: 0.01, default: 1 },
+    { id: 'steps',      label: 'Steps',      type: 'slider',  min: 32,   max: 96,  step: 1,    default: 70 },
+    { id: 'dispersion', label: 'Dispersion', type: 'toggle',  default: true },
+    { id: 'twoPass',    label: 'Two-Pass',   type: 'toggle',  default: true },
+    { id: 'absorption', label: 'Absorption', type: 'toggle',  default: true },
+    { id: 'todMode',    label: 'ToD Mode',   type: 'select',
+      options: ['Fast cycle', 'Wall clock', 'Manual'], default: 'Fast cycle' },
+    { id: 'todPeriod',  label: 'Cycle (s)',  type: 'slider',  min: 10,   max: 600, step: 1,    default: 240 },
+    { id: 'todScrub',   label: 'ToD Scrub',  type: 'slider',  min: 0,    max: 1,   step: 0.001, default: 0 },
+    { id: 'paused',     label: 'Pause',      type: 'toggle',  default: false },
+    { id: 'restart',    label: 'Restart',    type: 'button',  onClick: () => { elapsed = 0.0; } },
+  ],
+});
+
+// ---------------------------------------------------------------------------
+// Uniform buffer helpers
+// 48 bytes — see file header for full ABI.
+// DataView used for u32 (flags@16) and i32 (stepsI@40) fields.
+// Float32Array view used for all f32 fields.
+// ---------------------------------------------------------------------------
+const UNIFORM_BYTES = 48;
+const uBuf32 = new Float32Array(UNIFORM_BYTES / 4);  // 12 floats
+const uDV    = new DataView(uBuf32.buffer);            // for u32 / i32 writes
+
+// Field index helpers (byte offset / 4 for Float32Array indexing).
+const IDX_TIME       = 0;   // offset 0
+// IDX_PAD0          = 1    // offset 4  (always 0.0)
+const IDX_RES_X      = 2;   // offset 8
+const IDX_RES_Y      = 3;   // offset 12
+// flags @ offset 16 -> written via DataView.setUint32(16, ...)
+const IDX_TOD        = 5;   // offset 20
+const IDX_IOR        = 6;   // offset 24
+const IDX_DISP_SPREAD= 7;   // offset 28
+const IDX_BLOB_SPEED = 8;   // offset 32
+const IDX_VIGNETTE   = 9;   // offset 36
+// stepsI @ offset 40 -> written via DataView.setInt32(40, ...)
+// _pad1  @ offset 44 -> always 0
+
+// ---------------------------------------------------------------------------
+// Boot
+// ---------------------------------------------------------------------------
+async function main() {
+  if (!navigator.gpu) {
+    hud.report('WebGPU unavailable',
+      'navigator.gpu is undefined. Needs Chrome/Edge 113+, Safari 18+, or Firefox Nightly with WebGPU enabled.');
+    return;
+  }
+
+  let adapter = null;
+  try { adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }); }
+  catch (e) { hud.report('requestAdapter() threw', (e && e.stack) || String(e)); return; }
+  if (!adapter) {
+    hud.report('No GPU adapter',
+      'navigator.gpu.requestAdapter() returned null. The GPU may be blocklisted, or other WebGPU tabs are holding all adapters — close them and reload.');
+    return;
+  }
+
+  let device;
+  try { device = await adapter.requestDevice(); }
+  catch (e) { hud.report('requestDevice() failed', (e && e.stack) || String(e)); return; }
+  device.lost.then(info => hud.report('GPU device lost', info.reason + ' — ' + info.message));
+  device.addEventListener('uncapturederror', ev => {
+    console.error('[mercury] uncaptured GPU error:', ev.error);
+    hud.report('GPU validation error', String((ev.error && ev.error.message) || ev.error));
+  });
+
+  const ctx = canvas.getContext('webgpu');
+  if (!ctx) { hud.report('No WebGPU canvas context', "canvas.getContext('webgpu') returned null."); return; }
+  const format = navigator.gpu.getPreferredCanvasFormat();
+  const dpr    = Math.min(window.devicePixelRatio || 1, 2);
+
+  function resize() {
+    canvas.width  = Math.floor(window.innerWidth  * dpr);
+    canvas.height = Math.floor(window.innerHeight * dpr);
+    ctx.configure({ device, format, alphaMode: 'opaque' });
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // Shader module + getCompilationInfo dual guard (blackhole lesson).
+  const module = device.createShaderModule({ label: 'Mercury', code: WGSL });
+  const ciFn = module.getCompilationInfo ? module.getCompilationInfo.bind(module)
+             : module.compilationInfo    ? module.compilationInfo.bind(module)
+             : null;
+  if (ciFn) {
+    const info = await ciFn();
+    const msgs = (info && info.messages) || [];
+    const errs = msgs.filter(m => m.type === 'error');
+    if (msgs.length) {
+      console[errs.length ? 'error' : 'warn']('[mercury] WGSL messages:\n' +
+        msgs.map(m => m.type + ' L' + m.lineNum + ':' + m.linePos + '  ' + m.message).join('\n'));
+    }
+    if (errs.length) {
+      hud.report('WGSL compile error',
+        errs.map(m => 'L' + m.lineNum + ':' + m.linePos + '  ' + m.message).join('\n'));
+      return;
+    }
+  }
+
+  const uniformBuf = device.createBuffer({
+    size:  UNIFORM_BYTES,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+  const bgl = device.createBindGroupLayout({
+    entries: [{ binding: 0, visibility: GPUShaderStage.FRAGMENT,
+                buffer: { type: 'uniform' } }],
+  });
+  const bindGroup = device.createBindGroup({
+    layout: bgl,
+    entries: [{ binding: 0, resource: { buffer: uniformBuf } }],
+  });
+  const pipeline = device.createRenderPipeline({
+    label:  'Mercury',
+    layout: device.createPipelineLayout({ bindGroupLayouts: [bgl] }),
+    vertex:   { module, entryPoint: 'vs_main' },
+    fragment: {
+      module, entryPoint: 'fs_main', targets: [{ format }],
+      constants: { MAX_PRIMARY_STEPS: 96 },
+    },
+    primitive: { topology: 'triangle-list' },
+  });
+
+  // ---------------------------------------------------------------------------
+  // Time-of-day helper
+  // ---------------------------------------------------------------------------
+  function computeTimeOfDay() {
+    const mode   = ctrl.value('todMode');
+    if (mode === 'Manual') {
+      return ctrl.value('todScrub');
+    } else if (mode === 'Wall clock') {
+      const now = new Date();
+      const sod = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+      return sod / 86400.0;
+    } else {
+      // Fast cycle: fract(elapsed / period). Mirrors Swift fastCycle branch.
+      const period = ctrl.value('todPeriod');
+      return (elapsed / period) - Math.floor(elapsed / period);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Render loop
+  // ---------------------------------------------------------------------------
+  let t0    = performance.now();
+  let lastT = t0;
+
+  function renderFrame(now) {
+    const dt = Math.min(0.05, (now - lastT) / 1000.0);
+    lastT = now;
+
+    if (!ctrl.value('paused')) {
+      elapsed += dt * ctrl.value('speed');
+    }
+
+    // ---- Pack uniforms -------------------------------------------------------
+    // Clear buffer (ensures pad bytes stay zero).
+    uBuf32.fill(0);
+
+    const stepsVal = Math.round(ctrl.value('steps'));
+
+    uBuf32[IDX_TIME]        = elapsed;
+    // uBuf32[1] = _pad0 = 0 (already cleared)
+    uBuf32[IDX_RES_X]       = canvas.width;
+    uBuf32[IDX_RES_Y]       = canvas.height;
+    // flags @ byte offset 16 — must use DataView for u32 correctness.
+    let flags = 0;
+    if (ctrl.value('dispersion')) flags |= 1;
+    if (ctrl.value('twoPass'))    flags |= 2;
+    if (ctrl.value('absorption')) flags |= 4;
+    uDV.setUint32(16, flags, true);   // little-endian
+    uBuf32[IDX_TOD]         = computeTimeOfDay();
+    uBuf32[IDX_IOR]         = ctrl.value('ior');
+    uBuf32[IDX_DISP_SPREAD] = ctrl.value('dispSpread');
+    uBuf32[IDX_BLOB_SPEED]  = ctrl.value('blobSpeed');
+    uBuf32[IDX_VIGNETTE]    = ctrl.value('vignette');
+    // stepsI @ byte offset 40 — must use DataView for i32 correctness.
+    uDV.setInt32(40, stepsVal, true);  // little-endian
+    // uDV @ offset 44 = _pad1 = 0 (already cleared)
+
+    device.queue.writeBuffer(uniformBuf, 0, uBuf32);
+
+    // ---- Render pass ---------------------------------------------------------
+    const enc  = device.createCommandEncoder();
+    const pass = enc.beginRenderPass({
+      colorAttachments: [{
+        view:       ctx.getCurrentTexture().createView(),
+        loadOp:     'clear',
+        storeOp:    'store',
+        clearValue: { r: 0, g: 0, b: 0, a: 1 },
+      }],
+    });
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.draw(3);
+    pass.end();
+    device.queue.submit([enc.finish()]);
+
+    // ---- HUD update ----------------------------------------------------------
+    if (stepsVal !== lastStepsReported) {
+      hud.set('steps', stepsVal + ' steps');
+      lastStepsReported = stepsVal;
+    }
+    hud.tick(now);
+  }
+
+  function frame(now) {
+    try { renderFrame(now); }
+    catch (e) {
+      hud.report('Render-loop exception', (e && e.stack) || String(e));
+      return;
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+main().catch(err => {
+  console.error('[mercury] init failed:', err);
+  hud.report('Init exception', (err && err.stack) || String(err));
+});
+</script>
+<script src="../lib/sj-capture.js"></script>
+<script src="../tests/loader.js"></script>
+<script>
+// Studio Joe — back-link (hidden when this page is loaded inside an iframe
+// preview on /savers.html). Plain DOM, no innerHTML; near-opaque scrim only
+// so it stays legible over the animating canvas.
+(function () {
+  if (window.top !== window.self) return;
+  var a = document.createElement("a");
+  a.href = "/savers.html";
+  a.textContent = "← Savers";
+  Object.assign(a.style, {
+    position: "fixed", bottom: "14px", left: "14px", zIndex: "2147483646",
+    color: "rgba(255,255,255,0.55)", textDecoration: "none",
+    font: "11px/1 ui-monospace, SF Mono, SFMono-Regular, Menlo, monospace",
+    background: "rgba(6,6,8,0.82)",
+    padding: "8px 13px", borderRadius: "10px",
+    border: "1px solid rgba(255,255,255,0.10)",
+    transition: "color .15s, border-color .15s",
+  });
+  a.addEventListener("mouseenter", function () {
+    a.style.color = "rgba(255,255,255,0.92)";
+    a.style.borderColor = "rgba(255,255,255,0.3)";
+  });
+  a.addEventListener("mouseleave", function () {
+    a.style.color = "rgba(255,255,255,0.55)";
+    a.style.borderColor = "rgba(255,255,255,0.10)";
+  });
+  document.body.appendChild(a);
+})();
+</script>
+</body>
+</html>

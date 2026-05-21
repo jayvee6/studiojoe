@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lattice — WebGPU Saver</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; }
+  /* Lesson 3: scope to canvas ID ONLY — a bare canvas{} rule also matches the
+     HUD sparkline canvas and stretches its 150x28 bitmap to full viewport. */
+  #gpu-canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<canvas id="gpu-canvas"></canvas>
+
+<script src="../lib/sj-hud.js?v=sv-lattice-001"></script>
+<script src="../lib/sj-controls.js?v=sv-lattice-001"></script>
+<script type="module">
+// ============================================================================
+// Lattice — WebGPU/WGSL port of Lattice.metal (StudioJoeSavers).
+//
+// Idempotency key: lattice / sv-lattice-001
+//
+// Source shader: StudioJoeSavers/Sources/SaverCore/Shaders/Lattice.metal
+// Technique: gyroid TPMS SDF sphere-trace, spiral camera dive, inner point
+//   light + Beer-Lambert absorption, iridescent Fresnel rim, Blinn-Phong spec,
+//   black fog, EDR top-lift, triangular dither, vignette.
+//
+// Hard-won lessons (inherited verbatim from blackhole.html):
+//   1. getCompilationInfo dual-guard (Chrome renamed it).
+//   2. DPR clamp to <=2 prevents 3x memory on HiDPI.
+//   3. CSS scoped to #gpu-canvas, never bare canvas{}.
+//   4. ZERO backtick characters inside the WGSL template literal, incl. comments.
+//   5. atan2 used without seam issue (only in dither hash, no periodic branch).
+//   6. HUD tick-only; never re-implement EMA perf numbers.
+//
+// Uniform ABI (64 bytes, 16 x f32, stride %16 == 0):
+//   Offset  0: time        f32
+//   Offset  4: _pad        f32   -- pad so resolution lands on 8-byte boundary
+//   Offset  8: resolution  vec2<f32>  (8-byte aligned — WGSL requires align(8))
+//   Offset 16: speed       f32   -- time multiplier
+//   Offset 20: gyroidScale f32   -- gyroid cell scale (Metal default: 1.6)
+//   Offset 24: gyThickness f32   -- gyroid wall thickness (Metal default: 0.55)
+//   Offset 28: bubble      f32   -- safety-sphere radius (Metal default: 0.50)
+//   Offset 32: lightInt    f32   -- inner-light intensity scale
+//   Offset 36: absorb      f32   -- Beer-Lambert sigma_a scale
+//   Offset 40: fresnelGain f32   -- iridescent Fresnel rim gain
+//   Offset 44: fogScale    f32   -- black-fog density scale
+//   Offset 48: edgeGlowG   f32   -- edge-glow accumulator gain
+//   Offset 52: stepsF      f32   -- live step count (cast to i32 in shader)
+//   Offset 56: vignette    f32   -- vignette strength
+//   Offset 60: _pad2       f32
+// Total: 64 bytes
+// NOTE: Metal packs float2 at offset 4 (Metal has relaxed alignment vs WGSL).
+//   WGSL requires vec2<f32> align(8). We insert _pad at offset 4 so resolution
+//   lands at offset 8. JS Float32Array mirrors this layout exactly.
+//
+// Matrix order decision:
+//   Metal float3x3(row0,row1,row2) is ROW-major constructor.
+//   WGSL mat3x3<f32>(col0,col1,col2) is COLUMN-major constructor.
+//   We transpose the constructor args so M*v yields identical results.
+//   rotY: Metal rows [c,0,s][0,1,0][-s,0,c] -> WGSL cols [c,0,-s][0,1,0][s,0,c]
+//   rotX: Metal rows [1,0,0][0,c,s][0,-s,c] -> WGSL cols [1,0,0][0,c,-s][0,s,c]
+//   Multiply order (rotY * rotX) is preserved identically.
+//
+// steps as live uniform:
+//   WGSL loop: for(i<128){ if(i >= stepsI){ break; } ... }
+//   Compile-time guard (128) satisfies WGSL uniform-control-flow; runtime
+//   stepsI (from stepsF cast to i32, clamped 24..128) makes slider live.
+//   Default stepsI=64 exactly matches Metal.
+// ============================================================================
+
+const BUILD = 'sv-lattice-001';
+const canvas = document.getElementById('gpu-canvas');
+
+// ---- WGSL -----------------------------------------------------------------
+// IMPORTANT: no backtick characters anywhere inside this string. Use single
+// or double quotes exclusively — even in WGSL comments — or the JS template
+// literal breaks catastrophically with a parse error at the end of the page.
+const WGSL = /* wgsl */`
+// Uniform struct — 64 bytes, 16 f32 fields, stride %16 == 0.
+// WGSL requires vec2<f32> to be align(8). One f32 pad before resolution
+// puts it at offset 8 (8-byte aligned). JS Float32Array mirrors exactly.
+struct U {
+    time:        f32,         // 0
+    _pad:        f32,         // 4   pad -> resolution lands at offset 8
+    resolution:  vec2<f32>,   // 8   (8-byte aligned, WGSL align(8) satisfied)
+    speed:       f32,         // 16  control: time multiplier
+    gyroidScale: f32,         // 20  control: gyroid cell scale
+    gyThickness: f32,         // 24  control: wall thickness
+    bubble:      f32,         // 28  control: safety-sphere radius
+    lightInt:    f32,         // 32  control: inner-light intensity scale
+    absorb:      f32,         // 36  control: Beer-Lambert sigma_a scale
+    fresnelGain: f32,         // 40  control: iridescent Fresnel rim gain
+    fogScale:    f32,         // 44  control: black-fog density scale
+    edgeGlowG:   f32,         // 48  control: edge-glow gain
+    stepsF:      f32,         // 52  control: live step count (cast to i32)
+    vignette:    f32,         // 56  control: vignette strength
+    _pad2:       f32,         // 60
+}
+@group(0) @binding(0) var<uniform> u: U;
+
+struct VSOut {
+    @builtin(position) pos: vec4<f32>,
+    @location(0)       uv:  vec2<f32>,
+}
+
+// Full-screen triangle -- verbatim from blackhole.html (proven pattern).
+@vertex fn vs_main(@builtin(vertex_index) vid: u32) -> VSOut {
+    var p = array<vec2<f32>, 3>(
+        vec2<f32>(-1.0, -1.0),
+        vec2<f32>( 3.0, -1.0),
+        vec2<f32>(-1.0,  3.0),
+    );
+    var uvs = array<vec2<f32>, 3>(
+        vec2<f32>(0.0, 0.0),
+        vec2<f32>(2.0, 0.0),
+        vec2<f32>(0.0, 2.0),
+    );
+    var o: VSOut;
+    o.pos = vec4<f32>(p[vid], 0.0, 1.0);
+    o.uv  = uvs[vid];
+    return o;
+}
+
+// ---- Rotation matrices (column-major WGSL; transposed from Metal row-major) -----
+//
+// Metal rotY rows: [c,0,s] [0,1,0] [-s,0,c]
+// WGSL  rotY cols: [c,0,-s] [0,1,0] [s,0,c]
+// Verified: (rotY_wgsl * v).x = c*vx + s*vz  (same as Metal row0.dot(v))
+fn rotY(a: f32) -> mat3x3<f32> {
+    let c = cos(a); let s = sin(a);
+    return mat3x3<f32>(
+        vec3<f32>( c, 0.0, -s),
+        vec3<f32>( 0.0, 1.0, 0.0),
+        vec3<f32>( s, 0.0,  c),
+    );
+}
+
+// Metal rotX rows: [1,0,0] [0,c,s] [0,-s,c]
+// WGSL  rotX cols: [1,0,0] [0,c,-s] [0,s,c]
+// Verified: (rotX_wgsl * v).y = c*vy + s*vz  (same as Metal row1.dot(v))
+fn rotX(a: f32) -> mat3x3<f32> {
+    let c = cos(a); let s = sin(a);
+    return mat3x3<f32>(
+        vec3<f32>(1.0, 0.0, 0.0),
+        vec3<f32>(0.0,  c,  -s),
+        vec3<f32>(0.0,  s,   c),
+    );
+}
+
+// ---- Gyroid SDF (verbatim math from Lattice.metal sdGyroid) ------------------
+//
+// Triply-periodic minimal surface: sin(x)cos(y)+sin(y)cos(z)+sin(z)cos(x),
+// expressed as dot(sin(p), cos(p.zxy)).  Thicken with abs(v)-thickness.
+// Divide by scale to restore world-space distance for sphere-tracing.
+fn sdGyroid(p: vec3<f32>, scale: f32, thickness: f32) -> f32 {
+    let q = p * scale;
+    let v = dot(sin(q), cos(q.zxy));
+    return (abs(v) - thickness) / scale;
+}
+
+// ---- Smooth-max (verbatim from smaxK in Lattice.metal) ----------------------
+fn smaxK(a: f32, b: f32, k: f32) -> f32 {
+    let h = clamp(0.5 + 0.5 * (a - b) / k, 0.0, 1.0);
+    return mix(b, a, h) + k * h * (1.0 - h);
+}
+
+// ---- Scene SDF (gyroid + camera safety bubble) ------------------------------
+//
+// Metal: smaxK(gy, -sphere, bubbleK) where sphere = length(p-ro) - bubbleR.
+// The "Parting Seas" trick: smooth-subtract a sphere centred at the camera.
+const BUBBLE_K: f32 = 0.18;   // Metal literal -- not exposed as control (minor)
+fn sdScene(p: vec3<f32>, ro: vec3<f32>, gyScale: f32, gyThick: f32, bubbleR: f32) -> f32 {
+    let gy  = sdGyroid(p, gyScale, gyThick);
+    let sph = length(p - ro) - bubbleR;
+    return smaxK(gy, -sph, BUBBLE_K);
+}
+
+// ---- Tetrahedron normal (verbatim from sdSceneNormal in Lattice.metal) ------
+fn sdSceneNormal(p: vec3<f32>, ro: vec3<f32>, gyScale: f32, gyThick: f32, bubbleR: f32) -> vec3<f32> {
+    let eps = 0.005;
+    let k   = vec2<f32>(1.0, -1.0);
+    let g =
+        k.xyy * sdScene(p + k.xyy * eps, ro, gyScale, gyThick, bubbleR) +
+        k.yyx * sdScene(p + k.yyx * eps, ro, gyScale, gyThick, bubbleR) +
+        k.yxy * sdScene(p + k.yxy * eps, ro, gyScale, gyThick, bubbleR) +
+        k.xxx * sdScene(p + k.xxx * eps, ro, gyScale, gyThick, bubbleR);
+    return select(vec3<f32>(0.0, 1.0, 0.0), normalize(g), length(g) > 1e-5);
+}
+
+// ---- Iridescent palette (verbatim from iridescentPalette in Lattice.metal) --
+fn iridescentPalette(t: f32) -> vec3<f32> {
+    let a = vec3<f32>(0.50, 0.45, 0.55);
+    let b = vec3<f32>(0.45, 0.40, 0.50);
+    let c = vec3<f32>(1.00, 1.00, 1.00);
+    let d = vec3<f32>(0.10, 0.40, 0.70);
+    return a + b * cos(6.2831853 * (c * t + d));
+}
+
+// ---- Fragment -----------------------------------------------------------------
+@fragment fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
+    // NDC derivation matches Lattice.metal exactly:
+    //   ndc = uv*2-1 ; ndc.x *= aspect
+    // in.uv is [0..2] for the triangle; uv*2-1 maps [0..1] -> [-1..1].
+    var ndc = in.uv * 2.0 - 1.0;
+    ndc.x *= u.resolution.x / max(u.resolution.y, 1.0);
+
+    let t = u.time;   // already scaled by speed in JS
+
+    // ---- Control-driven shader parameters ----
+    let gyScale    = u.gyroidScale;
+    let gyThick    = u.gyThickness;
+    let bubbleR    = u.bubble;
+    // stepsI: live uniform, compile-time cap 128 satisfies WGSL control-flow.
+    let stepsI = clamp(i32(u.stepsF), 24, 128);
+
+    // ---- Spiral camera dive (verbatim from Lattice.metal) ----
+    let ro = vec3<f32>(
+        sin(t * 0.045) * 0.6,
+        t * 0.18,
+        cos(t * 0.045) * 0.6
+    );
+    // rot = rotY(t*0.06) * rotX(sin(t*0.07)*0.18)
+    // Matrix multiply order preserved; column-major WGSL handles M*N correctly.
+    let rot = rotY(t * 0.06) * rotX(sin(t * 0.07) * 0.18);
+    let rd  = rot * normalize(vec3<f32>(ndc.x, ndc.y, 1.4));
+
+    // ---- Inner glowing core (verbatim) ----
+    let lightCore = ro
+        + rd * 1.8
+        + vec3<f32>(sin(t * 0.13) * 0.3, cos(t * 0.11) * 0.2, sin(t * 0.09) * 0.3);
+    let lightCol = vec3<f32>(0.45, 0.75, 1.20);
+
+    // ---- Raymarch ----
+    // Loop cap 128 with runtime stepsI guard -- satisfies WGSL uniform CF rules.
+    // Default stepsI=64 == Metal. Step factor 0.85, far clip 5.5 verbatim.
+    var marchT  = 0.0;
+    var edgeGlowAcc = 0.0;
+    var hit     = false;
+    var hitP    = vec3<f32>(0.0);
+    for (var i: i32 = 0; i < 128; i = i + 1) {
+        if (i >= stepsI) { break; }
+        let p = ro + rd * marchT;
+        let d = sdScene(p, ro, gyScale, gyThick, bubbleR);
+
+        // Gate exp behind distance check (Metal comment: exp(-d*14) ~ 0 for d>=0.2).
+        if (d < 0.2) {
+            edgeGlowAcc = edgeGlowAcc + exp(-d * 14.0) * 0.022;
+        }
+
+        if (d < 0.001) {
+            hit  = true;
+            hitP = p;
+            break;
+        }
+        if (marchT > 5.5) { break; }
+        // KNOWN ISSUE (sv-lattice-001): verbatim from Lattice.metal. On
+        // WebGPU/Tint the gyroid lattice does not resolve at the default
+        // gyScale 1.6 (only the bubble edge-glow shows); Metal renders it
+        // correctly with identical math. A conservative-step workaround
+        // (d*0.85/gyScale) did NOT fix it, so it is reverted to stay a
+        // faithful 1:1 transcription. Root cause still open — see HANDOVER.md
+        // "Lattice known issue". Do not patch speculatively.
+        marchT = marchT + max(d * 0.85, 0.005);
+    }
+
+    var col = vec3<f32>(0.0);
+
+    if (hit) {
+        let n       = sdSceneNormal(hitP, ro, gyScale, gyThick, bubbleR);
+        let viewDir = -rd;
+        // Metal: saturate(dot(n,viewDir)) -> WGSL: clamp(...,0,1)
+        let NdotV   = clamp(dot(n, viewDir), 0.0, 1.0);
+
+        // ---- Beer-Lambert volume absorption (verbatim) ----
+        let thickness    = clamp(0.4 / max(NdotV, 0.05), 0.4, 4.5);
+        let sigma_a      = vec3<f32>(0.85, 0.55, 0.32);
+        // absorb control scales sigma_a (default 1.0 = identical to Metal).
+        let transmittance = exp(-sigma_a * thickness * 0.55 * u.absorb);
+
+        // ---- Sub-surface scattering (verbatim) ----
+        let lightDist  = length(hitP - lightCore);
+        let lightAtten = 1.0 / (0.25 + lightDist * lightDist * 0.45);
+        // lightInt control scales final brightness (default 1.0 = identical).
+        let throughGlass = lightCol * lightAtten * transmittance * 2.4 * u.lightInt;
+
+        // ---- Iridescent rim (verbatim) ----
+        let palT = length(hitP) * 0.10
+                 + sin(hitP.x * 0.40) * 0.20
+                 + sin(hitP.y * 0.30) * 0.20
+                 + t * 0.05;
+        var rimCol  = iridescentPalette(palT);
+        let fresnel = pow(1.0 - NdotV, 3.5);
+        let magentaTarget = vec3<f32>(1.05, 0.55, 0.95);
+        rimCol = mix(rimCol, magentaTarget, smoothstep(0.55, 1.0, fresnel) * 0.40);
+        // fresnelGain control (default 1.0 = identical to Metal).
+        let fresnelScaled = fresnel * u.fresnelGain;
+
+        // ---- Blinn-Phong specular (verbatim) ----
+        let lightDir = normalize(lightCore - hitP);
+        let halfV    = normalize(lightDir + viewDir);
+        let NdotH    = clamp(dot(n, halfV), 0.0, 1.0);
+        let spec     = pow(NdotH, 80.0);
+        let specPop  = lightCol * spec * 1.8 * lightAtten * 4.0 * u.lightInt;
+
+        // ---- Composite (verbatim) ----
+        // edgeGlowG scales the edge-glow term; default 1.0 = Metal.
+        col = throughGlass
+            + rimCol * fresnelScaled * 1.3
+            + specPop
+            + rimCol * edgeGlowAcc * 0.45 * u.edgeGlowG;
+    } else {
+        // Miss ray: edge halo only (verbatim).
+        col = lightCol * edgeGlowAcc * 0.35 * u.edgeGlowG;
+    }
+
+    // ---- Soft near-plane fade (verbatim) ----
+    let nearFade = smoothstep(0.05, 0.35, marchT);
+    col = col * nearFade;
+
+    // ---- Exponential black fog (verbatim, fogScale control) ----
+    let fog = exp(-marchT * 0.22 * u.fogScale);
+    col = col * fog;
+
+    // ---- EDR top-lift (verbatim; note: web canvas is SDR so >1.0 clips,
+    //      but the math is preserved for fidelity -- just softens highlights) ----
+    let lum = dot(col, vec3<f32>(0.2126, 0.7152, 0.0722));
+    col = col * (1.0 + smoothstep(0.7, 1.5, lum) * 0.85);
+
+    // ---- Triangular-distribution dither (verbatim) ----
+    let n1 = fract(sin(dot(in.pos.xy, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+    let n2 = fract(sin(dot(in.pos.xy, vec2<f32>(45.123, 89.456)) + 0.7) * 27182.818);
+    let dither = (n1 + n2) - 1.0;
+    col = col + dither * (1.0 / 255.0);
+
+    // ---- Vignette (verbatim math, vignette control scales the 0.32 factor) ----
+    let vig = 1.0 - 0.32 * u.vignette * smoothstep(1.30, 2.05, length(ndc));
+
+    return vec4<f32>(max(col * vig, vec3<f32>(0.0)), 1.0);
+}
+`;
+
+// ---- Uniform layout (16 x f32 = 64 bytes) --------------------------------
+const UNIFORM_BYTES = 64;  // verified above in header comment
+const uni = new Float32Array(UNIFORM_BYTES / 4);
+// Field indices (slot = byteOffset/4):
+// [0]=time [1]=_pad [2]=res.x [3]=res.y
+// [4]=speed [5]=gyroidScale [6]=gyThickness [7]=bubble
+// [8]=lightInt [9]=absorb [10]=fresnelGain [11]=fogScale
+// [12]=edgeGlowG [13]=stepsF [14]=vignette [15]=_pad2
+
+// ---- HUD ------------------------------------------------------------------
+const hud = window.SJHud.createHud({
+    title:  'Lattice',
+    build:  BUILD,
+    canvas: canvas,
+    help:   ['console: window.lat.*'],
+    lines:  [{ id: 'steps', init: '64 steps' }],
+});
+const report = hud.report;
+
+// ---- Controls -------------------------------------------------------------
+let elapsed = 0.0;
+const ctrl = window.SJControls.create({
+    title:    'Lattice',
+    build:    BUILD,
+    ns:       'lat',
+    controls: [
+        { id: 'speed',       label: 'Speed',      type: 'slider', min: 0,   max: 3,   step: 0.01, default: 1.0 },
+        { id: 'gyroidScale', label: 'Gyroid Scale',type: 'slider', min: 0.5, max: 3,   step: 0.01, default: 1.6 },
+        { id: 'thickness',   label: 'Thickness',   type: 'slider', min: 0.1, max: 1.2, step: 0.01, default: 0.55 },
+        { id: 'bubble',      label: 'Bubble',      type: 'slider', min: 0.1, max: 1.2, step: 0.01, default: 0.50 },
+        { id: 'lightInt',    label: 'Light Int',   type: 'slider', min: 0,   max: 3,   step: 0.01, default: 1.0 },
+        { id: 'absorb',      label: 'Absorb',      type: 'slider', min: 0,   max: 2,   step: 0.01, default: 1.0 },
+        { id: 'fresnel',     label: 'Fresnel',     type: 'slider', min: 0,   max: 2,   step: 0.01, default: 1.0 },
+        { id: 'fog',         label: 'Fog',         type: 'slider', min: 0,   max: 2,   step: 0.01, default: 1.0 },
+        { id: 'edgeGlow',    label: 'Edge Glow',   type: 'slider', min: 0,   max: 3,   step: 0.01, default: 1.0 },
+        { id: 'steps',       label: 'Steps',       type: 'slider', min: 24,  max: 128, step: 1,    default: 64 },
+        { id: 'vignette',    label: 'Vignette',    type: 'slider', min: 0,   max: 1.5, step: 0.01, default: 1.0 },
+        { id: 'paused',      label: 'Pause',       type: 'toggle', default: false },
+        { id: 'restart',     label: 'Restart',     type: 'button', onClick: () => { elapsed = 0.0; } },
+    ],
+    onChange: (id, v) => {
+        if (id === 'steps') {
+            const stepsI = Math.round(v);
+            hud.set('steps', stepsI + ' steps');
+        }
+    },
+});
+
+// ---- Boot -----------------------------------------------------------------
+async function main() {
+    if (!navigator.gpu) {
+        report('WebGPU unavailable',
+            'navigator.gpu is undefined. Needs Chrome/Edge 113+, Safari 18+, or Firefox Nightly with WebGPU flag.');
+        return;
+    }
+    let adapter = null;
+    try { adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }); }
+    catch (e) { report('requestAdapter() threw', (e && e.stack) || String(e)); return; }
+    if (!adapter) {
+        report('No GPU adapter',
+            'navigator.gpu.requestAdapter() returned null. GPU may be blocklisted or all adapters in use.');
+        return;
+    }
+    let device;
+    try { device = await adapter.requestDevice(); }
+    catch (e) { report('requestDevice() failed', (e && e.stack) || String(e)); return; }
+    device.lost.then(info => report('GPU device lost', info.reason + ' -- ' + info.message));
+    device.addEventListener('uncapturederror', ev => {
+        console.error('[lattice] uncaptured GPU error:', ev.error);
+        report('GPU validation error', String((ev.error && ev.error.message) || ev.error));
+    });
+    const ctx = canvas.getContext('webgpu');
+    if (!ctx) { report('No WebGPU canvas context', "canvas.getContext('webgpu') returned null."); return; }
+    const format = navigator.gpu.getPreferredCanvasFormat();
+
+    // DPR clamp to <=2 (lesson 2: 3x DPR triples memory on HiDPI displays).
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    function resize() {
+        canvas.width  = Math.floor(window.innerWidth  * dpr);
+        canvas.height = Math.floor(window.innerHeight * dpr);
+        ctx.configure({ device, format, alphaMode: 'opaque' });
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    // ---- Compile WGSL with dual getCompilationInfo guard (lesson 1) --------
+    const module = device.createShaderModule({ label: 'Lattice', code: WGSL });
+    // Chrome renamed compilationInfo() -> getCompilationInfo(); support both.
+    const ciFn = module.getCompilationInfo ? module.getCompilationInfo.bind(module)
+               : module.compilationInfo    ? module.compilationInfo.bind(module)
+               : null;
+    if (ciFn) {
+        const info = await ciFn();
+        const msgs = (info && info.messages) || [];
+        const errs = msgs.filter(m => m.type === 'error');
+        if (msgs.length) {
+            console[errs.length ? 'error' : 'warn']('[lattice] WGSL messages:\n' +
+                msgs.map(m => m.type + ' L' + m.lineNum + ':' + m.linePos + '  ' + m.message).join('\n'));
+        }
+        if (errs.length) {
+            report('WGSL compile error',
+                errs.map(m => 'L' + m.lineNum + ':' + m.linePos + '  ' + m.message).join('\n'));
+            return;
+        }
+    }
+
+    // ---- Uniform buffer ----------------------------------------------------
+    const uniformBuf = device.createBuffer({
+        size: UNIFORM_BYTES,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    // ---- Bind group --------------------------------------------------------
+    const bgl = device.createBindGroupLayout({
+        entries: [{ binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } }],
+    });
+    const bindGroup = device.createBindGroup({
+        layout: bgl,
+        entries: [{ binding: 0, resource: { buffer: uniformBuf } }],
+    });
+
+    // ---- Pipeline ----------------------------------------------------------
+    // No MAX_STEPS override constant needed: steps is a live uniform with a
+    // compile-time cap of 128 guarding the loop in-shader.
+    const pipeline = device.createRenderPipeline({
+        label:  'Lattice',
+        layout: device.createPipelineLayout({ bindGroupLayouts: [bgl] }),
+        vertex:   { module, entryPoint: 'vs_main' },
+        fragment: { module, entryPoint: 'fs_main', targets: [{ format }] },
+        primitive: { topology: 'triangle-list' },
+    });
+
+    // ---- Render loop -------------------------------------------------------
+    let lastT = performance.now();
+    hud.set('steps', '64 steps');
+
+    function renderFrame(now) {
+        const dt = Math.min(0.05, (now - lastT) / 1000);
+        lastT = now;
+
+        const paused = ctrl.value('paused');
+        if (!paused) {
+            elapsed += dt * ctrl.value('speed');
+        }
+
+        const stepsVal = Math.round(ctrl.value('steps'));
+
+        // Pack uniforms in exact field order (Float32Array slot = byteOffset/4):
+        uni[0]  = elapsed;                      // time
+        uni[1]  = 0.0;                          // _pad  (pad before vec2 for WGSL align(8))
+        uni[2]  = canvas.width;                 // resolution.x
+        uni[3]  = canvas.height;                // resolution.y
+        uni[4]  = ctrl.value('speed');          // speed (already applied above; fed for potential future use)
+        uni[5]  = ctrl.value('gyroidScale');    // gyroidScale
+        uni[6]  = ctrl.value('thickness');      // gyThickness
+        uni[7]  = ctrl.value('bubble');         // bubble
+        uni[8]  = ctrl.value('lightInt');       // lightInt
+        uni[9]  = ctrl.value('absorb');         // absorb
+        uni[10] = ctrl.value('fresnel');        // fresnelGain
+        uni[11] = ctrl.value('fog');            // fogScale
+        uni[12] = ctrl.value('edgeGlow');       // edgeGlowG
+        uni[13] = stepsVal;                     // stepsF (cast to i32 in shader)
+        uni[14] = ctrl.value('vignette');       // vignette
+        uni[15] = 0.0;                          // _pad2
+
+        device.queue.writeBuffer(uniformBuf, 0, uni);
+
+        const enc  = device.createCommandEncoder();
+        const pass = enc.beginRenderPass({
+            colorAttachments: [{
+                view:       ctx.getCurrentTexture().createView(),
+                loadOp:     'clear',
+                storeOp:    'store',
+                clearValue: { r: 0, g: 0, b: 0, a: 1 },
+            }],
+        });
+        pass.setPipeline(pipeline);
+        pass.setBindGroup(0, bindGroup);
+        pass.draw(3);
+        pass.end();
+        device.queue.submit([enc.finish()]);
+
+        hud.tick(now);
+    }
+
+    function frame(now) {
+        try { renderFrame(now); }
+        catch (e) { report('Render-loop exception', (e && e.stack) || String(e)); return; }
+        requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+}
+
+main().catch(err => {
+    console.error('[lattice] init failed:', err);
+    report('Init exception', (err && err.stack) || String(err));
+});
+</script>
+<script src="../lib/sj-capture.js"></script>
+<script src="../tests/loader.js"></script>
+<script>
+// Studio Joe — back-link (hidden when this page is loaded inside an iframe
+// preview on /savers.html). Plain DOM, no innerHTML; near-opaque scrim only
+// so it stays legible over the animating canvas.
+(function () {
+  if (window.top !== window.self) return;
+  var a = document.createElement("a");
+  a.href = "/savers.html";
+  a.textContent = "← Savers";
+  Object.assign(a.style, {
+    position: "fixed", bottom: "14px", left: "14px", zIndex: "2147483646",
+    color: "rgba(255,255,255,0.55)", textDecoration: "none",
+    font: "11px/1 ui-monospace, SF Mono, SFMono-Regular, Menlo, monospace",
+    background: "rgba(6,6,8,0.82)",
+    padding: "8px 13px", borderRadius: "10px",
+    border: "1px solid rgba(255,255,255,0.10)",
+    transition: "color .15s, border-color .15s",
+  });
+  a.addEventListener("mouseenter", function () {
+    a.style.color = "rgba(255,255,255,0.92)";
+    a.style.borderColor = "rgba(255,255,255,0.3)";
+  });
+  a.addEventListener("mouseleave", function () {
+    a.style.color = "rgba(255,255,255,0.55)";
+    a.style.borderColor = "rgba(255,255,255,0.10)";
+  });
+  document.body.appendChild(a);
+})();
+</script>
+</body>
+</html>

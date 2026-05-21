@@ -1,0 +1,119 @@
+/* sj-design.css — Studio Joe "Nocturne" design tokens, extracted from
+   studiojoe/index.html :root. Single source of truth for the savers showcase:
+   gallery cards, the SJControls panel, nav chrome. The sj-hud.js module
+   inlines its own copy of these tokens (a shared module can't depend on a
+   host :root) — keep the values here in sync with that copy. */
+
+:root {
+  /* Typography */
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+          "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+
+  /* Background */
+  --bg:   #060608;
+  --bg-g: radial-gradient(ellipse 90% 60% at 50% -10%,
+            #122 0%, #0c1418 30%, #08090e 62%, #060608 100%);
+
+  /* Text hierarchy */
+  --label-1: rgba(255,255,255,0.92);   /* primary */
+  --label-2: rgba(255,255,255,0.55);   /* secondary */
+  --label-3: rgba(255,255,255,0.28);   /* tertiary / disabled */
+
+  /* Accent — Nocturne signature teal */
+  --accent:    #2DD4BF;
+  --accent-2:  #f0abfc;
+  --accent-bg: rgba(45,212,191,0.12);
+
+  /* Fill layers */
+  --fill-1: rgba(255,255,255,0.04);
+  --fill-2: rgba(255,255,255,0.08);
+
+  /* Separator */
+  --sep: rgba(255,255,255,0.09);
+
+  /* Glass — NOTE: no backdrop-filter when laid over an animating canvas.
+     A blur is re-evaluated by the compositor every frame: a real per-frame
+     GPU cost and an observer-effect confound for the HUD it sits beside.
+     Use the near-opaque scrim instead (see .sjc-panel below). */
+  --glass-bg:  rgba(255,255,255,0.05);
+  --glass-bdr: rgba(255,255,255,0.10);
+  --glass-shd: 0 8px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08);
+
+  /* Near-opaque scrim — the over-canvas-safe panel background */
+  --scrim: rgba(6,6,8,0.82);
+
+  /* Functional perf colours (sj-design has no warn/bad token; perf
+     legibility beats brand here — matches sj-hud.js exactly) */
+  --ok:   #2DD4BF;
+  --warn: #ffd040;
+  --bad:  #ff5252;
+}
+
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  background: var(--bg);
+  color: var(--label-1);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Showcase nav chrome (per-saver page) ─────────────────────────────── */
+.sj-nav {
+  position: fixed; top: 14px; right: 14px; z-index: 2147483646;
+  display: flex; gap: 8px; pointer-events: auto;
+}
+.sj-nav a {
+  color: var(--label-2); text-decoration: none;
+  font: 11px/1 var(--font-mono);
+  background: var(--scrim);
+  padding: 8px 13px; border-radius: 10px;
+  border: 1px solid var(--glass-bdr);
+  transition: color .15s, border-color .15s;
+}
+.sj-nav a:hover { color: var(--label-1); border-color: rgba(255,255,255,0.3); }
+
+/* ── Gallery (index.html) ─────────────────────────────────────────────── */
+.sj-gallery-wrap { max-width: 1180px; margin: 0 auto; padding: 64px 28px 80px; }
+.sj-gallery-head h1 {
+  font-size: 26px; font-weight: 650; letter-spacing: -0.01em;
+  margin: 0 0 6px;
+}
+.sj-gallery-head p {
+  margin: 0 0 40px; color: var(--label-2); font-size: 14px; max-width: 60ch;
+}
+.sj-grid {
+  display: grid; gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+.sj-card {
+  display: block; text-decoration: none; color: inherit;
+  background: var(--fill-1);
+  border: 1px solid var(--sep); border-radius: 16px;
+  overflow: hidden;
+  transition: border-color .18s, transform .18s, background .18s;
+}
+.sj-card:hover {
+  border-color: rgba(45,212,191,0.45);
+  background: var(--fill-2);
+  transform: translateY(-3px);
+}
+.sj-card-canvas {
+  display: block; width: 100%; aspect-ratio: 16 / 10;
+  background: var(--bg-g);
+}
+.sj-card-body { padding: 16px 18px 18px; }
+.sj-card-body h2 {
+  font-size: 15px; font-weight: 600; margin: 0 0 5px;
+}
+.sj-card-body p {
+  font: 11px/1.5 var(--font-mono);
+  color: var(--label-3); margin: 0;
+}
+.sj-card-tag {
+  display: inline-block; margin-top: 12px;
+  font: 10px/1 var(--font-mono);
+  color: var(--accent); background: var(--accent-bg);
+  padding: 5px 9px; border-radius: 999px;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
