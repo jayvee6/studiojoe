@@ -177,7 +177,7 @@ function cellKey(x, y, z) {
 }
 
 // Shared geometry templates (reuse vertex buffers via clone())
-let pipeGeoTemplate, capGeoTemplate, capInnerGeoTemplate, capBackDiscGeoTemplate, jointGeoTemplate;
+let pipeGeoTemplate, pipeGeoTemplateOpen, capGeoTemplate, capInnerGeoTemplate, capBackDiscGeoTemplate, jointGeoTemplate;
 
 // Pipe heads array
 // Each head: { pos:Vector3, growingFrom:Vector3, dir:Vector3, color:[r,g,b],
@@ -321,13 +321,15 @@ function initScene() {
   // clone still occupies its own VRAM allocation.
   // TODO(perf): InstancedMesh for the up-to-1000 identical segments (out of scope for this pass).
 
-  // P10: body segments are CLOSED-ENDED solid cylinders. The SCNTube's
-  // open-pipe-with-bore look is reserved for cap meshes (flared mouths) where
-  // it's actually visible. Body segments butt end-to-end with identical
-  // material at every junction — the two coplanar disc end-caps z-fight on
-  // identical geometry, which the GPU resolves invisibly. No more rings, no
-  // more dark bore peeking through every segment boundary.
-  pipeGeoTemplate = new THREE.CylinderGeometry(PIPE_OUTER, PIPE_OUTER, SEGMENT_LENGTH, 24, 1, false);
+  // P10: body segments come in two flavours, picked per-material at build:
+  //   - closed: built-in end discs; used for opaque materials (obsidian, tracer)
+  //     so the camera can never peek through a junction into the cavity.
+  //   - open:   no end discs; used for transmissive materials (crystal, glass)
+  //     so light passes through cleanly — closed discs render as visible
+  //     internal cross-sections when transmission > 0 and turn every junction
+  //     into a "stack of pucks inside the tube".
+  pipeGeoTemplate     = new THREE.CylinderGeometry(PIPE_OUTER, PIPE_OUTER, SEGMENT_LENGTH, 24, 1, false);
+  pipeGeoTemplateOpen = new THREE.CylinderGeometry(PIPE_OUTER, PIPE_OUTER, SEGMENT_LENGTH, 24, 1, true);
 
   // Cap outer wall: open-ended flared cylinder (SCNTube outerRadius=0.496, height=0.42)
   // Kept open-ended so the cap reads as a real flared mouth — the BackSide
@@ -869,12 +871,13 @@ function addPipe(from, dir, mat, growDur) {
   alignToDir(outer, dir);
   outer.scale.set(1, 0.001, 1);   // start collapsed
 
-  // P10: single closed-ended cylinder — built-in top + bottom discs replace
-  // the open-ended-wall + BackSide-bore + ring-cap stack. At every interior
-  // junction, segment N's top disc and segment N+1's bottom disc are coplanar
-  // with identical wall material; z-fighting between identical surfaces is
-  // visually invisible. No more annular gap into a dark bore.
-  const wallGeo = pipeGeoTemplate.clone();
+  // P10: pick the template per-material. Opaque materials get closed-ended
+  // cylinders (junctions invisibly z-fight on identical discs). Transmissive
+  // materials get open-ended cylinders so light passes through cleanly
+  // instead of rendering every internal end disc as a visible cross-section.
+  const isTransmissive = mat && mat.transmission > 0;
+  const template = isTransmissive ? pipeGeoTemplateOpen : pipeGeoTemplate;
+  const wallGeo = template.clone();
   const wallMesh = new THREE.Mesh(wallGeo, mat);
   wallMesh.position.set(0, SEGMENT_LENGTH / 2, 0);
   wallMesh.castShadow = true;
