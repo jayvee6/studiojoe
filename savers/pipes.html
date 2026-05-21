@@ -178,6 +178,7 @@ function cellKey(x, y, z) {
 
 // Shared geometry templates (reuse vertex buffers via clone())
 let pipeGeoTemplate, pipeInnerGeoTemplate, capGeoTemplate, capInnerGeoTemplate, jointGeoTemplate;
+let pipeRingGeoTemplate, capRingGeoTemplate;
 
 // Pipe heads array
 // Each head: { pos:Vector3, growingFrom:Vector3, dir:Vector3, color:[r,g,b],
@@ -333,6 +334,16 @@ function initScene() {
 
   // Joint geometry: SCNSphere(radius 0.32, seg 16) — stays solid sphere, unchanged
   jointGeoTemplate = new THREE.SphereGeometry(JOINT_RADIUS, 16, 16);
+
+  // P9: annular end-ring templates — close the open ends of every pipe segment
+  // and cap. Without these, the dark BackSide bore is visible through each
+  // segment's open ends, reading as dark "gaps" all along every pipe run.
+  // RingGeometry sits in the XY plane with +Z normal by default; the meshes
+  // get rotated 90° around X to lie perpendicular to the cylinder's local Y
+  // axis (its length axis). 24 thetaSegments match the cylinders' 24 radial
+  // samples so the ring's outer edge weld-aligns with the wall.
+  pipeRingGeoTemplate = new THREE.RingGeometry(PIPE_INNER, PIPE_OUTER, 24);
+  capRingGeoTemplate  = new THREE.RingGeometry(PIPE_INNER, CAP_OUTER,  24);
 
   // ---- Lights ----
   // Key directional — casts PCF shadows
@@ -875,6 +886,27 @@ function addPipe(from, dir, mat, growDur) {
   boreMesh.castShadow = false;
   outer.add(boreMesh);
 
+  // P9: annular end-rings — close the open ends with the wall material so
+  // adjacent segments weld visually instead of reading as dark gaps where
+  // the BackSide bore peeks through. Two rings per segment (bottom at y=0,
+  // top at y=SEGMENT_LENGTH); at a straight junction these two coplanar rings
+  // from neighbouring segments overlap with identical material, no z-fight.
+  const ringBotGeo = pipeRingGeoTemplate.clone();
+  const ringBotMesh = new THREE.Mesh(ringBotGeo, mat);
+  ringBotMesh.position.set(0, 0, 0);
+  ringBotMesh.rotation.x = Math.PI / 2;     // RingGeometry +Z normal -> -Y
+  ringBotMesh.castShadow = true;
+  ringBotMesh.receiveShadow = true;
+  outer.add(ringBotMesh);
+
+  const ringTopGeo = pipeRingGeoTemplate.clone();
+  const ringTopMesh = new THREE.Mesh(ringTopGeo, mat);
+  ringTopMesh.position.set(0, SEGMENT_LENGTH, 0);
+  ringTopMesh.rotation.x = -Math.PI / 2;    // RingGeometry +Z normal -> +Y
+  ringTopMesh.castShadow = true;
+  ringTopMesh.receiveShadow = true;
+  outer.add(ringTopMesh);
+
   pipesContainer.add(outer);
   allNodeMeshes.push(outer);
 
@@ -916,6 +948,25 @@ function makeCapMesh(mat, dir) {
   const boreMesh = new THREE.Mesh(boreGeo, darkInnerMat);
   boreMesh.castShadow = false;
   capGroup.add(boreMesh);
+
+  // P9: annular end-rings — same purpose as on the body, but using the
+  // wider cap-radius ring so the flared mouth's open ends are closed too.
+  // capGeoTemplate is centered on origin so it spans y=-CAP_HEIGHT/2..+CAP_HEIGHT/2.
+  const capRingBotGeo = capRingGeoTemplate.clone();
+  const capRingBotMesh = new THREE.Mesh(capRingBotGeo, mat);
+  capRingBotMesh.position.set(0, -CAP_HEIGHT / 2, 0);
+  capRingBotMesh.rotation.x = Math.PI / 2;
+  capRingBotMesh.castShadow = true;
+  capRingBotMesh.receiveShadow = true;
+  capGroup.add(capRingBotMesh);
+
+  const capRingTopGeo = capRingGeoTemplate.clone();
+  const capRingTopMesh = new THREE.Mesh(capRingTopGeo, mat);
+  capRingTopMesh.position.set(0, CAP_HEIGHT / 2, 0);
+  capRingTopMesh.rotation.x = -Math.PI / 2;
+  capRingTopMesh.castShadow = true;
+  capRingTopMesh.receiveShadow = true;
+  capGroup.add(capRingTopMesh);
 
   return capGroup;
 }
