@@ -330,7 +330,7 @@
       border: 1px dashed var(--glass-bdr);
     }
 
-    /* ── Workbench pillars — the co-engineering machine ─────────────────── */
+    /* ── Workbench pillars — agentic glow per pillar, macOS-native lighting ─ */
     .mx-grid {
       margin-top: clamp(22px, 3.5vh, 40px);
       width: min(100%, 1100px);
@@ -339,16 +339,42 @@
       gap: clamp(14px, 1.8vw, 22px);
     }
     .mx-card {
+      --pillar: 56, 189, 248;
+      position: relative; isolation: isolate;
       display: flex; flex-direction: column;
       padding: clamp(18px, 2vw, 26px);
-      border-radius: 16px;
+      border-radius: 18px;
       background: var(--glass-bg);
       border: 1px solid var(--glass-bdr);
       box-shadow: var(--glass-shd);
+      overflow: hidden;
+      transition: transform 0.4s cubic-bezier(0.16,1,0.3,1),
+                  border-color 0.3s, box-shadow 0.3s;
     }
+    .mx-card::before {
+      content: ''; position: absolute; inset: -40%; z-index: 0;
+      background:
+        radial-gradient(60% 50% at 25% 0%, rgba(var(--pillar), 0.14), transparent 60%),
+        radial-gradient(40% 60% at 100% 100%, rgba(var(--pillar), 0.06), transparent 70%);
+      pointer-events: none;
+    }
+    .mx-card > * { position: relative; z-index: 1; }
+    .mx-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(var(--pillar), 0.32);
+      box-shadow:
+        0 14px 40px -18px rgba(var(--pillar), 0.45),
+        var(--glass-shd);
+    }
+    .mx-card[data-accent="audit"]    { --pillar: 56, 189, 248; }
+    .mx-card[data-accent="context"]  { --pillar: 244, 114, 182; }
+    .mx-card[data-accent="fleet"]    { --pillar: 245, 158, 11; }
+    .mx-card[data-accent="failsafe"] { --pillar: 132, 204, 22; }
     .mx-kind {
       font-size: 11px; font-weight: 600; letter-spacing: 0.12em;
-      text-transform: uppercase; color: var(--accent);
+      text-transform: uppercase;
+      color: rgb(var(--pillar));
+      text-shadow: 0 0 18px rgba(var(--pillar), 0.45);
     }
     .mx-title {
       margin-top: 6px;
@@ -361,9 +387,15 @@
     }
     .mx-stage {
       position: relative; margin-top: clamp(14px, 2vh, 20px);
-      width: 100%; height: 172px;
+      width: 100%; height: 184px;
       border-radius: 12px; overflow: hidden;
-      background: #060a0c; border: 1px solid var(--sep);
+      background:
+        radial-gradient(80% 100% at 50% 0%, rgba(var(--pillar), 0.08), transparent 60%),
+        linear-gradient(180deg, #070a0d, #03060a);
+      border: 1px solid var(--sep);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.05),
+        inset 0 -1px 0 rgba(0,0,0,0.55);
     }
     .mx-stage canvas {
       position: absolute; inset: 0; display: block;
@@ -632,7 +664,7 @@
     </div>
 
     <div class="mx-grid">
-      <article class="mx-card">
+      <article class="mx-card" data-accent="audit">
         <p class="mx-kind">Review architecture</p>
         <h3 class="mx-title">Two auditors, one arbiter</h3>
         <p class="mx-what">
@@ -644,7 +676,7 @@
         <button type="button" class="crack-link" data-crack-open="mx-audit">⟨ &nbsp;the contract&nbsp; ⟩</button>
       </article>
 
-      <article class="mx-card">
+      <article class="mx-card" data-accent="context">
         <p class="mx-kind">Context management</p>
         <h3 class="mx-title">Context is managed state</h3>
         <p class="mx-what">
@@ -657,7 +689,7 @@
         <button type="button" class="crack-link" data-crack-open="mx-context">⟨ &nbsp;the contract&nbsp; ⟩</button>
       </article>
 
-      <article class="mx-card">
+      <article class="mx-card" data-accent="fleet">
         <p class="mx-kind">Agent design</p>
         <h3 class="mx-title">A fleet of specialists</h3>
         <p class="mx-what">
@@ -670,7 +702,7 @@
         <button type="button" class="crack-link" data-crack-open="mx-fleet">⟨ &nbsp;the contract&nbsp; ⟩</button>
       </article>
 
-      <article class="mx-card">
+      <article class="mx-card" data-accent="failsafe">
         <p class="mx-kind">Defensive engineering</p>
         <h3 class="mx-title">Fast, loud failure</h3>
         <p class="mx-what">
@@ -1695,10 +1727,28 @@ fn accel(p: vec3<f32>, h2: f32) -> vec3<f32> {
     requestAnimationFrame(frame);
   })();
 
+  // ── Spring ── tiny critically-damped second-order system. No deps.
+  // Drives any scalar toward a target with overshoot-free macOS-native feel.
+  // k = stiffness; d = damping. Defaults tuned for ~250ms settle on a delta of 1.
+  function makeSpring(value, { k = 170, d = 22 } = {}) {
+    let v = value, vel = 0, target = value;
+    return {
+      set(t) { target = t; },
+      step(dt) {
+        if (dt > 0.05) dt = 0.05;   // clamp big tab-resume frames
+        const a = -k * (v - target) - d * vel;
+        vel += a * dt; v += vel * dt; return v;
+      },
+      snap(t) { v = target = t; vel = 0; return v; },
+      get value() { return v; },
+    };
+  }
+
   // ── Workbench — "how the machine ships" pipeline diagram ───────────────
-  // A node loop (Brainstorm → … → Handoff → repeat) with a pulse
-  // travelling the edges. Uses the live zone --accent so it stays in the
-  // atmosphere. Same Canvas + off-screen-pause discipline as the Sandbox.
+  // The seven-stage loop (Brainstorm → … → Handoff). Pulse travels the edges;
+  // travel speed is spring-driven by the user's scroll velocity, so the loop
+  // visibly "spins up" when they're moving through the page and decays back
+  // to a calm idle when they stop. Live zone --accent drives the glow.
   (function Machine() {
     const stage = document.getElementById('mxStage');
     const cv    = document.getElementById('mxCanvas');
@@ -1719,17 +1769,35 @@ fn accel(p: vec3<f32>, h2: f32) -> vec3<f32> {
     }
     fitObserve(stage, () => { fit(); if (REDUCED) { readAccent(); draw(null); } });
 
-    let accent = '#2DD4BF', accentT = 0;
+    let accent = '#2DD4BF', accentT = 0, accentRgb = '45,212,191';
     function readAccent() {
       const c = getComputedStyle(document.body).getPropertyValue('--accent').trim();
-      if (c) accent = c;
+      if (c) { accent = c; accentRgb = hexToRgb(c); }
+    }
+    function hexToRgb(h) {
+      const m = h.replace('#','').match(/.{2}/g);
+      if (!m || m.length < 3) return '255,255,255';
+      return m.slice(0,3).map(s => parseInt(s,16)).join(',');
     }
     readAccent();
 
+    // ── Scroll-velocity → pipeline speed (spring-smoothed) ────────────────
+    const speedSpring = makeSpring(1, { k: 90, d: 18 });
+    let lastSY = window.scrollY, lastST = performance.now();
+    function onScroll() {
+      const now = performance.now();
+      const dy = window.scrollY - lastSY;
+      const dt = Math.max(1, now - lastST) / 1000;
+      const v = Math.min(2.6, Math.abs(dy) / dt / 1100);
+      speedSpring.set(1 + v);
+      lastSY = window.scrollY; lastST = now;
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    // Decay: when no scroll for ~250ms, drift back toward 1
+    setInterval(() => speedSpring.set(1), 250);
+
     function nodePos(i) {
       const a = (i / N) * Math.PI * 2 - Math.PI / 2;
-      // Keep the whole loop + centered labels inside the box: leave ~110px
-      // horizontal / ~46px vertical so "Brainstorm" et al. never clip.
       const rx = Math.max(40, Math.min(W * 0.34, W / 2 - 110));
       const ry = Math.max(30, Math.min(H * 0.34, H / 2 - 46));
       return [W / 2 + Math.cos(a) * rx, H / 2 + Math.sin(a) * ry];
@@ -1742,31 +1810,59 @@ fn accel(p: vec3<f32>, h2: f32) -> vec3<f32> {
     let t0, tp, prog = 0;
     function draw(activeF) {
       ctx.clearRect(0, 0, W, H);
-      // edges
+
+      // ── Orbital anchor ring (faint accent ellipse behind the loop) ──────
+      const rx = Math.max(40, Math.min(W * 0.34, W / 2 - 110));
+      const ry = Math.max(30, Math.min(H * 0.34, H / 2 - 46));
+      ctx.save();
+      ctx.translate(W / 2, H / 2);
+      ctx.strokeStyle = `rgba(${accentRgb},0.08)`;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+      // Inner ring (rhythm: half-radius hairline)
+      ctx.strokeStyle = `rgba(${accentRgb},0.04)`;
+      ctx.beginPath(); ctx.ellipse(0, 0, rx * 0.5, ry * 0.5, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+
+      // ── Edges (constellation skeleton) ──────────────────────────────────
       ctx.lineWidth = 1.5;
       for (let i = 0; i < N; i++) {
         const p = nodePos(i), q = nodePos((i + 1) % N);
         ctx.strokeStyle = 'rgba(255,255,255,0.10)';
         ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
       }
-      // travelling pulse along the active edge
+
+      // ── Travelling pulse (the active hand-off) ──────────────────────────
       if (activeF != null) {
         const seg = Math.floor(activeF), f = activeF - seg;
         const p = nodePos(seg % N), q = nodePos((seg + 1) % N);
         const px = p[0] + (q[0] - p[0]) * f, py = p[1] + (q[1] - p[1]) * f;
-        const g = ctx.createRadialGradient(px, py, 0, px, py, 26);
-        g.addColorStop(0, accent); g.addColorStop(1, 'rgba(0,0,0,0)');
+        // outer halo
+        const g = ctx.createRadialGradient(px, py, 0, px, py, 40);
+        g.addColorStop(0, `rgba(${accentRgb},0.62)`);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.fillStyle = g;
-        ctx.beginPath(); ctx.arc(px, py, 26, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(px, py, 40, 0, Math.PI * 2); ctx.fill();
+        // bright core
+        ctx.fillStyle = accent;
+        ctx.beginPath(); ctx.arc(px, py, 3, 0, Math.PI * 2); ctx.fill();
       }
-      // nodes
+
+      // ── Nodes + labels ──────────────────────────────────────────────────
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.font = '600 12px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif';
       for (let i = 0; i < N; i++) {
         const p = nodePos(i);
         const isActive = activeF != null &&
           (Math.floor(activeF) % N === i || (Math.floor(activeF) + 1) % N === i);
-        ctx.beginPath(); ctx.arc(p[0], p[1], 6, 0, Math.PI * 2);
+        if (isActive) {
+          const ng = ctx.createRadialGradient(p[0], p[1], 0, p[0], p[1], 18);
+          ng.addColorStop(0, `rgba(${accentRgb},0.55)`);
+          ng.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = ng;
+          ctx.beginPath(); ctx.arc(p[0], p[1], 18, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.beginPath(); ctx.arc(p[0], p[1], isActive ? 6.5 : 5.5, 0, Math.PI * 2);
         ctx.fillStyle = isActive ? accent : 'rgba(255,255,255,0.35)';
         ctx.fill();
         ctx.fillStyle = isActive ? accent : 'rgba(255,255,255,0.55)';
@@ -1775,7 +1871,7 @@ fn accel(p: vec3<f32>, h2: f32) -> vec3<f32> {
       }
     }
 
-    if (REDUCED) return;   // static draw handled by the fitObserve callback
+    if (REDUCED) return;
 
     function frame(ts) {
       requestAnimationFrame(frame);
@@ -1783,161 +1879,355 @@ fn accel(p: vec3<f32>, h2: f32) -> vec3<f32> {
       if (t0 === undefined) { t0 = ts; tp = ts; }
       const dt = Math.min(0.05, (ts - tp) / 1000); tp = ts;
       accentT += dt; if (accentT > 0.5) { accentT = 0; readAccent(); }
-      prog = (prog + dt * 0.6) % N;   // ~12s per full loop
+      speedSpring.step(dt);
+      // Base 0.6 edges/s (~12s/loop) × spring-smoothed scroll multiplier.
+      prog = (prog + dt * 0.6 * speedSpring.value) % N;
       draw(prog);
     }
     requestAnimationFrame(frame);
   })();
 
-  // ── Workbench pillars — four schematics + their crack-it-open contracts.
-  // Spec-driven: each pillar is nodes + edges in normalized coords; one
-  // generic renderer scales to the card's real box (fitObserve) and re-tints
-  // with the live zone --accent. A single shared rAF sends a slow, calm
-  // accent pulse travelling each diagram's edges (same visual language as
-  // Machine()'s pulse). Reduced-motion stays the exact static drawing — no
-  // rAF; the static frame is the phase==null default of the same draw().
+  // ── Workbench pillars — four bespoke data-viz, one per pillar ──────────
+  // Each pillar is its own chart type (no shared node-edge graph this time):
+  //   audit    → twin sparklines converging into an Arbiter hex glyph
+  //   context  → token-budget meter with cold-boot snap-backs and a ghost row
+  //   fleet    → central hub, 4 satellites; one lights per cycle with a pulse
+  //   failsafe → 8-axis error-class radar; rotating active axis (red on FATAL)
+  // Per-pillar agentic accent colour (cyan/magenta/amber/lime), independent
+  // of the zone --accent — each card speaks in its own voice.
   (function MachinePillars() {
-    const SPEC = {
-      audit: {
-        n: [['Pedant',0.13,0.24],['Critic',0.13,0.76],['Arbiter',0.52,0.5,1],['ship',0.88,0.5,1]],
-        e: [[0,2],[1,2],[2,3]],
-      },
-      context: {
-        n: [['packet',0.13,0.52],['8K?',0.45,0.52,1],['next',0.87,0.52],['cold-boot',0.45,0.18,1]],
-        e: [[0,1],[1,2],[1,3],[3,0]],
-      },
-      fleet: {
-        n: [['hub',0.12,0.5,1],['gfx',0.5,0.18],['swarm',0.5,0.5],['refactor',0.5,0.82],['join',0.88,0.5,1]],
-        e: [[0,1],[0,2],[0,3],[1,4],[2,4],[3,4]],
-      },
-      failsafe: {
-        n: [['try',0.1,0.5],['fail',0.33,0.5],['classify',0.57,0.5,1],['halt',0.84,0.27,1],['human',0.84,0.73]],
-        e: [[0,1],[1,2],[2,3],[2,4],[2,1]],
-      },
-    };
-
     const REDUCED = window.matchMedia &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    let accent = '#E8B450';
-    function readAccent() {
-      const c = getComputedStyle(document.body).getPropertyValue('--accent').trim();
-      if (c) accent = c;
-    }
+    const ACCENT = {
+      audit:    '56,189,248',     // cyan
+      context:  '244,114,182',    // magenta
+      fleet:    '245,158,11',     // amber
+      failsafe: '132,204,22',     // lime
+    };
+    const RED = '239,68,68';
+    const rgba = (rgb, a) => `rgba(${rgb},${a})`;
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif';
 
-    function makeRenderer(cv, spec) {
+    function setupCanvas(cv) {
       const stage = cv.parentElement;
       const ctx = cv.getContext('2d');
-      let W = 0, H = 0;
-      function fit() {
+      const s = { cv, stage, ctx, W: 0, H: 0 };
+      s.fit = function () {
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const r = stage.getBoundingClientRect();
-        W = Math.max(1, r.width); H = Math.max(1, r.height);
-        cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+        s.W = Math.max(1, r.width); s.H = Math.max(1, r.height);
+        cv.width = Math.round(s.W * dpr); cv.height = Math.round(s.H * dpr);
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      }
-      function pt(nx, ny) {
-        const padX = Math.min(W * 0.16, 42), padY = 26;
-        return [padX + nx * (W - 2 * padX), padY + ny * (H - 2 * padY)];
-      }
-      function offscreen() {
+      };
+      s.offscreen = function () {
         const r = stage.getBoundingClientRect();
         return r.bottom < 0 || r.top > window.innerHeight;
-      }
-      // phase == null -> the original static drawing (unchanged). A non-null
-      // phase additively layers a travelling accent pulse over that exact
-      // base; the edges/nodes/labels render identically either way.
-      function draw(phase) {
-        ctx.clearRect(0, 0, W, H);
-        // Which edge the pulse is on, and how far along it (loop the list).
-        const nE = spec.e.length;
-        let actE = -1, actF = 0, aNode = -1, bNode = -1;
-        if (phase != null && nE > 0) {
-          const pe = ((phase % nE) + nE) % nE;
-          actE = Math.floor(pe); actF = pe - actE;
-          aNode = spec.e[actE][0]; bNode = spec.e[actE][1];
-        }
-        ctx.lineWidth = 1.5;
-        spec.e.forEach(([a, b], ei) => {
-          const p = pt(spec.n[a][1], spec.n[a][2]);
-          const q = pt(spec.n[b][1], spec.n[b][2]);
-          const key = spec.n[a][3] || spec.n[b][3];
-          ctx.strokeStyle = key ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.10)';
-          ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
-          // Travelling pulse on the active edge — same radial-gradient blob
-          // as Machine()'s pulse, sized/dimmed by a calm SJPulse breath.
-          if (ei === actE) {
-            const px = p[0] + (q[0] - p[0]) * actF;
-            const py = p[1] + (q[1] - p[1]) * actF;
-            const breath = window.SJPulse
-              ? 0.78 + 0.22 * window.SJPulse.wave(phase, { rate: 1.6, mid: 0.5, amp: 0.5 })
-              : 1;
-            const rad = 22 * breath;
-            const g = ctx.createRadialGradient(px, py, 0, px, py, rad);
-            g.addColorStop(0, accent); g.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.save();
-            ctx.globalAlpha = 0.55 + 0.30 * breath;
-            ctx.fillStyle = g;
-            ctx.beginPath(); ctx.arc(px, py, rad, 0, Math.PI * 2); ctx.fill();
-            ctx.restore();
-          }
-        });
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif';
-        spec.n.forEach(([label, nx, ny, key], ni) => {
-          const p = pt(nx, ny);
-          const lit = ni === aNode || ni === bNode;   // pulse passing this node
-          ctx.beginPath(); ctx.arc(p[0], p[1], (key || lit) ? 6 : 5, 0, Math.PI * 2);
-          ctx.fillStyle = (key || lit) ? accent : 'rgba(255,255,255,0.34)';
-          ctx.fill();
-          ctx.fillStyle = (key || lit) ? accent : 'rgba(255,255,255,0.55)';
-          ctx.fillText(label, p[0], p[1] + (ny < 0.5 ? -16 : 17));
-        });
-      }
-      return {
-        render: () => { fit(); readAccent(); draw(null); },
-        drawPhase: (phase) => { draw(phase); },
-        offscreen,
       };
+      return s;
     }
 
-    const renderers = [];
-    document.querySelectorAll('.mx-pc').forEach(cv => {
-      const spec = SPEC[cv.getAttribute('data-pillar')];
-      if (!spec) return;
-      const r = makeRenderer(cv, spec);
-      renderers.push(r);
-      fitObserve(cv.parentElement, r.render);   // static look (also reduced-motion + resize)
-    });
-    // Re-tint when the zone (and thus --accent) changes under the scroll.
-    if (window.MutationObserver && renderers.length) {
-      new MutationObserver(() => renderers.forEach(r => r.render()))
-        .observe(document.body, { attributes: true, attributeFilter: ['data-zone'] });
-    }
+    // ── audit ─ twin sparklines (Pedant + Critic) → Arbiter hex ───────────
+    function renderAudit(s, phase) {
+      const { ctx, W, H } = s, rgb = ACCENT.audit;
+      ctx.clearRect(0, 0, W, H);
+      const padL = 30, padR = 64, padY = 28;
+      const xa = padL, xb = W - padR;
+      const yMid = H / 2, gap = Math.min(28, (H - 2 * padY) * 0.18);
+      const yP = yMid - gap, yC = yMid + gap;
 
-    // Reduced-motion: stop here — the static frame is already drawn by the
-    // fitObserve callback (and re-drawn on resize / zone change). No rAF.
-    if (!REDUCED && renderers.length) {
-      // One shared loop for all four canvases. Slow cadence: one full edge
-      // traversal every ~4.5s. Each diagram gets a phase offset so they
-      // don't pulse in lockstep — calm, legible, additive over the static base.
-      let t0, tp, prog = 0, accentT = 0;
-      const STRIDE = 1 / 4.5;   // edges per second
-      function frame(ts) {
-        requestAnimationFrame(frame);
-        // Pause while the whole pillar row is off-screen (every stage off).
-        if (renderers.every(r => r.offscreen())) { tp = ts; return; }
-        if (t0 === undefined) { t0 = ts; tp = ts; }
-        const dt = Math.min(0.05, (ts - tp) / 1000); tp = ts;
-        accentT += dt; if (accentT > 0.5) { accentT = 0; readAccent(); }
-        prog += dt * STRIDE;
-        renderers.forEach((r, i) => {
-          if (r.offscreen()) return;            // skip individual off-screen cards
-          r.drawPhase(prog + i * 0.6);          // staggered so they're not in lockstep
-        });
+      // Center spine (the arbiter's resting axis)
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(xa, yMid); ctx.lineTo(xb, yMid); ctx.stroke();
+
+      // Two streams
+      const N = 56;
+      ctx.lineWidth = 1.6;
+      function drawStream(yBase, offset, alpha) {
+        ctx.strokeStyle = rgba(rgb, alpha);
+        ctx.beginPath();
+        for (let i = 0; i < N; i++) {
+          const u = i / (N - 1);
+          const x = lerp(xa, xb, u);
+          const y = yBase
+            + Math.sin(phase * 2.1 + u * 7.5 + offset) * 7
+            + Math.sin(phase * 0.9 + u * 2.7 + offset * 0.5) * 3;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
       }
-      requestAnimationFrame(frame);
+      drawStream(yP, 0.0, 0.62);
+      drawStream(yC, 1.4, 0.62);
+
+      // Source pips
+      ctx.fillStyle = rgba(rgb, 0.85);
+      ctx.beginPath(); ctx.arc(xa, yP, 3.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(xa, yC, 3.5, 0, Math.PI * 2); ctx.fill();
+
+      // Labels
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.font = `600 9.5px ${FONT}`;
+      ctx.fillText('PEDANT', xa + 8, yP - 12);
+      ctx.fillText('CRITIC', xa + 8, yC + 12);
+
+      // Arbiter hex glyph at the convergence
+      const ax = xb + 18, ay = yMid, r = 16;
+      const halo = ctx.createRadialGradient(ax, ay, 0, ax, ay, r * 2);
+      halo.addColorStop(0, rgba(rgb, 0.5));
+      halo.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = halo;
+      ctx.beginPath(); ctx.arc(ax, ay, r * 2, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = rgba(rgb, 0.9);
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = -Math.PI / 2 + i * Math.PI / 3;
+        const x = ax + Math.cos(a) * r, y = ay + Math.sin(a) * r;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.closePath(); ctx.stroke();
+      ctx.fillStyle = rgba(rgb, 1);
+      ctx.textAlign = 'center';
+      ctx.font = `700 10px ${FONT}`;
+      ctx.fillText('✓', ax, ay + 0.5);
+
+      // Footer
+      ctx.fillStyle = 'rgba(255,255,255,0.42)';
+      ctx.textAlign = 'right'; ctx.font = `500 9px ${FONT}`;
+      ctx.fillText('arbiter ruling', W - 12, H - 12);
     }
+
+    // ── context ─ token-budget bars with cold-boot snap-backs ─────────────
+    function renderContext(s, phase) {
+      const { ctx, W, H } = s, rgb = ACCENT.context;
+      ctx.clearRect(0, 0, W, H);
+      const padL = 36, padR = 22, padT = 26, padB = 26;
+      const x0 = padL, x1 = W - padR, y0 = padT, y1 = H - padB;
+      const yThresh = y0 + (y1 - y0) * 0.18;  // 8K threshold near top
+
+      // Envelope frame
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
+
+      // Threshold hairline
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = rgba(rgb, 0.45);
+      ctx.beginPath(); ctx.moveTo(x0, yThresh); ctx.lineTo(x1, yThresh); ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Bars
+      const BARS = 16;
+      const slot = (x1 - x0) / BARS;
+      const barW = slot - 3;
+      for (let i = 0; i < BARS; i++) {
+        // Each bar's local progress (0..1) — staggered, looping
+        const u = ((i * 0.62 + phase * 0.5) % 4) / 4;
+        // Build-up to 100% just before the cold-boot, then snap back to 0
+        let fill;
+        if (u < 0.82) fill = u / 0.82;
+        else if (u < 0.88) fill = 1;                 // pegged at top — cold-boot moment
+        else fill = Math.max(0, 1 - (u - 0.88) / 0.06);
+        const isPeak = u >= 0.82 && u < 0.88;
+        const isReset = u >= 0.88 && u < 0.94;
+        const bx = x0 + i * slot + 1.5;
+        const bh = (y1 - y0) * fill;
+        const by = y1 - bh;
+        // Bar body — brightens at peak (the cold-boot)
+        const grd = ctx.createLinearGradient(bx, by, bx, y1);
+        grd.addColorStop(0, rgba(rgb, isPeak ? 0.95 : 0.55));
+        grd.addColorStop(1, rgba(rgb, isPeak ? 0.45 : 0.18));
+        ctx.fillStyle = grd;
+        ctx.fillRect(bx, by, barW, bh);
+        // Cold-boot halo at peak
+        if (isPeak) {
+          const cx = bx + barW / 2;
+          const g = ctx.createRadialGradient(cx, by, 0, cx, by, 24);
+          g.addColorStop(0, rgba(rgb, 0.75));
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.arc(cx, by, 24, 0, Math.PI * 2); ctx.fill();
+        }
+        // Ghost mark at reset (a faint vertical tick at baseline)
+        if (isReset) {
+          ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+          ctx.beginPath(); ctx.moveTo(bx + barW / 2, y1); ctx.lineTo(bx + barW / 2, y1 - 7); ctx.stroke();
+        }
+      }
+
+      // Threshold + axis labels
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      ctx.font = `600 9.5px ${FONT}`;
+      ctx.fillText('8K', x0 - 6, yThresh);
+      ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(255,255,255,0.42)';
+      ctx.font = `500 9px ${FONT}`;
+      ctx.fillText('cold-boot at threshold', x1, H - 12);
+    }
+
+    // ── fleet ─ hub + 4 satellites; one lit per cycle, pulse along spoke ──
+    function renderFleet(s, phase) {
+      const { ctx, W, H } = s, rgb = ACCENT.fleet;
+      ctx.clearRect(0, 0, W, H);
+      const SATS = ['gfx', 'swarm', 'refactor', 'review'];
+      const N = SATS.length;
+      const cx = W * 0.40, cy = H / 2;
+      const R = Math.min(W * 0.30, H * 0.36);
+      const activeIdx = Math.floor(phase) % N;
+      const frac = phase - Math.floor(phase);
+
+      // Orbit ring
+      ctx.strokeStyle = rgba(rgb, 0.10);
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+
+      // Hub halo + core
+      const hg = ctx.createRadialGradient(cx, cy, 0, cx, cy, 22);
+      hg.addColorStop(0, rgba(rgb, 0.55));
+      hg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = hg;
+      ctx.beginPath(); ctx.arc(cx, cy, 22, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = rgba(rgb, 0.95);
+      ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2); ctx.fill();
+
+      // Spokes, satellites, labels
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `600 10px ${FONT}`;
+      for (let i = 0; i < N; i++) {
+        const a = -Math.PI / 2 + i * (Math.PI * 2 / N);
+        const sx = cx + Math.cos(a) * R, sy = cy + Math.sin(a) * R;
+        const lit = i === activeIdx;
+        // Spoke
+        ctx.strokeStyle = lit ? rgba(rgb, 0.55) : 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = lit ? 1.4 : 1;
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(sx, sy); ctx.stroke();
+        // Travelling pulse on active spoke
+        if (lit) {
+          const px = cx + (sx - cx) * frac, py = cy + (sy - cy) * frac;
+          const g = ctx.createRadialGradient(px, py, 0, px, py, 16);
+          g.addColorStop(0, rgba(rgb, 0.7));
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.arc(px, py, 16, 0, Math.PI * 2); ctx.fill();
+        }
+        // Satellite dot
+        if (lit) {
+          const g2 = ctx.createRadialGradient(sx, sy, 0, sx, sy, 20);
+          g2.addColorStop(0, rgba(rgb, 0.55));
+          g2.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = g2;
+          ctx.beginPath(); ctx.arc(sx, sy, 20, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.fillStyle = lit ? rgba(rgb, 1) : 'rgba(255,255,255,0.45)';
+        ctx.beginPath(); ctx.arc(sx, sy, lit ? 5 : 4, 0, Math.PI * 2); ctx.fill();
+        // Label outside the ring
+        const labelDist = R + 16;
+        const lx = cx + Math.cos(a) * labelDist;
+        const ly = cy + Math.sin(a) * labelDist;
+        ctx.fillStyle = lit ? rgba(rgb, 1) : 'rgba(255,255,255,0.55)';
+        ctx.fillText(SATS[i], lx, ly);
+      }
+    }
+
+    // ── failsafe ─ 8-axis radar of the error taxonomy ──────────────────────
+    function renderFailsafe(s, phase) {
+      const { ctx, W, H } = s, rgb = ACCENT.failsafe;
+      ctx.clearRect(0, 0, W, H);
+      const CLASSES = ['TRANSIENT', 'INPUT', 'PRECOND', 'OVERFLOW',
+                       'PARTIAL', 'HUNG', 'DEADLOCK', 'FATAL'];
+      const N = CLASSES.length;
+      const cx = W * 0.40, cy = H / 2;
+      const R = Math.min(W * 0.32, H * 0.40);
+
+      // Web (3 concentric octagons)
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+      ctx.lineWidth = 1;
+      for (let level = 1; level <= 3; level++) {
+        const rr = R * level / 3;
+        ctx.beginPath();
+        for (let i = 0; i < N; i++) {
+          const a = -Math.PI / 2 + i * (Math.PI * 2 / N);
+          const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.closePath(); ctx.stroke();
+      }
+
+      const activeIdx = Math.floor(phase) % N;
+      // Spokes + axis tips + labels
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `600 8.5px ${FONT}`;
+      for (let i = 0; i < N; i++) {
+        const a = -Math.PI / 2 + i * (Math.PI * 2 / N);
+        const x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R;
+        const lit = i === activeIdx;
+        const cls = CLASSES[i];
+        const isFatal = cls === 'FATAL' || cls === 'DEADLOCK';
+        const colour = isFatal ? RED : rgb;
+        // Spoke
+        ctx.strokeStyle = lit ? rgba(colour, 0.65) : 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = lit ? 1.4 : 1;
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x, y); ctx.stroke();
+        // Halo on lit axis tip
+        if (lit) {
+          const g = ctx.createRadialGradient(x, y, 0, x, y, 20);
+          g.addColorStop(0, rgba(colour, 0.6));
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.arc(x, y, 20, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.fillStyle = lit ? rgba(colour, 1) : 'rgba(255,255,255,0.45)';
+        ctx.beginPath(); ctx.arc(x, y, lit ? 4 : 3, 0, Math.PI * 2); ctx.fill();
+        // Label outside, tinted on lit + colored red on fatal
+        const lx = cx + Math.cos(a) * (R + 14);
+        const ly = cy + Math.sin(a) * (R + 14);
+        ctx.fillStyle = lit ? rgba(colour, 1) : 'rgba(255,255,255,0.55)';
+        ctx.fillText(cls, lx, ly);
+      }
+      // Hub
+      ctx.fillStyle = rgba(rgb, 0.7);
+      ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
+    }
+
+    const RENDERERS = {
+      audit: renderAudit,
+      context: renderContext,
+      fleet: renderFleet,
+      failsafe: renderFailsafe,
+    };
+
+    const stages = [];
+    document.querySelectorAll('.mx-pc').forEach(cv => {
+      const pillar = cv.getAttribute('data-pillar');
+      const render = RENDERERS[pillar];
+      if (!render) return;
+      const s = setupCanvas(cv);
+      s.pillar = pillar;
+      s.render = render;
+      stages.push(s);
+      fitObserve(cv.parentElement, () => { s.fit(); s.render(s, 0); });
+    });
+
+    if (REDUCED || !stages.length) return;
+
+    // One shared rAF; each pillar gets its own phase offset for variety.
+    let t0, tp, prog = 0;
+    const STRIDE = 1 / 4.5;
+    function frame(ts) {
+      requestAnimationFrame(frame);
+      if (stages.every(s => s.offscreen())) { tp = ts; return; }
+      if (t0 === undefined) { t0 = ts; tp = ts; }
+      const dt = Math.min(0.05, (ts - tp) / 1000); tp = ts;
+      prog += dt * STRIDE;
+      stages.forEach((s, i) => {
+        if (s.offscreen()) return;
+        s.render(s, prog + i * 0.6);
+      });
+    }
+    requestAnimationFrame(frame);
 
     // The contracts — distilled in spirit from the playbook
     // (~/.claude -> dev-playbook/best_practices.md) and the real ~/.claude
