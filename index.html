@@ -543,18 +543,21 @@
     <p class="eyebrow">Sandbox</p>
     <h2>Put your hands on the tools.</h2>
     <p class="lede">
-      No video, no GIF — the real toolkit running in your browser. Make
-      it rain, or watch a formation morph between shapes. Same lib that
-      builds the rest of this site.
+      No video, no GIF — the real toolkit running in your browser. Launch
+      emoji fireworks, twist a Fermat spiral, fold a kaleidoscope mandala,
+      or steer a tiny emoji galaxy. Same lib that builds the rest of this
+      site, four ways to make it bloom.
     </p>
     <div class="sandbox-stage" id="sbStage">
       <canvas id="sbCanvas"></canvas>
       <span class="sandbox-hint" id="sbHint">move your pointer over the stage</span>
     </div>
     <div class="sandbox-controls">
-      <button type="button" class="sb-btn" id="sbModeRain" aria-pressed="true">Emoji rain</button>
-      <button type="button" class="sb-btn" id="sbModeForm" aria-pressed="false">Formation</button>
-      <span class="sb-emojis" id="sbEmojis" role="group" aria-label="Rain emoji"></span>
+      <button type="button" class="sb-btn" id="sbModeRain" aria-pressed="true">Fireworks</button>
+      <button type="button" class="sb-btn" id="sbModeForm" aria-pressed="false">Spiral</button>
+      <button type="button" class="sb-btn" id="sbModeMandala" aria-pressed="false">Mandala</button>
+      <button type="button" class="sb-btn" id="sbModeGalaxy" aria-pressed="false">Galaxy</button>
+      <span class="sb-emojis" id="sbEmojis" role="group" aria-label="Accent emoji"></span>
       <button type="button" class="sb-btn" id="sbBurst">Burst ✨</button>
       <button type="button" class="crack-link" data-crack-open="sandbox">⟨ &nbsp;how the sandbox is built&nbsp; ⟩</button>
     </div>
@@ -1393,22 +1396,34 @@ fn accel(p: vec3<f32>, h2: f32) -> vec3<f32> {
       },
       'sandbox': {
         title: 'The Sandbox — Canvas 2D + the lib',
-        what: 'Two real demos in one panel. Emoji rain is a tiny gravity ' +
-              'particle system on a DPR-fit Canvas 2D. The formation is an ' +
-              'N-gon that morphs triangle → square → pentagon → hexagon — ' +
-              'emojis arc-length-placed on the perimeter, the side count ' +
-              'eased by VizEnv, sizes pulsed by SJPulse. Your pointer ' +
-              'speeds the morph and tilts it. Same /lib/ the hero uses.',
+        what: 'Four real demos sharing one DPR-fit Canvas, one bitmap-cached ' +
+              'emoji atlas, and one off-screen-pause rAF. Fireworks is a ' +
+              'two-stage projectile system — rockets integrate under gravity ' +
+              'and detonate into radial debris with secondary mini-bursts. ' +
+              'Spiral places emojis along a Fermat spiral (r = c√i) and ' +
+              'lets the pointer steer tightness and flow. Mandala folds a ' +
+              'ring of glyphs through 6/8/12-fold rotational symmetry with ' +
+              'an SJPulse breath. Galaxy is a Keplerian-ish orbit field, ' +
+              'inward drift when the pointer is held. Same /lib/ the hero ' +
+              'uses; the emoji palette biases every mode.',
         code:
-'// Formation — the whole idea, condensed:\n' +
-'const sidesEnv = new VizEnv.Envelope({ attack: 0.9, release: 0.9 });\n' +
-'sides = sidesEnv.follow(KEYFRAMES[step % 4], dt);  // 3→4→5→6, eased\n' +
-'const pulse = SJPulse.kick(t);                      // size pulse\n' +
-'// emoji m at arc-length s on the n-gon perimeter:\n' +
-'//   p = lerp(V[floor(s)], V[(floor(s)+1)%n], frac(s))\n' +
+'// One canvas, one bitmap atlas, four modes:\n' +
+'const cache = rasterizeEmojis(PALETTE);   // drawImage >> fillText on Win\n' +
+'function drawEmoji(e,x,y,s){ ctx.drawImage(cache[e], x-s/2, y-s/2, s, s); }\n' +
 '\n' +
-'// Full version:\n' +
-'//   sj-design/showcase/emoji-formations/shape-morph.html\n' +
+'// Fireworks — rockets gravity-integrate, detonate, debris fades:\n' +
+'rocket.vy += G*dt; if (rocket.y < apex) detonate(rocket);\n' +
+'\n' +
+'// Spiral — Fermat: angle by golden ratio, r grows with √i:\n' +
+'const phi = Math.PI * (3 - Math.sqrt(5));\n' +
+'for (let i=0;i<N;i++){ const r = c*Math.sqrt(i); const a = i*phi + t; }\n' +
+'\n' +
+'// Mandala — draw one wedge, rotate-stamp it K times:\n' +
+'for (let k=0;k<K;k++){ ctx.rotate(TAU/K); drawWedge(); }\n' +
+'\n' +
+'// Galaxy — elliptical Keplerian-ish orbits, color by radius:\n' +
+'p.theta += p.omega*dt; p.x = cx + p.a*Math.cos(p.theta + p.tilt);\n' +
+'\n' +
 '// Helpers vendored at /lib/: synthetic-pulse.js, envelopes.js',
         take: 'https://github.com/jayvee6',
       },
@@ -1552,9 +1567,12 @@ fn accel(p: vec3<f32>, h2: f32) -> vec3<f32> {
     window.CrackOpen = { register: (id, entry) => { REG[id] = entry; }, open };
   })();
 
-  // ── Sandbox — hands-on. Two real demos on one DPR-fit Canvas 2D,
-  // built from the same /lib/ as the hero. Pointer drives the formation;
-  // click rains. Pauses when the zone is off-screen. ─────────────────────
+  // ── Sandbox — hands-on. Four real demos on one DPR-fit Canvas 2D, all
+  // sharing the same bitmap-cached emoji atlas (drawImage is ~10× faster
+  // than fillText on Windows / Segoe UI Emoji — same Windows-stutter fix
+  // that's been in place since the original two-mode sandbox). Pointer
+  // drives every mode; the burst button only matters in Fireworks. Pauses
+  // when the zone is off-screen. ────────────────────────────────────────
   (function Sandbox() {
     const stage = document.getElementById('sbStage');
     const cv    = document.getElementById('sbCanvas');
@@ -1572,14 +1590,40 @@ fn accel(p: vec3<f32>, h2: f32) -> vec3<f32> {
     }
     fitObserve(stage, fit);
 
-    const RAIN = ['✨','🪐','🔮','🎮','🧠','🤖','🌀','💫'];
-    let pick = RAIN[0];
-    let mode = 'rain';
-    const particles = [];
-    const pointer = { x: 0.5, y: 0.5, on: false };
+    // Accent palette — same eight glyphs that have always been in the
+    // picker. Stays small on purpose: every glyph is rasterized at full
+    // DPR-resolution into a cache below; widening this set linearly grows
+    // the cache. The picked accent biases every mode (it appears more
+    // often in firework debris, anchors spiral rings, leads mandala
+    // wedges, brightens galaxy halos).
+    const ACCENT = ['✨','🪐','🔮','🎮','🧠','🤖','🌀','💫'];
+
+    // Themed pools — Fireworks themes (rockets + matched debris), and a
+    // wider "color" set used by Spiral / Mandala / Galaxy so the canvas
+    // doesn't look monochrome. Every glyph in any of these sets must be
+    // in EMOJI_ALL below so the cache pre-rasterizes it.
+    const THEMES = [
+      { rocket: '🚀', debris: ['✨','💥','🌟','🎉']       },
+      { rocket: '💘', debris: ['💖','💕','❤️','💗','💝']  },
+      { rocket: '🪄', debris: ['✨','🌟','💫','⭐','✴️']  },
+      { rocket: '🍾', debris: ['🎉','🎊','🥂','🎈']       },
+      { rocket: '🌈', debris: ['🦄','💖','⭐','🌟','✨']  },
+      { rocket: '🌸', debris: ['🌼','🌺','🌷','🌻','🏵️'] },
+      { rocket: '👽', debris: ['🛸','⭐','🌙','🪐','💫']  },
+      { rocket: '⚡', debris: ['⭐','✨','💫','🌟','☄️']  },
+    ];
+    const STARS  = ['✨','⭐','🌟','💫','✴️','☄️','🌠'];
+    const COSMIC = ['🪐','🌙','🌌','🌠','⭐','🌟','💫','✨'];
+    const FLORAL = ['🌸','🌼','🌺','🌷','🌻','🏵️','💮','❀'];
+    const HEARTS = ['💖','💕','💗','💝','❤️','💓','💞'];
+    const GEM    = ['🔷','🔶','🟣','🟢','🟡','🔴','💠','◆','🟦','🟪','🟩'];
+
+    let pick = ACCENT[0];
+    let mode = 'fireworks';
+    const pointer = { x: 0.5, y: 0.5, on: false, down: false };
 
     const picker = document.getElementById('sbEmojis');
-    RAIN.forEach((e, i) => {
+    ACCENT.forEach((e, i) => {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'sb-emoji'; b.textContent = e;
       b.setAttribute('aria-pressed', i === 0 ? 'true' : 'false');
@@ -1591,58 +1635,28 @@ fn accel(p: vec3<f32>, h2: f32) -> vec3<f32> {
       picker.appendChild(b);
     });
 
-    function spawn(n, x) {
-      for (let i = 0; i < n; i++) particles.push({
-        x: x != null ? x : Math.random() * W,
-        y: -20 - Math.random() * 40,
-        vx: (Math.random() - 0.5) * 40,
-        vy: 30 + Math.random() * 60,
-        e: pick, s: 20 + Math.random() * 26,
-        rot: (Math.random() - 0.5) * 2, vr: (Math.random() - 0.5) * 2,
-        life: 0, max: 4 + Math.random() * 3,
-      });
-      if (particles.length > 900) particles.splice(0, particles.length - 900);
-    }
-
-    document.getElementById('sbBurst').addEventListener('click', () => spawn(120, W / 2));
-
-    function setMode(m) {
-      mode = m;
-      document.getElementById('sbModeRain').setAttribute('aria-pressed', String(m === 'rain'));
-      document.getElementById('sbModeForm').setAttribute('aria-pressed', String(m === 'form'));
-      document.getElementById('sbEmojis').style.display = m === 'rain' ? 'flex' : 'none';
-      document.getElementById('sbBurst').style.display  = m === 'rain' ? '' : 'none';
-      hint.textContent = m === 'rain'
-        ? 'click the stage to make it rain'
-        : 'move your pointer — speed + tilt the morph';
-      particles.length = 0;
-    }
-    document.getElementById('sbModeRain').addEventListener('click', () => setMode('rain'));
-    document.getElementById('sbModeForm').addEventListener('click', () => setMode('form'));
-
-    function localXY(ev) {
-      const r = stage.getBoundingClientRect();
-      return { x: (ev.clientX - r.left) / r.width, y: (ev.clientY - r.top) / r.height };
-    }
-    stage.addEventListener('pointermove', ev => { const p = localXY(ev); pointer.x = p.x; pointer.y = p.y; pointer.on = true; });
-    stage.addEventListener('pointerleave', () => { pointer.on = false; });
-    stage.addEventListener('pointerdown', ev => { if (mode === 'rain') { const p = localXY(ev); spawn(40, p.x * W); } });
-
-    const FORM = ['🔷','🔶','🟣','🟢','🟡','🔴','💠','✦','◆','🟦','🟪','🟩'];
-    const KEY = [3, 4, 5, 6];
-
-    // Pre-rasterize every sandbox glyph once into an off-screen canvas.
-    // Per-frame fillText() of color-emoji glyphs is ~10× slower than
-    // drawImage() on Windows (Segoe UI Emoji / DirectWrite) — at up to
-    // 900 rain particles that was the Windows-only stutter. Same
-    // technique as sj-design's emoji-vortex. Unchanged on macOS.
+    // ── Emoji atlas — pre-rasterize every glyph any mode might touch.
+    // fillText() of color-emoji is ~10× slower than drawImage() on
+    // Windows (Segoe UI Emoji / DirectWrite). At 1000+ particles that
+    // was the original Windows-only stutter. Keep this list in lockstep
+    // with what the modes reference. ────────────────────────────────
+    const EMOJI_ALL = (() => {
+      const s = new Set(ACCENT);
+      for (const t of THEMES) { s.add(t.rocket); for (const d of t.debris) s.add(d); }
+      for (const e of STARS)  s.add(e);
+      for (const e of COSMIC) s.add(e);
+      for (const e of FLORAL) s.add(e);
+      for (const e of HEARTS) s.add(e);
+      for (const e of GEM)    s.add(e);
+      return Array.from(s);
+    })();
     const EMOJI_GLYPH  = 0.82;   // glyph fraction of the cache box (safe padding)
-    const EMOJI_MAX_PX = 52;     // ≥ largest on-screen glyph (rain s≤46, form≤34)
+    const EMOJI_MAX_PX = 56;     // ≥ largest on-screen glyph across all modes
     const emojiCache = (() => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const px  = Math.ceil((EMOJI_MAX_PX / EMOJI_GLYPH) * dpr);
       const map = {};
-      for (const e of RAIN.concat(FORM)) {
+      for (const e of EMOJI_ALL) {
         const oc = document.createElement('canvas');
         oc.width = oc.height = px;
         const o = oc.getContext('2d');
@@ -1655,13 +1669,12 @@ fn accel(p: vec3<f32>, h2: f32) -> vec3<f32> {
       return map;
     })();
     function drawEmoji(emoji, x, y, size) {
-      const img = emojiCache[emoji];
+      const img = emojiCache[emoji] || emojiCache[pick];
       if (!img) return;
       const box = size / EMOJI_GLYPH, h = box / 2;
       ctx.drawImage(img, x - h, y - h, box, box);
     }
-    const sidesEnv = window.VizEnv ? new window.VizEnv.Envelope({ attack: 0.9, release: 0.9, initial: 3 }) : null;
-    let sidesFb = 3, clock = 0;
+
     function rawPulse(t) {
       return window.SJPulse ? window.SJPulse.kick(t)
         : Math.min(1, Math.pow(Math.max(0, Math.sin(t * 2.2)), 2) * 0.9);
@@ -1671,6 +1684,391 @@ fn accel(p: vec3<f32>, h2: f32) -> vec3<f32> {
       return r.bottom < 0 || r.top > window.innerHeight;
     }
 
+    // ── State per mode. Each mode owns its own pools so switching modes
+    // doesn't leak particles across systems. ─────────────────────────
+    const rockets   = [];           // Fireworks: ascending projectiles
+    const debris    = [];           // Fireworks: post-explosion fragments
+    const spiralPs  = [];           // Spiral: not currently persisted, kept
+                                    // for the setMode reset hook so mode
+                                    // swaps don't ReferenceError.
+    const galaxyPs  = [];           // Galaxy: persistent orbiters
+
+    // ── Hard cap on debris. Bursts pile up faster than glyphs age out;
+    // without a ceiling the canvas tarpits on rapid clicks. Drop the
+    // oldest fragments — they're the most-faded so it's invisible. ──
+    const MAX_DEBRIS = 1200;
+
+    // ── Fireworks ──────────────────────────────────────────────────
+    const GRAVITY  = 360;   // px/s² — gravity for both rockets and debris
+    function rng(a, b) { return a + Math.random() * (b - a); }
+    function biasedDebrisEmoji(theme) {
+      // Slip the picked accent into the debris with ~35% probability so
+      // the user's chosen glyph is always visible in every burst.
+      if (Math.random() < 0.35) return pick;
+      return theme.debris[(Math.random() * theme.debris.length) | 0];
+    }
+    function launchRocket(x) {
+      const theme = THEMES[(Math.random() * THEMES.length) | 0];
+      // z ∈ [0,1] — depth. Far rockets (z low) are smaller / slower /
+      // dimmer so the field has parallax. Apex picked once per launch.
+      const z = rng(0, 1);
+      const scale = 0.65 + z * 0.55;
+      const apexY = rng(H * 0.12, H * 0.42);
+      // initial vy chosen so a rocket with only gravity acting reaches
+      // apexY from launch. vy_peak = sqrt(2 * g * (H - apexY))
+      const vy = -Math.sqrt(2 * GRAVITY * (H - apexY)) * rng(0.95, 1.08);
+      rockets.push({
+        x: x != null ? x : rng(W * 0.1, W * 0.9),
+        y: H + 8,
+        vx: rng(-30, 30),
+        vy,
+        emoji: theme.rocket, theme, scale, z,
+        trail: [],     // recent (x,y) for a streak
+        life: 0,
+      });
+    }
+    function detonate(r) {
+      // Count scales with depth — near bursts get the budget, far ones
+      // stay sparse. ~32–80 fragments per burst.
+      const count = ((32 + r.scale * 48) | 0);
+      const baseSpeed = 140 * r.scale;
+      const lift = -40 * r.scale;     // brief upward bias so it blooms
+      for (let i = 0; i < count; i++) {
+        // Radial peony: even angular distribution with a small jitter
+        // in radius so the shell isn't a perfect circle.
+        const a = (i / count) * Math.PI * 2 + rng(-0.04, 0.04);
+        const speed = baseSpeed * rng(0.7, 1.15);
+        debris.push({
+          x: r.x, y: r.y,
+          vx: Math.cos(a) * speed,
+          vy: Math.sin(a) * speed + lift,
+          emoji: biasedDebrisEmoji(r.theme),
+          size: rng(14, 22) * r.scale,
+          rot: rng(-1, 1), vr: rng(-2, 2),
+          age: 0, life: rng(1.6, 2.6) * (0.85 + r.scale * 0.3),
+          scale: r.scale,
+          secondary: 0,   // 1 = will mini-burst when slow enough
+        });
+      }
+      // Mark a fraction for secondary bursts — fragments that slow below
+      // a threshold detonate again into a smaller pop. Reads like
+      // "chrysanthemum tail" without the cost of a real second stage.
+      for (let i = 0; i < count * 0.18; i++) {
+        const d = debris[debris.length - 1 - ((Math.random() * count) | 0)];
+        if (d) d.secondary = 1;
+      }
+    }
+    function miniBurst(d) {
+      const n = 6 + ((Math.random() * 4) | 0);
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        debris.push({
+          x: d.x, y: d.y,
+          vx: Math.cos(a) * 60,
+          vy: Math.sin(a) * 60 - 10,
+          emoji: Math.random() < 0.5 ? d.emoji : pick,
+          size: d.size * 0.55,
+          rot: 0, vr: rng(-3, 3),
+          age: 0, life: 0.8,
+          scale: d.scale * 0.6,
+          secondary: 0,
+        });
+      }
+    }
+    document.getElementById('sbBurst').addEventListener('click', () => {
+      // Two simultaneous rockets at slightly offset apexes feels richer.
+      launchRocket(W * 0.4);
+      launchRocket(W * 0.6);
+    });
+
+    // ── Mode wiring. Button labels live in the HTML; this only flips
+    // aria-pressed, the burst-button visibility, and the hint copy. ──
+    const BTNS = {
+      fireworks: 'sbModeRain',
+      spiral:    'sbModeForm',
+      mandala:   'sbModeMandala',
+      galaxy:    'sbModeGalaxy',
+    };
+    const HINTS = {
+      fireworks: 'click the stage to launch a rocket — burst sends two',
+      spiral:    'pointer x tightens the spiral · y speeds the flow',
+      mandala:   'pointer x picks the fold · y picks the depth',
+      galaxy:    'hold the pointer down to pull stars inward',
+    };
+    function setMode(m) {
+      mode = m;
+      for (const k in BTNS) {
+        document.getElementById(BTNS[k]).setAttribute('aria-pressed', String(k === m));
+      }
+      document.getElementById('sbBurst').style.display = m === 'fireworks' ? '' : 'none';
+      hint.textContent = HINTS[m];
+      // Fresh slate on mode switch — keeps the demo legible.
+      rockets.length = 0;
+      debris.length  = 0;
+      spiralPs.length = 0;
+      galaxyPs.length = 0;
+    }
+    document.getElementById('sbModeRain').addEventListener('click', () => setMode('fireworks'));
+    document.getElementById('sbModeForm').addEventListener('click', () => setMode('spiral'));
+    document.getElementById('sbModeMandala').addEventListener('click', () => setMode('mandala'));
+    document.getElementById('sbModeGalaxy').addEventListener('click', () => setMode('galaxy'));
+
+    function localXY(ev) {
+      const r = stage.getBoundingClientRect();
+      return { x: (ev.clientX - r.left) / r.width, y: (ev.clientY - r.top) / r.height };
+    }
+    stage.addEventListener('pointermove', ev => {
+      const p = localXY(ev); pointer.x = p.x; pointer.y = p.y; pointer.on = true;
+    });
+    stage.addEventListener('pointerleave', () => { pointer.on = false; pointer.down = false; });
+    stage.addEventListener('pointerdown', ev => {
+      const p = localXY(ev); pointer.down = true; pointer.x = p.x; pointer.y = p.y;
+      if (mode === 'fireworks') launchRocket(p.x * W);
+    });
+    stage.addEventListener('pointerup',     () => { pointer.down = false; });
+    stage.addEventListener('pointercancel', () => { pointer.down = false; });
+
+    // ── Mode renderers ─────────────────────────────────────────────
+
+    function drawFireworks(t, dt) {
+      // Trail effect via low-alpha fill instead of clearRect. Looks like
+      // motion blur and hides the lattice of discrete-frame rocket dots.
+      // 0.18 alpha = ~6-frame tail at 60fps; tuned for legibility.
+      ctx.fillStyle = 'rgba(6,6,8,0.18)';
+      ctx.fillRect(0, 0, W, H);
+
+      // Stochastic auto-launches so the sky is never empty. Cap the
+      // active rocket count so a long idle doesn't pile up.
+      if (rockets.length < 4 && Math.random() < 0.6 * dt + 0.005) {
+        launchRocket();
+      }
+
+      // Rockets — integrate, lay down a trail point, detonate at apex.
+      for (let i = rockets.length - 1; i >= 0; i--) {
+        const r = rockets[i];
+        r.life += dt;
+        r.vy += GRAVITY * dt;
+        r.x  += r.vx * dt;
+        r.y  += r.vy * dt;
+        r.trail.push(r.x, r.y);
+        if (r.trail.length > 18) r.trail.splice(0, r.trail.length - 18);
+        // Detonate when velocity flips from up to down (the apex), or
+        // when life caps out (safety net for shallow shots).
+        if (r.vy >= 0 || r.life > 2.4 || r.y < 0) {
+          detonate(r);
+          rockets.splice(i, 1);
+          continue;
+        }
+        // Streak — a few faded dots behind the rocket.
+        ctx.save();
+        for (let k = 0; k < r.trail.length; k += 2) {
+          const a = k / r.trail.length;
+          ctx.globalAlpha = a * 0.6 * r.scale;
+          drawEmoji(r.emoji, r.trail[k], r.trail[k + 1], 12 * r.scale * a);
+        }
+        ctx.globalAlpha = 1;
+        drawEmoji(r.emoji, r.x, r.y, 22 * r.scale);
+        ctx.restore();
+      }
+
+      // Debris — integrate, fade, optional mini-burst when slow.
+      for (let i = debris.length - 1; i >= 0; i--) {
+        const d = debris[i];
+        d.age += dt;
+        if (d.age >= d.life || d.y > H + 30) { debris.splice(i, 1); continue; }
+        d.vy += GRAVITY * 0.65 * dt;        // air drag = lighter gravity
+        d.vx *= 0.985; d.vy *= 0.985;       // mild damping
+        d.x += d.vx * dt; d.y += d.vy * dt;
+        d.rot += d.vr * dt;
+        // Mini-burst trigger — fires once when the fragment has slowed
+        // and is past halfway through life. Reads as a chrysanthemum.
+        const speed2 = d.vx * d.vx + d.vy * d.vy;
+        if (d.secondary && speed2 < 1600 && d.age > d.life * 0.5) {
+          d.secondary = 0;
+          miniBurst(d);
+        }
+        const a = 1 - d.age / d.life;
+        ctx.save();
+        ctx.translate(d.x, d.y);
+        ctx.rotate(d.rot);
+        ctx.globalAlpha = a * a;           // ease-out quadratic fade
+        drawEmoji(d.emoji, 0, 0, d.size);
+        ctx.restore();
+      }
+      ctx.globalAlpha = 1;
+
+      if (debris.length > MAX_DEBRIS) {
+        debris.splice(0, debris.length - MAX_DEBRIS);
+      }
+    }
+
+    function drawSpiral(t, dt) {
+      // Fermat spiral: r = c · √i, angle = i · φ where φ is the golden
+      // angle. Gives an evenly-packed bloom with no gaps regardless of
+      // count. Pointer x tightens the spacing (c), pointer y drives the
+      // global rotation speed.
+      ctx.fillStyle = 'rgba(6,6,8,0.22)';
+      ctx.fillRect(0, 0, W, H);
+
+      const cx = W / 2, cy = H / 2;
+      const phi = Math.PI * (3 - Math.sqrt(5));   // golden angle
+      const px = pointer.on ? pointer.x : 0.5;
+      const py = pointer.on ? pointer.y : 0.5;
+      const rMax = Math.min(W, H) * 0.46;
+      // Tightness c picked so the outermost glyph (i = N) lands near
+      // rMax: rMax = c·√N  ⇒  c = rMax / √N. Pointer x scales it.
+      const N = 220;
+      const tight = 0.55 + px * 0.9;              // 0.55..1.45
+      const c = (rMax / Math.sqrt(N)) * tight;
+      const speed = 0.2 + py * 1.8;               // 0.2..2.0 rad/s
+      const spin = t * speed;
+      const pulse = rawPulse(t);
+
+      // Picked accent + cosmic backers so the spiral has color variety.
+      // Use a tiny rotating palette indexed by ring so adjacent glyphs
+      // differ — that's what makes the bloom feel alive vs. uniform.
+      const palette = [pick, COSMIC[1], STARS[0], COSMIC[3], FLORAL[0], pick];
+
+      for (let i = 0; i < N; i++) {
+        const r = c * Math.sqrt(i);
+        const a = i * phi + spin;
+        const x = cx + Math.cos(a) * r;
+        const y = cy + Math.sin(a) * r;
+        const t01 = i / N;
+        // Inner glyphs are bigger; outer ones taper. Pulse modulates.
+        const sz = (10 + (1 - t01) * 14) * (0.9 + pulse * 0.2);
+        // Soft fade in then fade out at the rim — bounds the visible
+        // ring so the spiral has a glowing edge instead of a hard cut.
+        const fadeIn  = Math.min(1, t01 * 8);
+        const fadeOut = Math.min(1, (1 - t01) * 4);
+        ctx.globalAlpha = fadeIn * fadeOut * 0.95;
+        const e = i < 6 ? pick : palette[i % palette.length];
+        drawEmoji(e, x, y, sz);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function drawMandala(t, dt) {
+      // Kaleidoscopic radial symmetry: build one wedge of glyphs once,
+      // then rotate-and-stamp it K times. Fold count and ring count are
+      // both pointer-steered, so the demo morphs continuously.
+      ctx.fillStyle = 'rgba(6,6,8,0.16)';
+      ctx.fillRect(0, 0, W, H);
+
+      const px = pointer.on ? pointer.x : 0.5;
+      const py = pointer.on ? pointer.y : 0.5;
+      // Quantized to {6,8,12} so the symmetry reads cleanly — fractional
+      // folds look like noise. Selection biased by pointer x.
+      const FOLDS = [6, 8, 12];
+      const K = FOLDS[Math.min(FOLDS.length - 1, (px * FOLDS.length) | 0)];
+      const rings = 2 + ((py * 3) | 0);          // 2..4 rings
+      const pulse = rawPulse(t);
+      const breath = 1 + 0.10 * pulse;           // breathing scale
+      const spin = t * 0.18;
+      const cx = W / 2, cy = H / 2;
+      const rMax = Math.min(W, H) * 0.42 * breath;
+
+      // Pre-compute one wedge: glyphs along a radial arm. We then stamp
+      // it K times via ctx.rotate. Doing it this way means glyph count
+      // grows ~K·rings·perRing, but the layout math runs once.
+      const perRing = 5;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(spin);
+      for (let k = 0; k < K; k++) {
+        ctx.save();
+        ctx.rotate((k / K) * Math.PI * 2);
+        // Mirror every other wedge for true kaleidoscope symmetry.
+        if (k % 2 === 1) ctx.scale(1, -1);
+        for (let r = 0; r < rings; r++) {
+          const rT = (r + 1) / (rings + 0.5);    // 0..1 normalized ring
+          const radius = rMax * rT;
+          for (let p = 0; p < perRing; p++) {
+            const along = (p + 0.5) / perRing - 0.5;   // -0.5..0.5
+            // Tangent offset gives the wedge "weave" — glyphs aren't on
+            // one straight arm, they curve along the ring slightly.
+            const ang = along * (Math.PI / K) * 1.6;
+            const x = Math.cos(ang) * radius;
+            const y = Math.sin(ang) * radius;
+            const sz = (8 + 16 * (1 - rT)) * (0.9 + pulse * 0.25);
+            // Choose glyph: anchor ring uses pick; outer rings rotate
+            // through florals + stars; corners use gems. The fold index
+            // shifts the palette so adjacent wedges aren't identical.
+            const pool = r === 0 ? [pick] :
+                         r === 1 ? FLORAL :
+                         r === 2 ? STARS  : GEM;
+            const e = pool[(p + k) % pool.length];
+            ctx.globalAlpha = 0.55 + 0.45 * (1 - rT);
+            drawEmoji(e, x, y, sz);
+          }
+        }
+        ctx.restore();
+      }
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+
+    function drawGalaxy(t, dt) {
+      // Elliptical orbits of persistent particles, color-graded by
+      // semi-major axis. Pointer-down nudges every orbit inward (subtle
+      // spiral collapse) — release and the particles re-expand.
+      ctx.fillStyle = 'rgba(6,6,8,0.12)';
+      ctx.fillRect(0, 0, W, H);
+
+      const cx = W / 2, cy = H / 2;
+      const rMax = Math.min(W, H) * 0.46;
+      // Lazy-init the orbit field. Each particle has a stable orbit
+      // (a, eccentricity, tilt) and a phase that advances each frame.
+      const TARGET = 260;
+      if (galaxyPs.length < TARGET) {
+        for (let i = galaxyPs.length; i < TARGET; i++) {
+          const aMaj = rng(rMax * 0.12, rMax);
+          const ecc  = rng(0.05, 0.32);            // mild ellipses
+          // Kepler-ish: inner orbits faster. Sign flips for variety.
+          const dir  = Math.random() < 0.5 ? 1 : -1;
+          const omega = dir * (0.25 + (rMax / aMaj) * 0.35);
+          galaxyPs.push({
+            a: aMaj, ecc, omega,
+            theta: rng(0, Math.PI * 2),
+            tilt:  rng(0, Math.PI * 2),
+            size:  rng(10, 18),
+            seed:  Math.random(),
+          });
+        }
+      }
+
+      // Pointer-held inward drift handled per-particle below — orbits
+      // shrink while down, spring back to their seeded value on release.
+
+      for (let i = 0; i < galaxyPs.length; i++) {
+        const p = galaxyPs[i];
+        p.theta += p.omega * dt;
+        // Soft drift toward (or away from) the held position.
+        if (pointer.down) p.a *= (1 - 0.4 * dt);
+        else p.a += ((p.seed * (rMax * 0.7) + rMax * 0.15) - p.a) * Math.min(1, dt * 0.6);
+        const r = p.a * (1 - p.ecc * p.ecc) /
+                  (1 + p.ecc * Math.cos(p.theta));
+        const x = cx + (Math.cos(p.theta) * r) * Math.cos(p.tilt) -
+                       (Math.sin(p.theta) * r * 0.7) * Math.sin(p.tilt);
+        const y = cy + (Math.cos(p.theta) * r) * Math.sin(p.tilt) +
+                       (Math.sin(p.theta) * r * 0.7) * Math.cos(p.tilt);
+        const t01 = p.a / rMax;
+        // Glyph by orbital distance: hot inner core → pick + stars,
+        // mid band → cosmic, outer halo → florals. Makes radius read
+        // as color even though the canvas can't actually tint emoji.
+        const pool = t01 < 0.33 ? [pick, STARS[0], STARS[2]]
+                   : t01 < 0.7  ? COSMIC
+                                 : FLORAL;
+        const e = pool[(i + ((t * 0.5) | 0)) % pool.length];
+        const sz = p.size * (1.1 - t01 * 0.5);
+        // Inner stars brighter so the "core" reads, outer halo fades.
+        ctx.globalAlpha = 1 - t01 * 0.55;
+        drawEmoji(e, x, y, sz);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // ── rAF loop ───────────────────────────────────────────────────
     let t0, tp;
     function frame(ts) {
       requestAnimationFrame(frame);
@@ -1678,56 +2076,13 @@ fn accel(p: vec3<f32>, h2: f32) -> vec3<f32> {
       if (t0 === undefined) { t0 = ts; tp = ts; }
       const t  = (ts - t0) / 1000;
       const dt = Math.min(0.05, (ts - tp) / 1000); tp = ts;
-      ctx.clearRect(0, 0, W, H);
 
-      if (mode === 'rain') {
-        if (Math.random() < 0.4) spawn(1);
-        for (let i = particles.length - 1; i >= 0; i--) {
-          const p = particles[i];
-          p.life += dt;
-          if (p.life > p.max || p.y > H + 40) { particles.splice(i, 1); continue; }
-          p.vy += 140 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
-          ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
-          ctx.globalAlpha = Math.max(0, 1 - p.life / p.max);
-          drawEmoji(p.e, 0, 0, p.s); ctx.restore();
-        }
-        ctx.globalAlpha = 1;
-      } else {
-        const speed = 0.32 + (pointer.on ? pointer.x * 0.9 : 0.25);
-        clock += dt * speed;
-        const target = KEY[Math.floor(clock) % 4];
-        let sides = sidesEnv ? sidesEnv.follow(target, dt)
-          : (sidesFb += (target - sidesFb) * Math.min(1, dt * 1.1), sidesFb);
-        sides = Math.max(3, sides);
-        const pulse = rawPulse(t);
-        const cx = W / 2, cy = H / 2;
-        const R = Math.min(W, H) * 0.30 * (1 + 0.14 * pulse);
-        const rot = t * 0.16 + (pointer.on ? (pointer.y - 0.5) * 1.6 : 0);
-        const M = 24, size = 20 + pulse * 14;
-        const ngon = n => {
-          const v = [];
-          for (let k = 0; k < n; k++) { const a = rot - Math.PI / 2 + k * (Math.PI * 2 / n); v.push([Math.cos(a) * R, Math.sin(a) * R]); }
-          return v;
-        };
-        const nLo = Math.floor(sides), nHi = Math.ceil(sides), fr = sides - nLo;
-        const A = ngon(nLo), B = nHi === nLo ? A : ngon(nHi);
-        const pt = (arr, n, m) => {
-          const s = (m / M) * n, e = Math.floor(s) % n, f = s - Math.floor(s);
-          const a = arr[e], b = arr[(e + 1) % n];
-          return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
-        };
-        // No per-frame ctx.font / fillText — drawEmoji() blits the cache.
-        for (let m = 0; m < M; m++) {
-          const p = pt(A, nLo, m), q = pt(B, nHi, m);
-          const x = cx + p[0] + (q[0] - p[0]) * fr;
-          const y = cy + p[1] + (q[1] - p[1]) * fr;
-          ctx.globalAlpha = 0.85 + pulse * 0.15;
-          drawEmoji(FORM[m % FORM.length], x, y, size);
-        }
-        ctx.globalAlpha = 1;
-      }
+      if (mode === 'fireworks')      drawFireworks(t, dt);
+      else if (mode === 'spiral')    drawSpiral(t, dt);
+      else if (mode === 'mandala')   drawMandala(t, dt);
+      else if (mode === 'galaxy')    drawGalaxy(t, dt);
     }
-    setMode('rain');
+    setMode('fireworks');
     requestAnimationFrame(frame);
   })();
 
