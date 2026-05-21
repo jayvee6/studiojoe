@@ -937,15 +937,19 @@ function makeCapMesh(mat, dir) {
   boreMesh.castShadow = false;
   capGroup.add(boreMesh);
 
-  // P10: close the BACK end of the cap with a solid disc (FrontSide, wall
+  // P13: close the BACK end of the cap with a solid disc (FrontSide, wall
   // material) so the cap reads as a real flared mouth — open forward, sealed
-  // toward the pipe body. The forward end stays open so the camera can see
-  // down into the dark bore. Disc sits in the XZ plane (rotated -π/2 around X
-  // so its +Z normal becomes -Y, pointing away from the pipe body).
+  // toward the pipe body. The CircleGeometry's front face has normal +Z by
+  // default. Rotating around X by -π/2 makes the front-face normal point -Y,
+  // i.e. AWAY from the cap mouth, so the front of the disc is visible from
+  // outside the back of the cap. The previous +π/2 rotation pointed the
+  // FrontSide toward the cap interior — the back of the cap rendered with the
+  // unrendered BackSide of the disc, leaving the cap visually open at both
+  // ends and exposing the inner bore from behind.
   const backDiscGeo = capBackDiscGeoTemplate.clone();
   const backDisc = new THREE.Mesh(backDiscGeo, mat);
   backDisc.position.set(0, -CAP_HEIGHT / 2, 0);
-  backDisc.rotation.x = Math.PI / 2;
+  backDisc.rotation.x = -Math.PI / 2;
   backDisc.castShadow = true;
   backDisc.receiveShadow = true;
   capGroup.add(backDisc);
@@ -1130,6 +1134,14 @@ function advanceHead(i, t) {
 
 function wrapHead(i) {
   const h = heads[i];
+  // P14: same snap as advanceHead — if the chain wraps while the leading
+  // segment is mid-grow, lock it to scale.y=1 before we lose the reference,
+  // otherwise it stays at a partial scale forever (floating stub orphaned
+  // from the rest of the chain when the new head seeds elsewhere).
+  if (h.growOuter && !h.growOuter._growDone) {
+    h.growOuter.scale.setY(1);
+    h.growOuter._growDone = true;
+  }
   // Place a static terminal cap at current position
   const termCap = makeCapMesh(h.mat, h.dir);
   placeCap(termCap, h.pos, h.dir);
