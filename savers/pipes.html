@@ -320,7 +320,11 @@ function makeEnvTexture() {
 function initScene() {
   // ---- Renderer ----
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  // P16: capped DPR from 2 → 1.5. At 4K-class viewports the difference
+  // is invisible but the fillrate cost is ~1.78× smaller — the IBL +
+  // shadow path that lifted the scene visually was capped at <20 fps
+  // on retina otherwise.
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -456,8 +460,10 @@ function initScene() {
   // ---- Floor ----
   // SCNFloor position y = -10, satin graphite
   // reflectivity 0.15, metalness 0.10, roughness 0.55
-  // Approximated with a large plane + MeshStandardMaterial
-  const floorGeo = new THREE.PlaneGeometry(300, 300);
+  // P16: shrunk from 300x300 to 120x120. The camera never travels far
+  // enough for the larger plane to matter, but at DPR 1.5 it was still
+  // ~3M fragments of IBL-tinted floor every frame — pure waste.
+  const floorGeo = new THREE.PlaneGeometry(120, 120);
   const floorMat = new THREE.MeshStandardMaterial({
     color: new THREE.Color(0.10, 0.09, 0.13),
     metalness: 0.10,
@@ -812,17 +818,17 @@ function makeMaterial(style, color) {
   let mat;
   switch (style) {
     case 'obsidian': {
-      // P15: painted enamel steel — bumped metalness, dropped roughness,
-      // added clearcoat for the wet-paint gloss. With scene.environment
-      // now bound, this finally reads as a real glossy material instead
-      // of flat plastic.
+      // P16: painted enamel steel. Reverted from PhysicalMaterial back to
+      // StandardMaterial — clearcoat doubled shadow-pass shader cost on
+      // every opaque chain and dropped FPS to single digits. Standard
+      // material still consumes scene.environment for IBL specular, so
+      // the gloss reads almost identically without the per-fragment
+      // clearcoat layer. Bumped metalness compensates for the lost sheen.
       const jitter = (Math.random() - 0.5) * 0.18;
-      mat = new THREE.MeshPhysicalMaterial({
+      mat = new THREE.MeshStandardMaterial({
         color: new THREE.Color(0.62, 0.62, 0.62),
         roughness: Math.max(0.05, 0.22 + jitter),
-        metalness: 0.55,
-        clearcoat: 0.7,
-        clearcoatRoughness: 0.18,
+        metalness: 0.65,
         envMapIntensity: 1.15,
         emissive: col,
         emissiveIntensity: 0.05,
@@ -875,14 +881,13 @@ function makeMaterial(style, color) {
     }
     case 'tracer':
     default: {
-      // Frosted dark with animated emissive pulse — bump env intensity
-      // so the unlit side still reads sculptural between pulses.
-      mat = new THREE.MeshPhysicalMaterial({
+      // P16: same Physical → Standard revert as obsidian for the same
+      // perf reason. The pulsing emissive carries the visual identity;
+      // clearcoat is overkill on a glowing surface anyway.
+      mat = new THREE.MeshStandardMaterial({
         color: col,
         roughness: 0.16,
         metalness: 0.0,
-        clearcoat: 0.4,
-        clearcoatRoughness: 0.20,
         envMapIntensity: 1.0,
         emissive: col,
         emissiveIntensity: 0.0,
@@ -1413,7 +1418,7 @@ function onResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 }
 
 // ===========================================================================
