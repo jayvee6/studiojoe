@@ -59,6 +59,7 @@
     body { --atmo: 45,212,191; transition: background 0.4s, color 0.4s; }
     body[data-zone="showroom"]  { --accent: #2DD4BF; --atmo: 45,212,191; }
     body[data-zone="sandbox"]   { --accent: #22D3EE; --atmo: 34,211,238; }
+    body[data-zone="darkroom"]  { --accent: #FF5C4D; --atmo: 255,92,77; }
     body[data-zone="shelf"]     { --accent: #8B7CF6; --atmo: 139,124,246; }
     body[data-zone="workbench"] { --accent: #E8B450; --atmo: 232,180,80; }
     #atmo {
@@ -148,6 +149,49 @@
       margin-top: clamp(40px, 7vh, 80px);
       font-size: 11px; font-weight: 600; letter-spacing: 0.16em;
       text-transform: uppercase; color: var(--label-3);
+    }
+
+    /* ── Darkroom (Neural VFX): marquee case-study teaser ───────────────── */
+    .dk-media {
+      position: relative;
+      margin-top: clamp(24px, 4vh, 44px);
+      width: min(100%, 1100px);
+      /* explicit height — no aspect-ratio in a flex column (Safari) */
+      height: clamp(300px, 48vh, 560px);
+      border-radius: 18px; overflow: hidden;
+      border: 1px solid var(--glass-bdr);
+      box-shadow: var(--glass-shd);
+      background: #0a0708;
+    }
+    .dk-media video, .dk-media img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+    }
+    .dk-tools {
+      margin-top: clamp(20px, 3vh, 32px);
+      display: flex; flex-wrap: wrap; gap: 8px;
+      width: min(100%, 1100px);
+    }
+    .dk-chip {
+      font-size: 12px; font-weight: 600; letter-spacing: 0.01em;
+      padding: 6px 12px; border-radius: 999px;
+      background: var(--fill-1); border: 1px solid var(--glass-bdr);
+      color: var(--label-2);
+    }
+    .dk-chip b { color: var(--accent); font-weight: 700; }
+    .dk-actions {
+      margin-top: clamp(22px, 3vh, 34px);
+      display: flex; gap: 14px; flex-wrap: wrap; align-items: center;
+    }
+    .dk-cta {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 22px; border-radius: 999px;
+      background: var(--accent); color: #1a0603; border: 1px solid transparent;
+      font-size: 14px; font-weight: 700; text-decoration: none;
+      transition: transform 0.3s cubic-bezier(0.16,1,0.3,1), box-shadow 0.3s;
+    }
+    .dk-cta:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 14px 44px rgba(var(--atmo), 0.35);
     }
 
     /* ── Sandbox (S3): hands-on playground ──────────────────────────────── */
@@ -566,7 +610,7 @@
         A studio that ships its own tools. WebGPU, Canvas, Metal — the eye
         candy here is the proof, and every bit of it is takeable.
       </p>
-      <p class="scroll-cue">Scroll — Sandbox · Shelf · Workbench ↓</p>
+      <p class="scroll-cue">Scroll — Sandbox · Darkroom · Shelf · Workbench ↓</p>
     </div>
   </section>
 
@@ -589,6 +633,34 @@
       <span class="sb-emojis" id="sbEmojis" role="group" aria-label="Rain emoji"></span>
       <button type="button" class="sb-btn" id="sbBurst">Burst ✨</button>
       <button type="button" class="crack-link" data-crack-open="sandbox">⟨ &nbsp;how the sandbox is built&nbsp; ⟩</button>
+    </div>
+  </section>
+
+  <!-- ── DARKROOM — Neural VFX marquee case study (S/teaser). ──────────── -->
+  <section id="darkroom" class="zone">
+    <p class="eyebrow">Neural VFX</p>
+    <h2>Restyle is a filter. Recast is a performance.</h2>
+    <p class="lede">
+      A dancer recast as Chun-Li. A phone-clip dance moved wholesale into the
+      Mushroom Kingdom — not a style pass, a performance transfer. The motion,
+      the mattes, the depth all come off the real footage; one reference image
+      decides the character and the world; the human keeps every decision.
+    </p>
+    <div class="dk-media">
+      <video src="/vfx/mario-fireball.mp4" poster="/vfx/mario-fireball.jpg"
+             autoplay muted loop playsinline
+             aria-label="Fire Mario in the Mushroom Kingdom — full-scene SCAIL-2 restyle"></video>
+    </div>
+    <div class="dk-tools" aria-label="Toolchain">
+      <span class="dk-chip"><b>SCAIL-2</b> — performance transfer</span>
+      <span class="dk-chip"><b>SAM3</b> — roto + tracking</span>
+      <span class="dk-chip"><b>DepthAnythingV2</b> — depth</span>
+      <span class="dk-chip"><b>Flux Kontext</b> — references</span>
+      <span class="dk-chip"><b>Real-ESRGAN</b> — upscale</span>
+      <span class="dk-chip"><b>FFmpeg</b> — finish</span>
+    </div>
+    <div class="dk-actions">
+      <a class="dk-cta" href="/neural-vfx.html">Read the full breakdown&nbsp;→</a>
     </div>
   </section>
 
@@ -2344,7 +2416,7 @@ fn accel(p: vec3<f32>, h2: f32) -> vec3<f32> {
   // The accent + glow shift between zones; CSS transitions do the crossfade.
   // Demonstrates the sj-design theme/mood idea: one look engine, many moods.
   (function ZoneAtmosphere() {
-    const zones = ['showroom', 'sandbox', 'shelf', 'workbench']
+    const zones = ['showroom', 'sandbox', 'darkroom', 'shelf', 'workbench']
       .map(id => document.getElementById(id))
       .filter(Boolean);
     if (!zones.length || !('IntersectionObserver' in window)) {

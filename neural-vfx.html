@@ -1,0 +1,1758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Neural VFX — Studio Joe</title>
+  <meta name="description" content="A dancer recast as Chun-Li. A TikTok dance moved into the Mushroom Kingdom. A neural-backed VFX pipeline — every stage, every tool, what broke, and the one law that governs all of it.">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Design tokens — Nocturne / Aurora (matches studiojoe.dev), tuned
+         to the Darkroom zone. Shares the site's 14-token contract and its
+         cool graphite base (--bg / --bg-g), and adds two tokens this page
+         needs: --mono and --atmo. Only the accent + atmosphere shift to
+         darkroom-red, so navigating #darkroom → this page stays continuous.
+         Dark-only, like the rest of the site (light mode retired). ── */
+    :root {
+      --font:      -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+                   "Helvetica Neue", Arial, sans-serif;
+      --mono:      "SF Mono", ui-monospace, "Menlo", monospace;
+      --bg:        #060608;
+      --bg-g:      radial-gradient(ellipse 90% 60% at 50% -10%,
+                     #122 0%, #0c1418 30%, #08090e 62%, #060608 100%);
+      --label-1:   rgba(255,255,255,0.92);
+      --label-2:   rgba(255,255,255,0.55);
+      --label-3:   rgba(255,255,255,0.28);
+      --accent:    #FF5C4D;
+      --accent-bg: rgba(255,92,77,0.12);
+      --atmo:      255,92,77;
+      --fill-1:    rgba(255,255,255,0.04);
+      --fill-2:    rgba(255,255,255,0.08);
+      --sep:       rgba(255,255,255,0.09);
+      --glass-bg:  rgba(255,255,255,0.05);
+      --glass-bdr: rgba(255,255,255,0.10);
+      --glass-shd: 0 8px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08);
+    }
+
+    html {
+      background: var(--bg);
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    body {
+      font-family: var(--font);
+      background: var(--bg-g);
+      background-attachment: fixed;
+      color: var(--label-1);
+      min-height: 100svh;
+    }
+
+    /* ── Ambient layers ─────────────────────────────────────────────────── */
+    .grain {
+      position: fixed; inset: 0; z-index: 9999; pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      opacity: 0.035; mix-blend-mode: overlay;
+    }
+    #atmo {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background: radial-gradient(ellipse 80% 60% at 50% 8%,
+        rgba(var(--atmo), 0.16) 0%, rgba(var(--atmo), 0.05) 40%, transparent 72%);
+    }
+    #gobo { position: fixed; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
+
+    /* ── Header ─────────────────────────────────────────────────────────── */
+    header {
+      position: fixed; top: 0; left: 0; right: 0;
+      z-index: 1000; height: 52px;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 clamp(24px, 5vw, 80px);
+      border-bottom: 1px solid var(--sep);
+      background: rgba(6,6,8,0.55);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+    }
+    .wordmark {
+      font-size: 15px; font-weight: 700; letter-spacing: -0.02em;
+      color: var(--label-1); text-decoration: none; transition: color 0.2s;
+    }
+    .wordmark:hover { color: var(--accent); }
+    nav { display: flex; align-items: center; gap: 4px; }
+    nav a {
+      font-size: 13px; font-weight: 500; color: var(--label-2);
+      text-decoration: none; padding: 6px 12px; border-radius: 6px;
+      transition: color 0.2s, background 0.2s;
+    }
+    nav a:hover { color: var(--label-1); background: var(--fill-2); }
+
+    /* ── Keyboard focus parity (matches hover affordances) ──────────────── */
+    .wordmark:focus-visible, nav a:focus-visible, .link-card:focus-visible,
+    .back a:focus-visible, .footer-link:focus-visible {
+      outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 8px;
+    }
+    .nav-home { opacity: 0.5; }
+
+    /* ── Layout ─────────────────────────────────────────────────────────── */
+    main { position: relative; z-index: 10; }
+    .wrap { width: min(100%, 1100px); margin: 0 auto; }
+    section {
+      position: relative;
+      padding: clamp(64px, 11vh, 128px) clamp(24px, 6vw, 96px);
+      border-bottom: 1px solid var(--sep);
+    }
+    .eyebrow {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--accent); margin-bottom: 16px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .eyebrow::before {
+      content: ''; width: 18px; height: 1px; background: var(--accent); flex: none;
+    }
+    h1 {
+      font-size: clamp(2.6rem, 7vw, 6rem);
+      font-weight: 700; letter-spacing: -0.035em; line-height: 1.02;
+      color: var(--label-1); max-width: 16ch;
+    }
+    h2 {
+      font-size: clamp(1.8rem, 4vw, 3.2rem);
+      font-weight: 700; letter-spacing: -0.03em; line-height: 1.06;
+      color: var(--label-1); max-width: 20ch;
+    }
+    h3 {
+      font-size: clamp(17px, 1.7vw, 20px); font-weight: 700;
+      letter-spacing: -0.02em; color: var(--label-1);
+    }
+    .accent { color: var(--accent); }
+    .lede {
+      margin-top: 22px;
+      font-size: clamp(15px, 1.6vw, 19px); font-weight: 400; line-height: 1.6;
+      color: var(--label-2); max-width: 60ch;
+    }
+    .kicker {
+      font-size: clamp(13px, 1.3vw, 15px); font-weight: 500;
+      color: var(--label-3); letter-spacing: 0.02em; margin-top: 14px;
+    }
+
+    /* ── Media frame (lazy video) ───────────────────────────────────────── */
+    .frame {
+      position: relative; margin-top: clamp(24px, 4vh, 44px);
+      border-radius: 18px; overflow: hidden;
+      border: 1px solid var(--glass-bdr); box-shadow: var(--glass-shd);
+      background: #0a0708;
+    }
+    .frame.hero-frame { height: clamp(300px, 52vh, 600px); }
+    .frame video, .frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .frame.contain video, .frame.contain img { object-fit: contain; background: #050405; }
+    .frame-cap {
+      position: absolute; left: 14px; bottom: 12px; z-index: 2;
+      font: 600 11px/1 var(--font); letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--label-2); padding: 6px 10px; border-radius: 8px;
+      background: rgba(6,6,8,0.55);
+      -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+      pointer-events: none;
+    }
+
+    /* ── Glass card ─────────────────────────────────────────────────────── */
+    .card {
+      position: relative; overflow: hidden;
+      background: var(--glass-bg); border: 1px solid var(--glass-bdr);
+      border-radius: 16px; box-shadow: var(--glass-shd);
+    }
+    .card::before {
+      content: ''; position: absolute; inset: 0; border-radius: inherit;
+      background: radial-gradient(ellipse 80% 40% at 40% 20%,
+        rgba(255,255,255,0.10) 0%, transparent 70%);
+      pointer-events: none; z-index: 0;
+    }
+    .card > * { position: relative; z-index: 1; }
+
+    /* ── Two-up compare (thesis) ────────────────────────────────────────── */
+    .compare {
+      margin-top: clamp(28px, 4vh, 48px);
+      display: grid; grid-template-columns: 1fr 1fr; gap: clamp(16px, 2.4vw, 28px);
+      align-items: start;
+    }
+    .compare .card { padding: clamp(22px, 2.4vw, 34px); }
+    .compare .tag {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: 12px;
+    }
+    .compare .tag.cool { color: #5AC8FA; }
+    .compare h3 { margin-bottom: 12px; font-size: clamp(19px, 2vw, 24px); }
+    .compare p { font-size: 14px; line-height: 1.62; color: var(--label-2); }
+    .compare .model {
+      margin-top: 16px; font: 600 12px/1.4 var(--mono);
+      color: var(--label-3); word-break: break-word;
+    }
+    .rule {
+      margin-top: clamp(24px, 3.5vh, 40px); padding: clamp(20px, 2.4vw, 30px);
+      border-left: 2px solid var(--accent);
+    }
+    .rule p { font-size: clamp(16px, 1.9vw, 22px); font-weight: 500; line-height: 1.45; color: var(--label-1); }
+
+    /* ── ComfyUI-style graph ─────────────────────────────────────────── */
+    .comfy-wrap { margin-top: clamp(28px, 4vh, 48px); overflow-x: auto;
+                  border-radius: 14px; -webkit-overflow-scrolling: touch; }
+    .comfy-graph { display: block; min-width: 1100px; width: 100%; height: auto;
+                   border-radius: 12px; box-shadow: 0 8px 40px rgba(0,0,0,0.45); }
+    .graph-cap { margin-top: 12px; font: 400 12px/1.7 var(--mono); color: var(--label-3); }
+    .graph-cap code { color: var(--label-2); }
+
+    /* ── Pass breakdown strip (Chun-Li decomposition) ────────────────── */
+    .passes { margin-top: clamp(28px, 4vh, 48px); display: grid; gap: clamp(10px, 1.2vw, 16px);
+              grid-template-columns: repeat(5, 1fr); }
+    .pass { border-radius: 14px; overflow: hidden; }
+    .pass video { display: block; width: 100%; aspect-ratio: 9/16; object-fit: cover;
+                  background: #0a0a0d; border-radius: 10px 10px 0 0; }
+    .pass figcaption { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 3px; }
+    .pass-name { font: 700 11px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase;
+                 color: var(--accent); }
+    .pass-sub { font: 400 11.5px/1.5 var(--font); color: var(--label-3); }
+    @media (max-width: 900px) { .passes { grid-template-columns: repeat(2, 1fr); }
+                                .passes .pass:last-child { grid-column: span 2; } }
+
+    /* ── Journey / dead ends ────────────────────────────────────────────── */
+    .steps { margin-top: clamp(28px, 4vh, 44px); display: flex; flex-direction: column; gap: 0; }
+    .step {
+      display: grid; grid-template-columns: 132px 1fr; gap: clamp(16px, 3vw, 40px);
+      padding: 24px 0; border-top: 1px solid var(--sep); align-items: start;
+    }
+    .step:last-child { border-bottom: 1px solid var(--sep); }
+    .step-verdict {
+      font: 700 11px/1.3 var(--font); letter-spacing: 0.1em; text-transform: uppercase;
+      padding-top: 3px;
+    }
+    .step-verdict.dead { color: #FF5C4D; }
+    .step-verdict.win  { color: #30D158; }
+    .step-verdict.fix  { color: #FF9F0A; }
+    .step h3 { margin-bottom: 6px; }
+    .step p { font-size: 13.5px; line-height: 1.6; color: var(--label-2); }
+
+    /* ── Pipeline stages ────────────────────────────────────────────────── */
+    .stage-grid { margin-top: clamp(28px, 4vh, 48px); display: flex; flex-direction: column; gap: clamp(16px, 2.2vw, 26px); }
+    .stage {
+      display: grid; grid-template-columns: 1fr 1.1fr; gap: clamp(18px, 2.6vw, 36px);
+      align-items: center; padding: clamp(20px, 2.4vw, 32px);
+    }
+    .stage.no-media { grid-template-columns: 1fr; }
+    .stage.flip .stage-body { order: 2; }
+    .stage-num {
+      font: 700 13px/1 var(--mono); color: var(--accent);
+      letter-spacing: 0.04em; margin-bottom: 10px;
+    }
+    .stage h3 { font-size: clamp(20px, 2.2vw, 27px); margin-bottom: 14px; }
+    .stage ul { list-style: none; display: flex; flex-direction: column; gap: 9px; }
+    .stage li {
+      font-size: 14px; line-height: 1.5; color: var(--label-2);
+      padding-left: 18px; position: relative;
+    }
+    .stage li::before {
+      content: ''; position: absolute; left: 0; top: 8px;
+      width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+    }
+    .stage-tool {
+      display: inline-flex; align-items: center; margin-top: 16px;
+      font: 600 12px/1 var(--mono); letter-spacing: 0.01em;
+      color: var(--label-1); padding: 8px 12px; border-radius: 999px;
+      background: var(--accent-bg); border: 1px solid var(--glass-bdr);
+    }
+    .stage-tool b { color: var(--accent); font-weight: 700; }
+    .stage-media { position: relative; border-radius: 14px; overflow: hidden;
+      border: 1px solid var(--glass-bdr); background: #0a0708;
+      aspect-ratio: 9 / 12; max-height: 460px; margin: 0 auto; width: 100%; }
+    .stage-media.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; aspect-ratio: auto; background: transparent; border: none; }
+    .stage-media.pair .sub { position: relative; border-radius: 12px; overflow: hidden;
+      border: 1px solid var(--glass-bdr); background: #0a0708; aspect-ratio: 9 / 14; }
+    .stage-media.wide { aspect-ratio: 16 / 9; }
+    .stage-media video, .stage-media img, .stage-media .sub video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .sub-cap {
+      position: absolute; left: 8px; bottom: 8px; z-index: 2;
+      font: 600 10px/1 var(--font); letter-spacing: 0.06em; text-transform: uppercase;
+      color: var(--label-2); padding: 4px 8px; border-radius: 6px;
+      background: rgba(6,6,8,0.6); pointer-events: none;
+    }
+
+    /* ── Tool breakdown cards ───────────────────────────────────────────── */
+    .tools { margin-top: clamp(28px, 4vh, 48px); display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+      gap: clamp(14px, 1.8vw, 22px); }
+    .tool { padding: clamp(20px, 2vw, 26px); display: flex; flex-direction: column; gap: 12px; }
+    .tool-name { font: 700 clamp(16px, 1.6vw, 19px)/1.2 var(--font); letter-spacing: -0.01em; color: var(--label-1); }
+    .tool-name span { display: block; font: 500 11px/1.3 var(--mono); color: var(--label-3); letter-spacing: 0; margin-top: 4px; }
+    .tool-role { font-size: 13px; line-height: 1.55; color: var(--label-2); }
+    .tool dl { display: flex; flex-direction: column; gap: 10px; margin-top: 2px; }
+    .tool dt {
+      font: 700 10px/1 var(--font); letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--label-3); margin-bottom: 5px;
+    }
+    .tool dd { font-size: 13px; line-height: 1.55; color: var(--label-2); }
+    .tool .gotcha dt { color: var(--accent); }
+
+    /* ── Craft ancestor table ───────────────────────────────────────────── */
+    .ancestry { margin-top: clamp(28px, 4vh, 48px); border-radius: 16px; overflow: hidden;
+      border: 1px solid var(--glass-bdr); }
+    .anc-row {
+      display: grid; grid-template-columns: 1fr 24px 1fr; gap: 12px; align-items: center;
+      padding: 16px clamp(16px, 2vw, 26px);
+      border-top: 1px solid var(--sep); background: var(--glass-bg);
+    }
+    .anc-row:first-child { border-top: none; }
+    .anc-row.head { background: transparent; }
+    .anc-row.head span { font: 700 10px/1 var(--font); letter-spacing: 0.14em; text-transform: uppercase; color: var(--label-3); }
+    .anc-new { font-size: 13.5px; font-weight: 600; color: var(--label-1); line-height: 1.4; }
+    .anc-arrow { color: var(--accent); text-align: center; font-size: 14px; }
+    .anc-old { font-size: 13.5px; color: var(--label-2); line-height: 1.4; }
+
+    /* ── Payoff highlight blocks ────────────────────────────────────────── */
+    .payoff-grid { margin-top: clamp(28px, 4vh, 44px); display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: clamp(14px, 1.8vw, 22px); }
+    .payoff { padding: clamp(22px, 2.2vw, 30px); display: flex; flex-direction: column; gap: 12px; }
+    .payoff .tag { font: 700 11px/1 var(--font); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+    .payoff h3 { font-size: clamp(18px, 1.9vw, 22px); }
+    .payoff p { font-size: 14px; line-height: 1.62; color: var(--label-2); }
+    .payoff code {
+      font: 600 12px/1.5 var(--mono); color: var(--label-1);
+      background: var(--fill-1); border: 1px solid var(--sep);
+      padding: 2px 6px; border-radius: 6px; white-space: nowrap;
+    }
+
+    /* ── Stats strip ────────────────────────────────────────────────────── */
+    .stats { margin-top: clamp(28px, 4vh, 48px); display: grid;
+      grid-template-columns: repeat(4, 1fr); gap: clamp(12px, 1.6vw, 20px); }
+    .stat { padding: clamp(20px, 2vw, 30px) clamp(16px, 1.8vw, 24px); text-align: left; }
+    .stat-num { font: 800 clamp(30px, 4.4vw, 54px)/1 var(--font); letter-spacing: -0.03em; color: var(--label-1); }
+    .stat-num .accent { color: var(--accent); }
+    .stat-label { margin-top: 8px; font-size: 12px; font-weight: 600; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--label-3); }
+
+    /* ── Outbound links ─────────────────────────────────────────────────── */
+    .links { margin-top: clamp(28px, 4vh, 48px); display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: clamp(14px, 1.8vw, 22px); }
+    .link-card {
+      padding: clamp(20px, 2vw, 26px); display: flex; flex-direction: column; gap: 8px;
+      text-decoration: none;
+      transition: transform 0.3s cubic-bezier(0.16,1,0.3,1), box-shadow 0.3s;
+    }
+    .link-card:hover { transform: translateY(-4px); box-shadow: 0 20px 60px rgba(0,0,0,0.45); }
+    .link-kind { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+    .link-title { font-size: clamp(17px, 1.7vw, 20px); font-weight: 700; letter-spacing: -0.02em; color: var(--label-1); }
+    .link-desc { font-size: 13px; line-height: 1.55; color: var(--label-2); }
+    .link-go { margin-top: 4px; font-size: 13px; font-weight: 600; color: var(--accent); }
+    .link-note { font-size: 11px; color: var(--label-3); margin-top: 2px; }
+
+    /* ── Back button ────────────────────────────────────────────────────── */
+    .back { margin-top: clamp(28px, 4vh, 44px); display: inline-flex; }
+    .back a {
+      font: 600 13px/1 var(--font); color: var(--label-2); text-decoration: none;
+      padding: 11px 20px; border-radius: 999px;
+      background: var(--fill-2); border: 1px solid var(--glass-bdr);
+      transition: color 0.2s, background 0.2s;
+    }
+    .back a:hover { color: var(--label-1); background: var(--fill-1); }
+
+    /* ── Footer ─────────────────────────────────────────────────────────── */
+    footer {
+      position: relative; z-index: 10;
+      padding: clamp(28px, 5vh, 48px) clamp(24px, 6vw, 96px);
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px;
+      border-top: 1px solid var(--sep); background: rgba(0,0,0,0.25);
+    }
+    .footer-sub { font-size: 11px; color: var(--label-3); letter-spacing: 0.04em; }
+    .footer-links { display: flex; gap: 16px; flex-wrap: wrap; }
+    .footer-link {
+      font-size: 11px; font-weight: 500; color: var(--label-3);
+      text-decoration: none; letter-spacing: 0.04em; transition: color 0.2s;
+    }
+    .footer-link:hover { color: var(--accent); }
+
+    /* ── Finished-work gallery ──────────────────────────────────────────── */
+    .gallery { margin-top: clamp(28px, 4vh, 48px); display: flex; flex-direction: column; gap: clamp(14px, 2vw, 22px); }
+    .gclip {
+      position: relative; margin: 0; border-radius: 16px; overflow: hidden;
+      border: 1px solid var(--glass-bdr); box-shadow: var(--glass-shd); background: #0a0708;
+    }
+    .gclip.wide { aspect-ratio: 896 / 512; }
+    .gclip-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(14px, 2vw, 22px); }
+    .gclip-row .gclip { aspect-ratio: 9 / 16; }
+    .gclip video, .gclip img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .gclip::after {
+      content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+      background: linear-gradient(to top, rgba(6,6,8,0.82) 0%, rgba(6,6,8,0.2) 34%, transparent 60%);
+    }
+    .gclip figcaption { position: absolute; left: 14px; right: 14px; bottom: 12px; z-index: 2; }
+    .g-title { font: 700 14px/1.25 var(--font); letter-spacing: -0.01em; color: var(--label-1); }
+    .g-sub { display: block; margin-top: 3px; font: 500 11px/1.35 var(--mono); color: var(--label-2); }
+
+    /* ── How it works (compact 5-step explainer) ────────────────────────── */
+    .how { margin-top: clamp(28px, 4vh, 48px); display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: clamp(14px, 1.8vw, 20px); }
+    .how-step { padding: clamp(18px, 1.9vw, 24px); display: flex; flex-direction: column; gap: 9px; }
+    .how-n { font: 800 13px/1 var(--mono); color: var(--accent); letter-spacing: 0.06em; }
+    .how-step h3 { font-size: clamp(15px, 1.5vw, 17px); }
+    .how-step p { font-size: 13px; line-height: 1.55; color: var(--label-2); }
+    .how-step code {
+      font: 600 11.5px/1.5 var(--mono); color: var(--label-1);
+      background: var(--fill-1); border: 1px solid var(--sep);
+      padding: 1px 5px; border-radius: 5px;
+    }
+
+    /* ── Palette (models we evaluated) ──────────────────────────────────── */
+    .palette { margin-top: clamp(24px, 3.5vh, 40px); display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: clamp(12px, 1.5vw, 18px); }
+    .pal { padding: 16px clamp(16px, 1.8vw, 20px); display: flex; flex-direction: column; gap: 5px; }
+    .pal-name { font: 700 13.5px/1.2 var(--font); color: var(--label-1); }
+    .pal-name span { color: var(--accent); font-weight: 700; }
+    .pal-role { font-size: 12.5px; line-height: 1.5; color: var(--label-2); }
+
+    /* ── Workflows & recipes placeholder ────────────────────────────────── */
+    .recipe-soon {
+      margin-top: clamp(28px, 4vh, 44px); padding: clamp(26px, 3.4vw, 44px);
+      display: flex; flex-direction: column; align-items: flex-start; gap: 12px;
+      border-style: dashed; border-color: var(--glass-bdr);
+    }
+    .recipe-soon .badge {
+      font: 700 11px/1 var(--font); letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--accent); padding: 7px 12px; border-radius: 999px;
+      background: var(--accent-bg); border: 1px solid var(--glass-bdr);
+    }
+    .recipe-soon h3 { font-size: clamp(18px, 1.9vw, 22px); }
+    .recipe-soon p { font-size: 14px; line-height: 1.6; color: var(--label-2); max-width: 62ch; }
+    .recipe-soon code {
+      font: 600 12px/1.5 var(--mono); color: var(--label-1);
+      background: var(--fill-1); border: 1px solid var(--sep);
+      padding: 2px 6px; border-radius: 6px;
+    }
+
+    /* ── Pipeline at-a-glance (native stage-still grid, no baked poster) ─── */
+    .pflow { margin-top: clamp(24px, 4vh, 40px); display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr)); gap: clamp(12px, 1.6vw, 18px); }
+    .pstep { padding: 0; overflow: hidden; }
+    .pstep-media { aspect-ratio: 4 / 3; background: #050405; display: block; }
+    .pstep-media img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .pstep-cap { display: flex; align-items: baseline; gap: 8px; padding: 11px 14px 13px; }
+    .pstep-n { font: 800 12px/1 var(--mono); color: var(--accent); letter-spacing: 0.04em; flex: none; }
+    .pstep-name { font: 600 13px/1.25 var(--font); letter-spacing: -0.01em; color: var(--label-1); }
+
+    /* ── Final delivery · 12-segment contact grid (native, stills only) ─── */
+    .segs { margin-top: clamp(24px, 4vh, 40px); display: grid;
+      grid-template-columns: repeat(6, 1fr); gap: clamp(8px, 1.2vw, 14px); }
+    .seg { position: relative; border-radius: 12px; overflow: hidden;
+      border: 1px solid var(--glass-bdr); background: #0a0708; aspect-ratio: 9 / 16; }
+    .seg img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .seg span {
+      position: absolute; top: 7px; left: 7px; z-index: 2;
+      font: 700 10px/1 var(--mono); letter-spacing: 0.04em; color: var(--label-1);
+      padding: 3px 6px; border-radius: 6px; background: rgba(6,6,8,0.6);
+      -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    }
+
+    /* ── Responsive ─────────────────────────────────────────────────────── */
+    @media (max-width: 820px) {
+      .compare { grid-template-columns: 1fr; }
+      .stage { grid-template-columns: 1fr; }
+      .stage.flip .stage-body { order: 0; }
+      .stage-media { max-height: 380px; }
+      .step { grid-template-columns: 1fr; gap: 8px; }
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .anc-row { grid-template-columns: 1fr 20px 1fr; }
+      /* Keep the primary CTAs reachable on mobile: Repo (the #1 CTA for this
+         audience) + Home stay visible and wrap; only the secondary links drop. */
+      nav { flex-wrap: wrap; justify-content: flex-end; }
+      .nav-collapse { display: none; }
+      .nav-home { opacity: 1; }
+      .g-title { font-size: 12px; }
+      .g-sub { display: none; }
+      .segs { grid-template-columns: repeat(4, 1fr); }
+    }
+    @media (max-width: 460px) {
+      .segs { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="grain" aria-hidden="true"></div>
+<div id="atmo" aria-hidden="true"></div>
+<div id="gobo" aria-hidden="true"></div>
+
+<header>
+  <a class="wordmark" href="/">Studio Joe</a>
+  <nav>
+    <a href="/#darkroom" class="nav-collapse">Darkroom</a>
+    <a href="/resume.html" class="nav-collapse">Resume</a>
+    <a href="https://github.com/jayvee6/comfy-cloud-lab" target="_blank" rel="noopener">Repo ↗</a>
+    <a href="/" class="nav-home">← Home</a>
+  </nav>
+</header>
+
+<main>
+
+  <!-- ── HERO ─────────────────────────────────────────────────────────── -->
+  <section id="hero">
+    <div class="wrap">
+      <p class="eyebrow" data-sr>Neural VFX · Case study</p>
+      <h1 data-sr>Restyle is a filter.<br><span class="accent">Recast is a performance.</span></h1>
+      <p class="lede" data-sr>
+        A dancer recast as Chun-Li. A phone-clip dance moved wholesale into the
+        Mushroom Kingdom — not a style pass, a performance transfer. This is the
+        whole pipeline: every stage, the tool behind it, the dead ends, and the
+        one law that turned out to govern all of it.
+      </p>
+      <div class="frame hero-frame" data-sr>
+        <video data-src="/vfx/mario-fireball.mp4" poster="/vfx/mario-fireball.jpg"
+               muted loop playsinline preload="none"
+               aria-label="Fire Mario in the Mushroom Kingdom — full-scene SCAIL-2 restyle"></video>
+        <span class="frame-cap">Fire Mario in the Mushroom Kingdom — full-scene SCAIL-2 restyle</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── THESIS ───────────────────────────────────────────────────────── -->
+  <section id="thesis">
+    <div class="wrap">
+      <p class="eyebrow" data-sr>The thesis</p>
+      <h2 data-sr>Two operations that feel the same and aren't.</h2>
+      <p class="lede" data-sr>
+        A restyle and a recast look like the same job wearing different clothes.
+        They are not. One is a per-pixel function; the other has to synthesize a
+        subject that doesn't exist and hold it together across frames, poses, and
+        cuts. The anime style pass worked on the first try. Holding one specific
+        character — her hands, her eyes, her world — fought back the whole way,
+        and that gap is the entire story.
+      </p>
+
+      <div class="compare">
+        <div class="card" data-sr>
+          <p class="tag cool">Restyle · a filter</p>
+          <h3>Repaint the whole world</h3>
+          <p>
+            A per-pixel map: every pixel gets a styled version of itself.
+            Identity-free, local, and temporally stable for free — the input
+            video is already coherent, so dancers can cross, overlap, anything.
+            A full-frame restyle model repaints the entire frame.
+          </p>
+          <p class="model">wan2.1_14B_SCAIL_2 — full-frame restyle</p>
+        </div>
+        <div class="card" data-sr>
+          <p class="tag">Recast · a performance</p>
+          <h3>Keep the silhouette, swap the subject</h3>
+          <p>
+            A subject recast synthesizes a new character and composites it over
+            the real scene. The character's pixels don't exist — they're
+            hallucinated fresh every frame. It keeps the driver's silhouette,
+            and that silhouette leaks: stray hair, a buff torso, identity drift.
+          </p>
+          <p class="model">Wan 2.2 Animate 14B — subject recast / composite</p>
+        </div>
+      </div>
+
+      <div class="card rule" data-sr>
+        <p>
+          The method-selection rule: restyle repaints the whole world; recast
+          keeps the driver's silhouette. Which one you reach for decides
+          everything downstream — including whether you keep the real scene or
+          get to build a new one.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── DEAD ENDS ────────────────────────────────────────────────────── -->
+  <section id="journey">
+    <div class="wrap">
+      <p class="eyebrow" data-sr>The journey</p>
+      <h2 data-sr>Retrospectives live on the dead ends.</h2>
+      <p class="lede" data-sr>
+        The credibility of a pipeline is the list of things that broke on the way
+        to it. Here is the honest arc — what we tried, what died, and the pivots
+        that followed.
+      </p>
+
+      <div class="steps">
+        <div class="step" data-sr>
+          <span class="step-verdict dead">Died</span>
+          <div>
+            <h3>Per-frame Nano-Banana</h3>
+            <p>A phenomenal single-keyframe engine with no temporal model — linework and watercolor boil frame to frame. It also obeys prompt wardrobe literally: a poisoned prompt invented a whole character. Rule born: read the source frame before prompting.</p>
+          </div>
+        </div>
+        <div class="step" data-sr>
+          <span class="step-verdict dead">Died</span>
+          <div>
+            <h3>EBSynth optical-flow propagation</h3>
+            <p>Great for slow motion — talking heads, pans. It melts on fast dance footage: huge inter-keyframe motion breaks the warp and the blend becomes a triple exposure. Dead for anything with real choreography.</p>
+          </div>
+        </div>
+        <div class="step" data-sr>
+          <span class="step-verdict win">Won</span>
+          <div>
+            <h3>AnimateDiff V2V, as a restyle</h3>
+            <p>Coherent by construction — every frame is denoised from the real source latent. This was the filter that worked, and it seeded the whole restyle-vs-recast insight.</p>
+          </div>
+        </div>
+        <div class="step" data-sr>
+          <span class="step-verdict win">Won</span>
+          <div>
+            <h3>SCAIL-2, driven by a reference</h3>
+            <p>The breakthrough: a full-frame restyle where one stylized character sheet plus two prompts recasts the whole clip. The Chun-Li pass came out with her hands, her proportions, her identity — first real try. The only things that change per style are the reference image and the prompts.</p>
+          </div>
+        </div>
+        <div class="step" data-sr>
+          <span class="step-verdict dead">Died</span>
+          <div>
+            <h3>Prompting against the reference</h3>
+            <p>On the distilled low-CFG path the prompt is a whisper. We asked for the Mushroom Kingdom in text while the reference sat on a grey studio backdrop — and the render stayed grey, run after run. The reference's own background out-votes any world you describe.</p>
+          </div>
+        </div>
+        <div class="step" data-sr>
+          <span class="step-verdict fix">Fixed</span>
+          <div>
+            <h3>The face-forward reference</h3>
+            <p>Characters whose identity is a costume recast first-try. Characters whose identity is a <em>face</em> drift toward a generic prior — until the reference shows that face large, sharp, and front-on. Crop the face, upscale it, hand the model something to actually copy. Identity locks.</p>
+          </div>
+        </div>
+        <div class="step" data-sr>
+          <span class="step-verdict win">The law</span>
+          <div>
+            <h3>The reference drives everything</h3>
+            <p>Face, hair, material, lighting, the background, the world — every failure traced to the reference, and so did every fix. Build the world <em>into</em> the reference and it holds in every frame at every length. That law reorganized the whole pipeline around one question: what's in the ref?</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── PIPELINE ─────────────────────────────────────────────────────── -->
+  <section id="pipeline">
+    <div class="wrap">
+      <p class="eyebrow" data-sr>The experiment · World control</p>
+      <h2 data-sr>One dance, five worlds. The reference won.</h2>
+      <p class="lede" data-sr>
+        Same character, same dance, five strategies for getting the Mushroom
+        Kingdom into the frame — a controlled shootout, about 93 credits of
+        evidence. Two strategies gambled, one half-worked, and the two that
+        carried the world inside the reference held it in every frame. The
+        moment you demand control instead of "generate something cool," you land
+        back on classical VFX discipline: build the shot, don't beg for it.
+      </p>
+
+      <div class="pflow" data-sr>
+        <figure class="pstep card">
+          <div class="pstep-media"><img src="/vfx/shootout/v1.jpg" alt="Variant 1 — world prompt at 81 frames: a dense toadstool wall behind Mario" loading="lazy"></div>
+          <figcaption class="pstep-cap"><span class="pstep-n">V1</span><span class="pstep-name">Prompt + length</span></figcaption>
+        </figure>
+        <figure class="pstep card">
+          <div class="pstep-media"><img src="/vfx/shootout/v3.jpg" alt="Variant 3 — a better world prompt: the background stays a grey studio" loading="lazy"></div>
+          <figcaption class="pstep-cap"><span class="pstep-n">V3</span><span class="pstep-name">The better prompt</span></figcaption>
+        </figure>
+        <figure class="pstep card">
+          <div class="pstep-media"><img src="/vfx/shootout/v2.jpg" alt="Variant 2 — zoom-out driver alone: the full render collapsed back to grey" loading="lazy"></div>
+          <figcaption class="pstep-cap"><span class="pstep-n">V2</span><span class="pstep-name">Zoom-out alone</span></figcaption>
+        </figure>
+        <figure class="pstep card">
+          <div class="pstep-media"><img src="/vfx/shootout/v4.jpg" alt="Variant 4 — the world carried inside the reference image: the world holds" loading="lazy"></div>
+          <figcaption class="pstep-cap"><span class="pstep-n">V4</span><span class="pstep-name">World in the ref</span></figcaption>
+        </figure>
+        <figure class="pstep card">
+          <div class="pstep-media"><img src="/vfx/shootout/v5.jpg" alt="Variant 5 — the continuity reference: the established series world, held in every frame" loading="lazy"></div>
+          <figcaption class="pstep-cap"><span class="pstep-n">V5</span><span class="pstep-name">Continuity ref</span></figcaption>
+        </figure>
+      </div>
+
+      <div class="stage-grid">
+
+        <!-- V1 -->
+        <div class="stage no-media card" data-sr>
+          <div class="stage-body">
+            <p class="stage-num">V1</p>
+            <h3>Prompt + length</h3>
+            <ul>
+              <li>The historical recipe — world prompt at 81 frames</li>
+              <li>The world forms, but <em>dissolves in</em> — grey for 1.4s of a 3s clip</li>
+              <li>Character excellent; the world reads as wallpaper</li>
+            </ul>
+            <span class="stage-tool"><b>Verdict</b>&nbsp;— works, unreliably. Not a lever.</span>
+          </div>
+        </div>
+
+        <!-- V2 -->
+        <div class="stage no-media card" data-sr>
+          <div class="stage-body">
+            <p class="stage-num">V2</p>
+            <h3>Zoom-out alone</h3>
+            <ul>
+              <li>Pad the driver — subject at ~50% height, wide-shot composition</li>
+              <li>The probe rendered a gorgeous full vista</li>
+              <li>The full render collapsed back to grey</li>
+            </ul>
+            <span class="stage-tool"><b>Verdict</b>&nbsp;— a slot machine. Composition ≠ world.</span>
+          </div>
+        </div>
+
+        <!-- V3 -->
+        <div class="stage no-media card" data-sr>
+          <div class="stage-body">
+            <p class="stage-num">V3</p>
+            <h3>The better prompt</h3>
+            <ul>
+              <li>Open-vista world description, targeted negatives</li>
+              <li>Never formed — at any point, in any frame</li>
+              <li>The reference's grey backdrop won every run</li>
+            </ul>
+            <span class="stage-tool"><b>Verdict</b>&nbsp;— the prompt is a whisper.</span>
+          </div>
+        </div>
+
+        <!-- V4 -->
+        <div class="stage no-media card" data-sr>
+          <div class="stage-body">
+            <p class="stage-num">V4</p>
+            <h3>World in the reference</h3>
+            <ul>
+              <li>The character composited into a frame of the target world</li>
+              <li>The world held in all 89 frames, at every length</li>
+              <li>But a different world grammar than the series' look</li>
+            </ul>
+            <span class="stage-tool"><b>Verdict</b>&nbsp;— deterministic. The mechanism, proven.</span>
+          </div>
+        </div>
+
+        <!-- V5 -->
+        <div class="stage no-media card" data-sr>
+          <div class="stage-body">
+            <p class="stage-num">V5</p>
+            <h3>The continuity reference</h3>
+            <ul>
+              <li>Reference = a frame of the <em>previous good shot</em></li>
+              <li>Same caps, same light, same palette — held every frame</li>
+              <li>Cuts with the established series by construction</li>
+            </ul>
+            <span class="stage-tool"><b>Verdict</b>&nbsp;— the flagship. Continuity beats beauty.</span>
+          </div>
+        </div>
+
+      </div>
+
+      <div style="margin-top:clamp(40px,6vh,64px)">
+        <p class="eyebrow" data-sr>Final delivery · V5</p>
+        <h2 data-sr>The delivered cut — continuity by construction.</h2>
+        <p class="lede" data-sr>
+          The V5 render: the reference was a frame of the previous good shot, so
+          this clip and that one share a world — same mushroom design, same
+          dappled light, same Mario — without a single matched-grading pass.
+          The dance is the driver's, untouched.
+        </p>
+        <div class="frame" data-sr style="max-width:520px; aspect-ratio:1/1">
+          <video data-src="/vfx/mario-mandance-v5.mp4" poster="/vfx/mario-mandance-v5.jpg"
+                 muted loop playsinline preload="none"
+                 aria-label="The V5 continuity render — Fire Mario dancing in the established Mushroom Kingdom"></video>
+          <span class="frame-cap">V5 — the continuity reference, delivered</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── THE DECOMPOSITION · CHUN-LI ──────────────────────────────────── -->
+  <section id="breakdown">
+    <div class="wrap">
+      <p class="eyebrow" data-sr>The decomposition · Chun-Li</p>
+      <h2 data-sr>Every pass, laid bare.</h2>
+      <p class="lede" data-sr>
+        The classic VFX breakdown reel, neural edition — the same seven seconds
+        of one dance, at every stage of the pipeline. The plate is decomposed
+        into the departments a studio would recognize: a mocap pass, a roto
+        pass, a layout pass — each one a neural model doing a craftsperson's
+        job — and then the performance transfer that puts Chun-Li inside all
+        of it. Every lane below is frame-locked to the same window; watch the
+        hands.
+      </p>
+
+      <div class="passes" data-sr>
+        <figure class="pass card">
+          <video data-src="/vfx/chunli/chunli-pass-original.mp4" poster="/vfx/chunli/chunli-pass-original.jpg"
+                 muted loop playsinline preload="none"
+                 aria-label="The original source performance — the plate"></video>
+          <figcaption>
+            <span class="pass-name">01 · Original</span>
+            <span class="pass-sub">The plate — one dancer, one phone, real motion.</span>
+          </figcaption>
+        </figure>
+        <figure class="pass card">
+          <video data-src="/vfx/chunli/chunli-pass-pose.mp4" poster="/vfx/chunli/chunli-pass-pose.jpg"
+                 muted loop playsinline preload="none"
+                 aria-label="The pose pass — body, hands, and face mesh tracked as a skeleton"></video>
+          <figcaption>
+            <span class="pass-name">02 · Pose</span>
+            <span class="pass-sub">Neural mocap — body, articulated hands, face mesh (MediaPipe holistic).</span>
+          </figcaption>
+        </figure>
+        <figure class="pass card">
+          <video data-src="/vfx/chunli/chunli-pass-mask.mp4" poster="/vfx/chunli/chunli-pass-mask.jpg"
+                 muted loop playsinline preload="none"
+                 aria-label="The mask pass — the tracked subject matte"></video>
+          <figcaption>
+            <span class="pass-name">03 · Mask</span>
+            <span class="pass-sub">The roto — SAM3 tracks the subject as a traveling matte.</span>
+          </figcaption>
+        </figure>
+        <figure class="pass card">
+          <video data-src="/vfx/chunli/chunli-pass-depth.mp4" poster="/vfx/chunli/chunli-pass-depth.jpg"
+                 muted loop playsinline preload="none"
+                 aria-label="The depth pass — per-frame monocular depth"></video>
+          <figcaption>
+            <span class="pass-name">04 · Depth</span>
+            <span class="pass-sub">The layout — DepthAnythingV2 reads the scene's geometry every frame.</span>
+          </figcaption>
+        </figure>
+        <figure class="pass card">
+          <video data-src="/vfx/chunli/chunli-pass-final.mp4" poster="/vfx/chunli/chunli-pass-final.jpg"
+                 muted loop playsinline preload="none"
+                 aria-label="The final — the dancer recast as Chun-Li on a night-market street"></video>
+          <figcaption>
+            <span class="pass-name">05 · Final</span>
+            <span class="pass-sub">The performance transfer — SCAIL-2, her hands, her world.</span>
+          </figcaption>
+        </figure>
+      </div>
+
+      <div class="card rule" data-sr style="margin-top:clamp(28px,4vh,44px)">
+        <p>
+          Nothing in the final frame is untracked: the motion came off the
+          plate, the silhouette off the matte, the space off the depth. That's
+          the difference between generating a video and <em>making a shot</em> —
+          every pass is a decision you can inspect, swap, or grade.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── TOOLCHAIN ────────────────────────────────────────────────────── -->
+  <section id="toolchain">
+    <div class="wrap">
+      <p class="eyebrow" data-sr>The full toolchain</p>
+      <h2 data-sr>Eight tools. What each does, why it's here, the gotcha.</h2>
+      <p class="lede" data-sr>
+        Every tool maps onto a classical VFX department. The gotchas below are the
+        ones that actually cost time — the practical meat you only learn by hitting
+        the wall.
+      </p>
+
+      <div class="tools">
+
+        <div class="tool card" data-sr>
+          <p class="tool-name">SCAIL-2 <span>wan2.1_14B_SCAIL_2_fp16 · WanSCAILToVideo</span></p>
+          <p class="tool-role">Full-frame restyle driven by one reference image plus the driver's performance — animation, lighting, and world in a single pass.</p>
+          <dl>
+            <div><dt>Why it's here</dt><dd>The engine behind every recast on this page: it repaints the character <em>and</em> the world while keeping the driver's motion — the performance transfer itself.</dd></div>
+            <div class="gotcha"><dt>The gotcha</dt><dd>It runs a distilled low-CFG path, so the prompt is a whisper — the reference drives everything, including its own background. <code>pose_strength</code> 1.0→0.8 fixes foreshortened giant hands; expect settle frames at segment cold-starts.</dd></div>
+          </dl>
+        </div>
+
+        <div class="tool card" data-sr>
+          <p class="tool-name">SAM3 <span>video segmentation + tracking</span></p>
+          <p class="tool-role">Point- and text-prompted segmentation that propagates across frames — the roto and traveling-matte department.</p>
+          <dl>
+            <div><dt>Why it's here</dt><dd>Mattes the rendered character off its backdrop for background-swap composites, and isolates subjects cleanly before any pose or identity pass.</dd></div>
+            <div class="gotcha"><dt>The gotcha</dt><dd>Matte the <em>render</em>, not the driver — a recast character rarely shares the driver's proportions, so a driver-shaped matte clips it. Mask jobs OOM past ~30 frames; downscale first.</dd></div>
+          </dl>
+        </div>
+
+        <div class="tool card" data-sr>
+          <p class="tool-name">Flux Kontext Pro <span>reference generation + editing</span></p>
+          <p class="tool-role">High-quality image generation that also accepts an input image — the model-sheet artist for a reference-driven pipeline.</p>
+          <dl>
+            <div><dt>Why it's here</dt><dd>Builds and edits the references that drive SCAIL — including compositing a character into a target-world frame. Permissive where Gemini hard-blocks franchise characters.</dd></div>
+            <div class="gotcha"><dt>The gotcha</dt><dd>It occasionally signs its work — a stray signature squiggle in a corner. Crop it. Framing a request as a "rigging reference / model sheet" clears moderation that a character name won't.</dd></div>
+          </dl>
+        </div>
+
+        <div class="tool card" data-sr>
+          <p class="tool-name">Real-ESRGAN x4plus <span>per-frame spatial upscale</span></p>
+          <p class="tool-role">Purely spatial 4× upscaling, frame by frame — the optical-printer blowup.</p>
+          <dl>
+            <div><dt>Why it's here</dt><dd>Turns a tiny face crop from source art into a usable face-forward reference — the cheap fix that locks a drifting identity.</dd></div>
+            <div class="gotcha"><dt>The gotcha</dt><dd>"Purely spatial" is a feature: no temporal smoothing means deliberate wobble and animation texture survive the blowup untouched.</dd></div>
+          </dl>
+        </div>
+
+        <div class="tool card" data-sr>
+          <p class="tool-name">Nano-Banana 2 <span>Gemini 3.1 Flash Image</span></p>
+          <p class="tool-role">Single-frame generation plus multi-image identity transfer — the keyframe and continuity artist.</p>
+          <dl>
+            <div><dt>Why it's here</dt><dd>Still the strongest single-keyframe engine for original characters and neutral-pose normalization passes.</dd></div>
+            <div class="gotcha"><dt>The gotcha</dt><dd>It refuses copyrighted characters and real-person likenesses outright — which is exactly why Flux sits beside it in the kit. And it obeys prompt wardrobe literally; read the source frame before prompting.</dd></div>
+          </dl>
+        </div>
+
+        <div class="tool card" data-sr>
+          <p class="tool-name">AnimateDiff V2V <span>in-place restyle</span></p>
+          <p class="tool-role">Denoises every frame from the real source latent — coherent by construction. The engine that stylizes <em>your</em> subject instead of swapping it.</p>
+          <dl>
+            <div><dt>Why it's here</dt><dd>The other half of engine-selection: SCAIL recasts a dancer <em>into</em> a character; AnimateDiff keeps the subject's identity and changes the material. Same request in English, two different jobs.</dd></div>
+            <div class="gotcha"><dt>The gotcha</dt><dd>Denoise 0.5 + FreeInit 3 + wider context overlap stabilizes the subject, but the background still boils — no ControlNet on it. The real fix is compositing the subject over the original stable plate.</dd></div>
+          </dl>
+        </div>
+
+        <div class="tool card" data-sr>
+          <p class="tool-name">Blender <span>headless reference renders</span></p>
+          <p class="tool-role">Renders character references straight from a 3D model — orthographic camera, controlled light, any framing. The turnaround artist.</p>
+          <dl>
+            <div><dt>Why it's here</dt><dd>When a rigged model of the character exists, a rendered reference beats any upscaled crop: accurate, high-res, artifact-free, and reusable for every future shot.</dd></div>
+            <div class="gotcha"><dt>The gotcha</dt><dd>The reference carries its lighting into the render — a flat studio-lit ortho pass flattened a character's signature hair. Light the reference the way you want the shot lit.</dd></div>
+          </dl>
+        </div>
+
+        <div class="tool card" data-sr>
+          <p class="tool-name">FFmpeg · NumPy · PIL <span>plate, comp, finish, audio</span></p>
+          <p class="tool-role">Plate prep, matte compositing, watermark and cold-start repair, audio mux — comp and DI.</p>
+          <dl>
+            <div><dt>Why it's here</dt><dd>The unglamorous spine — and the cheapest department. A watermark ghost in the last nine frames is a corner <code>delogo</code>, not a re-render; settle frames are a trim.</dd></div>
+            <div class="gotcha"><dt>The gotcha</dt><dd>Trust decode counts, not container metadata — one driver's header claimed 167 frames; it had 89. Every downstream frame budget was wrong until <code>ffprobe -count_frames</code> said so.</dd></div>
+          </dl>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── PAYOFF: SCAIL ────────────────────────────────────────────────── -->
+  <section id="payoff">
+    <div class="wrap">
+      <p class="eyebrow" data-sr>What we learned · SCAIL</p>
+      <h2 data-sr>The reference is the API.</h2>
+      <p class="lede" data-sr>
+        Everything the model honors rides in on the reference image — the face,
+        the hair, the material, the lighting, the world. The prompt negotiates;
+        the reference decides. Once that clicked, control stopped meaning
+        "prompt harder" and started meaning what it has always meant in VFX:
+        art-direct the inputs. Build the reference like a model sheet crossed
+        with a location scout, and the shot follows.
+      </p>
+
+      <div class="payoff-grid">
+        <div class="payoff card" data-sr>
+          <p class="tag">Continuity, by construction</p>
+          <h3>The last good shot is the next reference</h3>
+          <p>
+            A series has an established look, and every new shot is judged
+            against it. So the strongest reference for shot N+1 is a frame of
+            shot N — the character, palette, world design, and light arrive
+            together, and the new render cuts with the old one without a single
+            matched-grading pass. Dailies as an input, not just a review.
+          </p>
+          <div class="frame" style="margin-top:6px; aspect-ratio:1/1; max-height:440px">
+            <video data-src="/vfx/mario-mandance-v5.mp4" poster="/vfx/mario-mandance-v5.jpg"
+                   muted loop playsinline preload="none"
+                   aria-label="The V5 continuity render — the established world, held"></video>
+            <span class="frame-cap">V5 — referenced from the previous shot's frame 140</span>
+          </div>
+        </div>
+        <div class="payoff card" data-sr>
+          <p class="tag">One boolean</p>
+          <h3>On a green screen, or in the world</h3>
+          <p>
+            SCAIL's <code>replacement_mode&nbsp;=&nbsp;False</code> conditions the
+            entire frame — a full-scene restyle, e.g. Fire Mario in the Mushroom
+            Kingdom. Flip it to <code>True</code> and it's subject-only, with the
+            background passing through. The stock
+            <code>scail2_firemario_4seg.json</code> workflow ships
+            <code>replacement_mode&nbsp;=&nbsp;True</code> — subject-only, the
+            green-screen default — and our runs flip it to <code>False</code> for
+            the full-scene restyle. One setting is the whole difference between
+            "on a green screen" and "in the world."
+          </p>
+          <div class="frame" style="margin-top:6px; aspect-ratio:16/9">
+            <video data-src="/vfx/mario-mushroom-hero.mp4" muted loop playsinline preload="none"
+                   aria-label="Fire Mario restyled into the Mushroom Kingdom — full-scene conversion"></video>
+            <span class="frame-cap">replacement_mode=False — the whole world converts</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:clamp(40px,6vh,64px)">
+        <p class="eyebrow" data-sr>We were doing VFX the whole time</p>
+        <h2 data-sr>Every technique had a craft ancestor.</h2>
+        <p class="lede" data-sr>
+          AI didn't replace the pipeline. It replaced the labor of each stage —
+          the roto artist, the in-betweener, the matte painter, the mocap tech —
+          and left the architecture standing. The architecture is the invariant.
+        </p>
+
+        <div class="ancestry" data-sr>
+          <div class="anc-row head"><span>What we built</span><span></span><span>Craft ancestor</span></div>
+          <div class="anc-row"><span class="anc-new">SAM3 subject mattes</span><span class="anc-arrow">→</span><span class="anc-old">Rotoscoping (Fleischer, 1915) + traveling mattes</span></div>
+          <div class="anc-row"><span class="anc-new">Face-forward character references</span><span class="anc-arrow">→</span><span class="anc-old">Model sheets / character turnarounds</span></div>
+          <div class="anc-row"><span class="anc-new">The continuity reference from the last shot</span><span class="anc-arrow">→</span><span class="anc-old">The continuity supervisor + dailies</span></div>
+          <div class="anc-row"><span class="anc-new">SCAIL driven by the dancer's performance</span><span class="anc-arrow">→</span><span class="anc-old">Performance pass driven by motion capture</span></div>
+          <div class="anc-row"><span class="anc-new">World built into the reference</span><span class="anc-arrow">→</span><span class="anc-old">Matte painting + the location scout</span></div>
+          <div class="anc-row"><span class="anc-new">The five-variant world shootout</span><span class="anc-arrow">→</span><span class="anc-old">Wedge tests / lineup before the take</span></div>
+          <div class="anc-row"><span class="anc-new">Corner delogo, trims, audio mux</span><span class="anc-arrow">→</span><span class="anc-old">The compositing stack + DI finish</span></div>
+        </div>
+
+        <div class="card rule" data-sr style="margin-top:clamp(28px,4vh,44px)">
+          <p>
+            The one place AI genuinely diverges and the craft still wins: the 12
+            principles of animation — anticipation, follow-through, timing, weight,
+            staging. Neural models reproduce driving motion but have no sense of
+            intentional timing. The plumbing is absorbed; the performance is still
+            human.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── AUTHORSHIP / ARTIST-CENTRIC ──────────────────────────────────── -->
+  <section id="authorship">
+    <div class="wrap">
+      <p class="eyebrow" data-sr>The principle · Authorship</p>
+      <h2 data-sr>The auteurs who reject AI still use After Effects.</h2>
+      <p class="lede" data-sr>
+        Christopher Nolan and Hideo Kojima reject generative AI — but they embrace
+        After Effects, Premiere, motion capture, photogrammetry, custom engines.
+        Kojima is one of the most tech-forward creators alive; his rejection isn't
+        anti-technology. It's a line drawn in exactly one place: the tool may
+        execute the decision, never make it.
+      </p>
+
+      <div class="compare">
+        <div class="card" data-sr>
+          <p class="tag cool">Instrument · embraced</p>
+          <h3>The tool executes the decision</h3>
+          <p>
+            After Effects never decides what the shot looks like — the artist does,
+            and the tool renders that decision faster, cleaner, at scale. Every
+            frame is still authored. A brush, a camera, a compositor amplify intent;
+            they don't originate it.
+          </p>
+          <p class="model">After Effects · Premiere · mocap · photogrammetry · engines</p>
+        </div>
+        <div class="card" data-sr>
+          <p class="tag">Author · rejected</p>
+          <h3>The tool makes the decision</h3>
+          <p>
+            Generative AI, as it's pitched, decides everything from a prompt — a slot
+            machine where the authorship used to be. That's the rejection, and it
+            isn't about the technology. It's about who's holding the pen. Flawless
+            and authorless still reads as slop.
+          </p>
+          <p class="model">prompt in, movie out — the ghostwriter model</p>
+        </div>
+      </div>
+
+      <div class="card rule" data-sr>
+        <p>
+          Change the model — human authors, AI executes — and the rejection
+          evaporates. Build the instrument, not the author, and you become the next
+          After Effects, not the thing they reject. Everything on this page obeys
+          that rule: the human keeps the keyframes, the timing, the performance.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FINISHED WORK ────────────────────────────────────────────────── -->
+  <section id="gallery">
+    <div class="wrap">
+      <p class="eyebrow" data-sr>The finished work · SCAIL-2</p>
+      <h2 data-sr>Three recasts. One restyle model.</h2>
+      <p class="lede" data-sr>
+        The experiment above earned the method. These are the clips it produced —
+        each a real SCAIL-2 render off real driving footage: full-scene restyles
+        where the whole world converts, and a performance held through fast
+        choreography. Tap any clip to watch it loop.
+      </p>
+
+      <div class="gallery" data-sr>
+        <figure class="gclip wide">
+          <video data-src="/vfx/mario-fireball.mp4" poster="/vfx/mario-fireball.jpg"
+                 muted loop playsinline preload="none"
+                 aria-label="Fire Mario throwing a fireball in the Mushroom Kingdom — full-scene SCAIL-2 restyle"></video>
+          <figcaption>
+            <span class="g-title">Fire Mario in the Mushroom Kingdom</span>
+            <span class="g-sub">SCAIL-2 · replacement_mode=False · fireball hand-off · full-scene restyle</span>
+          </figcaption>
+        </figure>
+
+        <div class="gclip-row">
+          <figure class="gclip">
+            <video data-src="/vfx/chunli-dance.mp4" poster="/vfx/chunli-dance.jpg"
+                   muted loop playsinline preload="none"
+                   aria-label="A dancer recast as Chun-Li on a night-market street"></video>
+            <figcaption>
+              <span class="g-title">Chun-Li dance</span>
+              <span class="g-sub">Hands + eye-preserve pass</span>
+            </figcaption>
+          </figure>
+          <figure class="gclip">
+            <video data-src="/vfx/mario-mandance-v5.mp4" poster="/vfx/mario-mandance-v5.jpg"
+                   muted loop playsinline preload="none"
+                   aria-label="Fire Mario dancing in the established Mushroom Kingdom — the V5 continuity render"></video>
+            <figcaption>
+              <span class="g-title">Mario · the continuity render</span>
+              <span class="g-sub">Referenced from the previous shot</span>
+            </figcaption>
+          </figure>
+        </div>
+      </div>
+
+      <div style="margin-top:clamp(40px,6vh,64px)">
+        <p class="eyebrow" data-sr>How it works</p>
+        <h2 data-sr>Five moves, plain-English.</h2>
+        <p class="lede" data-sr>
+          Under the polish, every clip above rides the same five steps. No node
+          graph required to follow the idea.
+        </p>
+
+        <div class="how">
+          <div class="how-step card" data-sr>
+            <span class="how-n">01</span>
+            <h3>Full-frame restyle</h3>
+            <p>SCAIL-2 denoises the whole frame from the real source, so the world stays coherent frame to frame. Flip <code>replacement_mode</code> to restyle the entire scene or just the subject.</p>
+          </div>
+          <div class="how-step card" data-sr>
+            <span class="how-n">02</span>
+            <h3>Multi-subject crossing</h3>
+            <p>Two dancers that cross paths get their own tracked colour via <code>SCAIL2ColoredMask</code> — each is repainted as a distinct object, so the crossing stops collapsing into an identity switch.</p>
+          </div>
+          <div class="how-step card" data-sr>
+            <span class="how-n">03</span>
+            <h3>Boundary-aware pose</h3>
+            <p>The pose driver is fenced to each subject's own matte, so a limb reaching across the frame is read against the right body instead of bleeding onto its neighbour.</p>
+          </div>
+          <div class="how-step card" data-sr>
+            <span class="how-n">04</span>
+            <h3>Identity lock</h3>
+            <p>InsightFace embeddings pin each character's face across the shot, so the same two leads resolve every frame instead of drifting into a fresh face on every cut.</p>
+          </div>
+          <div class="how-step card" data-sr>
+            <span class="how-n">05</span>
+            <h3>Animation-smear finish</h3>
+            <p>A light smear pass adds motion-blur streaks on fast limbs — the in-betweener's trick — so quick moves read with weight instead of strobing frame to frame.</p>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:clamp(40px,6vh,64px)">
+        <p class="eyebrow" data-sr>Models we evaluated</p>
+        <h2 data-sr>The palette around SCAIL.</h2>
+        <p class="lede" data-sr>
+          SCAIL-2 carried the final clips, but the toolkit is bigger than one
+          model. These earned a place in the palette for specific jobs — reached
+          for when a shot needs them.
+        </p>
+
+        <div class="palette">
+          <div class="pal card" data-sr>
+            <p class="pal-name"><span>LivePortrait</span></p>
+            <p class="pal-role">Expression and lip retargeting for faces — driving a still portrait from a performance when the head is the whole shot.</p>
+          </div>
+          <div class="pal card" data-sr>
+            <p class="pal-name"><span>LTX-2.3</span></p>
+            <p class="pal-role">Fast keyframe-to-video for cutscene beats — bridging two authored frames into motion when a shot is short and self-contained.</p>
+          </div>
+          <div class="pal card" data-sr>
+            <p class="pal-name"><span>SeedVR2</span></p>
+            <p class="pal-role">Video restoration / de-boil — steadying a shimmering per-frame pass into something temporally clean before the final grade.</p>
+          </div>
+          <div class="pal card" data-sr>
+            <p class="pal-name"><span>Nano-Banana&nbsp;/&nbsp;Seedream</span></p>
+            <p class="pal-role">Single-frame plates and model sheets — the canonical character references and clean stills the video stages resolve toward.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── WORKFLOWS & RECIPES ──────────────────────────────────────────── -->
+  <!-- ── THE PLAYBOOK ─────────────────────────────────────────────────── -->
+  <section id="playbook">
+    <div class="wrap">
+      <p class="eyebrow" data-sr>The findings · Playbook</p>
+      <h2 data-sr>One law, paid for in credits: the reference drives everything.</h2>
+      <p class="lede" data-sr>
+        On the distilled low-CFG path these models run at, the text prompt is a
+        whisper — the reference image dictates the output. Face, hair, material,
+        lighting, even the background. Learned the hard way: a full-body
+        reference gave the costume but a stranger's face; a grey-studio Mario
+        reference kept erasing the Mushroom Kingdom no matter what the prompt
+        begged for. Every failure traced back to the same place. So does every fix.
+      </p>
+
+      <div class="compare">
+        <div class="card" data-sr>
+          <p class="tag">Fight the ref · slot machine</p>
+          <h3>Prompting against the reference</h3>
+          <p>
+            A five-variant shootout, same character, same dance: the world
+            <em>prompt</em> never beat a grey-background reference. Longer renders
+            let the world dissolve in — half the clip still grey. A wide-shot
+            driver produced a gorgeous probe, then collapsed back to grey in the
+            full render. Non-deterministic, every time.
+          </p>
+          <p class="model">prompt ✗ · length ~ · zoom-out alone 🎰</p>
+        </div>
+        <div class="card" data-sr>
+          <p class="tag cool">Fix the ref · deterministic</p>
+          <h3>Building the world into the reference</h3>
+          <p>
+            Put the target world <em>in the reference's own background</em> and it
+            held in every frame, at every length, both times it was tried. The
+            same bleed that poisoned the grey renders, weaponized. The face fix is
+            the same law: give the model a large, front-facing face to copy and
+            identity locks.
+          </p>
+          <p class="model">world-in-ref ✓ · face-forward ref ✓ — every frame, every run</p>
+        </div>
+      </div>
+
+      <div class="card rule" data-sr>
+        <p>
+          Continuity beats beauty. Once a series exists, the next shot is judged
+          against the established look — so the best reference for shot N+1 is a
+          frame of shot N. Self-referencing references make continuity a property
+          of the pipeline, not a hope. That's the difference between filmmaking
+          and pulling a slot machine lever.
+        </p>
+      </div>
+
+      <div class="how">
+        <div class="how-step card" data-sr>
+          <span class="how-n">RULE 01</span>
+          <h3>Cast for the costume</h3>
+          <p>Characters whose identity is an outfit (Mario, Chun-Li) recast first-try. Characters whose identity is a <em>face</em> drift generic — until the reference shows that face large and front-on. Best source: render it from a 3D model.</p>
+        </div>
+        <div class="how-step card" data-sr>
+          <span class="how-n">RULE 02</span>
+          <h3>The driver is the ceiling</h3>
+          <p>A tight, static phone clip can only grow wallpaper worlds. Wide shots give the world room; parallax is the <em>driver's camera motion</em> surviving the restyle. Cinematography in, cinematography out.</p>
+        </div>
+        <div class="how-step card" data-sr>
+          <span class="how-n">RULE 03</span>
+          <h3>Engine = intent</h3>
+          <p>Recast a dancer <em>into</em> a character: restyle with a character reference. Claymate <em>your own subject</em> in place: a different engine entirely. Same word — "make it clay" — two different jobs.</p>
+        </div>
+        <div class="how-step card" data-sr>
+          <span class="how-n">RULE 04</span>
+          <h3>Probe, then look</h3>
+          <p>A cheap 30-frame probe gates every render, and a human eyeballs the frames — exit codes lie, probes can too. Two failed attempts on one approach means stop and rethink, not roll again.</p>
+        </div>
+        <div class="how-step card" data-sr>
+          <span class="how-n">RULE 05</span>
+          <h3>Fix locally, not by re-rolling</h3>
+          <p>A watermark ghost in the last nine frames is an ffmpeg <code>delogo</code>, not a re-render. Settle frames are a trim. The cheapest fix is the one that doesn't touch the sampler.</p>
+        </div>
+        <div class="how-step card" data-sr>
+          <span class="how-n">PROOF</span>
+          <h3>One pipeline, repeatable</h3>
+          <p>The same style-routing tool recast a dancer as Chun-Li and moved a phone-clip dance into the established Mushroom Kingdom — same recipe, different reference. Pick a driver, pick a look, get the shot.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="recipes">
+    <div class="wrap">
+      <p class="eyebrow" data-sr>Workflows &amp; Recipes</p>
+      <h2 data-sr>The exact graph.</h2>
+      <p class="lede" data-sr>
+        This is the actual SCAIL-2 recast workflow — real node types, real model
+        filenames, real widget values, drawn from the API-format JSON that
+        rendered the clips above. One segment shown; the production graph chains
+        four of these with a 5-frame overlap, a <code>ColorTransfer</code> at
+        each seam, and the driver's audio muxed back in at the end.
+      </p>
+
+      <div class="comfy-wrap" data-sr>
+        <svg class="comfy-graph" viewBox="0 0 1560 815" role="img"
+             aria-label="The SCAIL-2 recast ComfyUI graph — loaders on the left feeding SAM3 tracking, the WanSCAILToVideo core, the sampler, and video assembly">
+          <defs>
+            <pattern id="cgrid" width="24" height="24" patternUnits="userSpaceOnUse">
+              <circle cx="1" cy="1" r="1" fill="rgba(255,255,255,0.05)"/>
+            </pattern>
+          </defs>
+          <style>
+            .cnode { fill:#26262b; stroke:rgba(0,0,0,0.65); stroke-width:1.2; rx:8; }
+            .cbar  { fill:#3a3a42; }
+            .ctit  { font:600 11.5px "SF Mono", ui-monospace, Menlo, monospace; fill:rgba(255,255,255,0.88); }
+            .cprt  { font:400 9.5px "SF Mono", ui-monospace, Menlo, monospace; fill:rgba(255,255,255,0.55); }
+            .cwid  { fill:#1b1b1f; rx:4; }
+            .cwt   { font:400 9.5px "SF Mono", ui-monospace, Menlo, monospace; fill:rgba(255,255,255,0.42); }
+            .cwv   { font:500 9.5px "SF Mono", ui-monospace, Menlo, monospace; fill:rgba(255,255,255,0.75); }
+            .noodle{ fill:none; stroke-width:2; opacity:0.85; }
+          </style>
+
+          <rect width="1560" height="815" fill="#141417" rx="12"/>
+          <rect width="1560" height="815" fill="url(#cgrid)" rx="12"/>
+
+          <!-- ══ noodles (under nodes) ══ -->
+          <!-- LoadVideo → GetVideoComponents -->
+          <path class="noodle" stroke="#8D6FD1" d="M226,72 C258,72 258,60 290,60"/>
+          <!-- GetVideoComponents.IMAGE → ImageFromBatch -->
+          <path class="noodle" stroke="#64B5F6" d="M516,52 C536,52 520,132 542,132"/>
+          <!-- GetVideoComponents fps/audio → CreateVideo (long) -->
+          <path class="noodle" stroke="#8D6FD1" opacity="0.45" d="M516,84 C700,84 1120,28 1268,364 C1290,414 1250,428 1262,428"/>
+          <!-- ImageFromBatch → SAM3 driver .images -->
+          <path class="noodle" stroke="#64B5F6" d="M746,130 C776,130 700,262 726,262"/>
+          <!-- ImageFromBatch → WanSCAIL.pose_video (long down) -->
+          <path class="noodle" stroke="#64B5F6" opacity="0.6" d="M746,130 C820,130 560,514 610,514"/>
+          <!-- LoadImage → SAM3 ref .images -->
+          <path class="noodle" stroke="#64B5F6" d="M226,168 C420,168 640,368 726,368"/>
+          <!-- LoadImage → CLIPVisionEncode.image -->
+          <path class="noodle" stroke="#64B5F6" opacity="0.6" d="M226,176 C300,176 240,700 290,700"/>
+          <!-- LoadImage → WanSCAIL.reference_image -->
+          <path class="noodle" stroke="#64B5F6" opacity="0.6" d="M226,184 C420,184 500,546 610,546"/>
+          <!-- sam3 ckpt MODEL → SAM3 tracks -->
+          <path class="noodle" stroke="#B39DDB" d="M226,742 C420,742 640,294 726,294"/>
+          <path class="noodle" stroke="#B39DDB" opacity="0.6" d="M226,750 C480,750 640,400 726,400"/>
+          <!-- SAM3 driver → ColoredMask.driving -->
+          <path class="noodle" stroke="#9E9E9E" d="M950,270 C990,270 960,352 1000,352"/>
+          <!-- SAM3 ref → ColoredMask.ref -->
+          <path class="noodle" stroke="#9E9E9E" d="M950,376 C990,376 968,384 1000,384"/>
+          <!-- ColoredMask masks → WanSCAIL (back-feed left) -->
+          <path class="noodle" stroke="#7EC57E" d="M1224,360 C1272,360 1272,236 990,236 C700,236 560,578 610,578"/>
+          <path class="noodle" stroke="#7EC57E" opacity="0.6" d="M1224,392 C1262,392 1262,250 1000,250 C720,250 580,610 610,610"/>
+          <!-- CLIPLoader → CLIPTextEncode pos/neg -->
+          <path class="noodle" stroke="#FFD500" d="M226,506 C258,506 262,502 290,502"/>
+          <path class="noodle" stroke="#FFD500" opacity="0.6" d="M226,514 C262,514 258,614 290,614"/>
+          <!-- TextEncode pos/neg → WanSCAIL -->
+          <path class="noodle" stroke="#FFA931" d="M516,510 C560,510 570,450 610,450"/>
+          <path class="noodle" stroke="#FFA931" opacity="0.7" d="M516,622 C560,622 570,482 610,482"/>
+          <!-- CLIPVisionLoader → CLIPVisionEncode -->
+          <path class="noodle" stroke="#7FD4D4" d="M226,586 C258,586 262,692 290,692"/>
+          <!-- CLIPVisionEncode → WanSCAIL.clip_vision -->
+          <path class="noodle" stroke="#7FD4D4" d="M516,700 C560,700 566,642 610,642"/>
+          <!-- VAELoader → WanSCAIL.vae + VAEDecode.vae -->
+          <path class="noodle" stroke="#FF6E6E" d="M226,662 C270,662 560,674 610,674"/>
+          <path class="noodle" stroke="#FF6E6E" opacity="0.6" d="M226,670 C500,670 900,790 1040,790 C1100,790 1090,654 1120,654"/>
+          <!-- model chain: UNET → DPO → distill → ModelSampling → SamplerCustom -->
+          <path class="noodle" stroke="#B39DDB" d="M226,268 C258,268 258,346 290,346"/>
+          <path class="noodle" stroke="#B39DDB" d="M516,354 C560,354 560,474 420,474 C320,474 250,428 290,428"/>
+          <path class="noodle" stroke="#B39DDB" d="M516,436 C620,436 700,90 1010,90"/>
+          <path class="noodle" stroke="#B39DDB" d="M1236,98 C1280,98 1230,156 1042,156 C1000,156 1010,190 1010,190"/>
+          <!-- WanSCAIL cond/latent → SamplerCustom -->
+          <path class="noodle" stroke="#FFA931" d="M834,450 C920,450 940,222 1010,222"/>
+          <path class="noodle" stroke="#FFA931" opacity="0.7" d="M834,482 C930,482 950,254 1010,254"/>
+          <path class="noodle" stroke="#FF9CF9" d="M834,514 C940,514 950,286 1010,286"/>
+          <!-- SamplerCustom → VAEDecode -->
+          <path class="noodle" stroke="#FF9CF9" d="M1236,230 C1280,230 1240,600 1120,600 C1080,600 1090,636 1120,636"/>
+          <!-- VAEDecode → ColorTransfer -->
+          <path class="noodle" stroke="#64B5F6" d="M1344,644 C1380,644 1360,530 1300,530 C1270,530 1276,556 1300,556"/>
+          <!-- ColorTransfer → CreateVideo -->
+          <path class="noodle" stroke="#64B5F6" d="M1524,564 C1548,564 1548,480 1400,464 C1330,456 1240,446 1262,446"/>
+          <!-- CreateVideo → SaveVideo -->
+          <path class="noodle" stroke="#8D6FD1" d="M1488,436 C1534,436 1534,368 1360,354 C1280,348 1230,318 1262,318"/>
+
+          <!-- ══ Column 1 · loaders ══ -->
+          <!-- Load Video -->
+          <g>
+            <rect class="cnode" x="20" y="36" width="206" height="66" rx="8"/>
+            <path class="cbar" d="M20,44 a8,8 0 0 1 8,-8 h190 a8,8 0 0 1 8,8 v14 h-206 z"/>
+            <text class="ctit" x="32" y="51">Load Video</text>
+            <circle cx="226" cy="72" r="4" fill="#8D6FD1"/><text class="cprt" x="186" y="75" text-anchor="end">VIDEO</text>
+            <rect class="cwid" x="28" y="80" width="190" height="15"/>
+            <text class="cwv" x="34" y="91">man-dancing-…-tiktok.mp4</text>
+          </g>
+          <!-- Load Image (reference) -->
+          <g>
+            <rect class="cnode" x="20" y="132" width="206" height="66" rx="8"/>
+            <path class="cbar" d="M20,140 a8,8 0 0 1 8,-8 h190 a8,8 0 0 1 8,8 v14 h-206 z"/>
+            <text class="ctit" x="32" y="147">Load Image · reference</text>
+            <circle cx="226" cy="176" r="4" fill="#64B5F6"/><text class="cprt" x="186" y="179" text-anchor="end">IMAGE</text>
+            <rect class="cwid" x="28" y="176" width="190" height="15"/>
+            <text class="cwv" x="34" y="187">v4_continuity_ref.png</text>
+          </g>
+          <!-- UNETLoader -->
+          <g>
+            <rect class="cnode" x="20" y="232" width="206" height="66" rx="8"/>
+            <path class="cbar" d="M20,240 a8,8 0 0 1 8,-8 h190 a8,8 0 0 1 8,8 v14 h-206 z"/>
+            <text class="ctit" x="32" y="247">Load Diffusion Model</text>
+            <circle cx="226" cy="268" r="4" fill="#B39DDB"/><text class="cprt" x="186" y="271" text-anchor="end">MODEL</text>
+            <rect class="cwid" x="28" y="276" width="190" height="15"/>
+            <text class="cwv" x="34" y="287">wan2.1_14B_SCAIL_2_fp16</text>
+          </g>
+          <!-- CLIPLoader -->
+          <g>
+            <rect class="cnode" x="20" y="470" width="206" height="66" rx="8"/>
+            <path class="cbar" d="M20,478 a8,8 0 0 1 8,-8 h190 a8,8 0 0 1 8,8 v14 h-206 z"/>
+            <text class="ctit" x="32" y="485">Load CLIP · wan</text>
+            <circle cx="226" cy="506" r="4" fill="#FFD500"/><text class="cprt" x="186" y="509" text-anchor="end">CLIP</text>
+            <rect class="cwid" x="28" y="514" width="190" height="15"/>
+            <text class="cwv" x="34" y="525">umt5_xxl_fp8_e4m3fn_scaled</text>
+          </g>
+          <!-- CLIPVisionLoader -->
+          <g>
+            <rect class="cnode" x="20" y="552" width="206" height="60" rx="8"/>
+            <path class="cbar" d="M20,560 a8,8 0 0 1 8,-8 h190 a8,8 0 0 1 8,8 v14 h-206 z"/>
+            <text class="ctit" x="32" y="567">Load CLIP Vision</text>
+            <circle cx="226" cy="586" r="4" fill="#7FD4D4"/><text class="cprt" x="176" y="589" text-anchor="end">CLIP_VISION</text>
+            <rect class="cwid" x="28" y="592" width="190" height="15"/>
+            <text class="cwv" x="34" y="603">clip_vision_h</text>
+          </g>
+          <!-- VAELoader -->
+          <g>
+            <rect class="cnode" x="20" y="628" width="206" height="60" rx="8"/>
+            <path class="cbar" d="M20,636 a8,8 0 0 1 8,-8 h190 a8,8 0 0 1 8,8 v14 h-206 z"/>
+            <text class="ctit" x="32" y="643">Load VAE</text>
+            <circle cx="226" cy="662" r="4" fill="#FF6E6E"/><text class="cprt" x="192" y="665" text-anchor="end">VAE</text>
+            <rect class="cwid" x="28" y="668" width="190" height="15"/>
+            <text class="cwv" x="34" y="679">Wan2_1_VAE_bf16</text>
+          </g>
+          <!-- SAM3 checkpoint -->
+          <g>
+            <rect class="cnode" x="20" y="706" width="206" height="66" rx="8"/>
+            <path class="cbar" d="M20,714 a8,8 0 0 1 8,-8 h190 a8,8 0 0 1 8,8 v14 h-206 z"/>
+            <text class="ctit" x="32" y="721">Load Checkpoint · SAM3</text>
+            <circle cx="226" cy="742" r="4" fill="#B39DDB"/><text class="cprt" x="186" y="745" text-anchor="end">MODEL</text>
+            <rect class="cwid" x="28" y="750" width="190" height="15"/>
+            <text class="cwv" x="34" y="761">sam3.1_multiplex_fp16</text>
+          </g>
+
+          <!-- ══ Column 2 ══ -->
+          <!-- GetVideoComponents -->
+          <g>
+            <rect class="cnode" x="290" y="24" width="226" height="72" rx="8"/>
+            <path class="cbar" d="M290,32 a8,8 0 0 1 8,-8 h210 a8,8 0 0 1 8,8 v14 h-226 z"/>
+            <text class="ctit" x="302" y="39">Get Video Components</text>
+            <circle cx="290" cy="60" r="4" fill="#8D6FD1"/><text class="cprt" x="300" y="63">video</text>
+            <circle cx="516" cy="52" r="4" fill="#64B5F6"/><text class="cprt" x="476" y="55" text-anchor="end">IMAGE</text>
+            <circle cx="516" cy="84" r="4" fill="#8D6FD1"/><text class="cprt" x="446" y="87" text-anchor="end">audio · fps</text>
+          </g>
+          <!-- ImageFromBatch -->
+          <g>
+            <rect class="cnode" x="542" y="104" width="204" height="82" rx="8"/>
+            <path class="cbar" d="M542,112 a8,8 0 0 1 8,-8 h188 a8,8 0 0 1 8,8 v14 h-204 z"/>
+            <text class="ctit" x="554" y="119">Get Image from Batch</text>
+            <circle cx="542" cy="132" r="4" fill="#64B5F6"/><text class="cprt" x="552" y="135">image</text>
+            <circle cx="746" cy="130" r="4" fill="#64B5F6"/><text class="cprt" x="736" y="133" text-anchor="end">IMAGE</text>
+            <rect class="cwid" x="550" y="142" width="188" height="15"/>
+            <text class="cwt" x="556" y="153">length</text><text class="cwv" x="730" y="153" text-anchor="end">81</text>
+            <rect class="cwid" x="550" y="161" width="188" height="15"/>
+            <text class="cwt" x="556" y="172">batch_index</text><text class="cwv" x="730" y="172" text-anchor="end">(81−5)·(seg−1)</text>
+          </g>
+          <!-- SAM3 Video Track (driver) -->
+          <g>
+            <rect class="cnode" x="726" y="240" width="224" height="86" rx="8"/>
+            <path class="cbar" d="M726,248 a8,8 0 0 1 8,-8 h208 a8,8 0 0 1 8,8 v14 h-224 z"/>
+            <text class="ctit" x="738" y="255">SAM3 Video Track · driver</text>
+            <circle cx="726" cy="270" r="4" fill="#64B5F6"/><text class="cprt" x="736" y="273">images</text>
+            <circle cx="726" cy="294" r="4" fill="#B39DDB"/><text class="cprt" x="736" y="297">model</text>
+            <circle cx="950" cy="270" r="4" fill="#9E9E9E"/><text class="cprt" x="910" y="273" text-anchor="end">TRACK</text>
+            <rect class="cwid" x="734" y="302" width="208" height="15"/>
+            <text class="cwt" x="740" y="313">prompt · max_objects</text><text class="cwv" x="934" y="313" text-anchor="end">"human" · 4</text>
+          </g>
+          <!-- SAM3 Video Track (reference) -->
+          <g>
+            <rect class="cnode" x="726" y="346" width="224" height="86" rx="8"/>
+            <path class="cbar" d="M726,354 a8,8 0 0 1 8,-8 h208 a8,8 0 0 1 8,8 v14 h-224 z"/>
+            <text class="ctit" x="738" y="361">SAM3 Video Track · ref</text>
+            <circle cx="726" cy="376" r="4" fill="#64B5F6"/><text class="cprt" x="736" y="379">images</text>
+            <circle cx="726" cy="400" r="4" fill="#B39DDB"/><text class="cprt" x="736" y="403">model</text>
+            <circle cx="950" cy="376" r="4" fill="#9E9E9E"/><text class="cprt" x="910" y="379" text-anchor="end">TRACK</text>
+            <rect class="cwid" x="734" y="408" width="208" height="15"/>
+            <text class="cwt" x="740" y="419">prompt · max_objects</text><text class="cwv" x="934" y="419" text-anchor="end">"human" · 4</text>
+          </g>
+          <!-- CLIP Text Encode (positive) -->
+          <g>
+            <rect class="cnode" x="290" y="480" width="226" height="94" rx="8"/>
+            <path class="cbar" d="M290,488 a8,8 0 0 1 8,-8 h210 a8,8 0 0 1 8,8 v14 h-226 z"/>
+            <text class="ctit" x="302" y="495">CLIP Text Encode · character + world</text>
+            <circle cx="290" cy="510" r="4" fill="#FFD500"/><text class="cprt" x="300" y="513">clip</text>
+            <circle cx="516" cy="510" r="4" fill="#FFA931"/><text class="cprt" x="476" y="513" text-anchor="end">COND</text>
+            <rect class="cwid" x="298" y="520" width="210" height="44"/>
+            <text class="cwv" x="304" y="532">"Fire Mario, short stocky plumber…</text>
+            <text class="cwv" x="304" y="545">dances in the Mushroom Kingdom —</text>
+            <text class="cwv" x="304" y="558">red layered caps, dappled light…"</text>
+          </g>
+          <!-- CLIP Text Encode (negative) -->
+          <g>
+            <rect class="cnode" x="290" y="592" width="226" height="62" rx="8"/>
+            <path class="cbar" d="M290,600 a8,8 0 0 1 8,-8 h210 a8,8 0 0 1 8,8 v14 h-226 z"/>
+            <text class="ctit" x="302" y="607">CLIP Text Encode · negative</text>
+            <circle cx="290" cy="622" r="4" fill="#FFD500"/><text class="cprt" x="300" y="625">clip</text>
+            <circle cx="516" cy="622" r="4" fill="#FFA931"/><text class="cprt" x="476" y="625" text-anchor="end">COND</text>
+            <rect class="cwid" x="298" y="632" width="210" height="15"/>
+            <text class="cwv" x="304" y="643">"watermark, caption, overexposed…"</text>
+          </g>
+          <!-- CLIP Vision Encode -->
+          <g>
+            <rect class="cnode" x="290" y="672" width="226" height="60" rx="8"/>
+            <path class="cbar" d="M290,680 a8,8 0 0 1 8,-8 h210 a8,8 0 0 1 8,8 v14 h-226 z"/>
+            <text class="ctit" x="302" y="687">CLIP Vision Encode</text>
+            <circle cx="290" cy="692" r="4" fill="#7FD4D4"/><text class="cprt" x="300" y="695">clip_vision</text>
+            <circle cx="290" cy="708" r="4" fill="#64B5F6"/><text class="cprt" x="300" y="711">image</text>
+            <circle cx="516" cy="700" r="4" fill="#7FD4D4"/><text class="cprt" x="466" y="703" text-anchor="end">CV_OUT</text>
+          </g>
+          <!-- LoRA chain -->
+          <g>
+            <rect class="cnode" x="290" y="310" width="226" height="70" rx="8"/>
+            <path class="cbar" d="M290,318 a8,8 0 0 1 8,-8 h210 a8,8 0 0 1 8,8 v14 h-226 z"/>
+            <text class="ctit" x="302" y="325">Load LoRA · DPO</text>
+            <circle cx="290" cy="346" r="4" fill="#B39DDB"/><text class="cprt" x="300" y="349">model</text>
+            <circle cx="516" cy="354" r="4" fill="#B39DDB"/><text class="cprt" x="476" y="357" text-anchor="end">MODEL</text>
+            <rect class="cwid" x="298" y="358" width="210" height="15"/>
+            <text class="cwv" x="304" y="369">wan2.1_SCAIL_2_DPO_lora_bf16 · 1.0</text>
+          </g>
+          <g>
+            <rect class="cnode" x="290" y="392" width="226" height="70" rx="8"/>
+            <path class="cbar" d="M290,400 a8,8 0 0 1 8,-8 h210 a8,8 0 0 1 8,8 v14 h-226 z"/>
+            <text class="ctit" x="302" y="407">Load LoRA · distill</text>
+            <circle cx="290" cy="428" r="4" fill="#B39DDB"/><text class="cprt" x="300" y="431">model</text>
+            <circle cx="516" cy="436" r="4" fill="#B39DDB"/><text class="cprt" x="476" y="439" text-anchor="end">MODEL</text>
+            <rect class="cwid" x="298" y="440" width="210" height="15"/>
+            <text class="cwv" x="304" y="451">lightx2v_I2V_14B_480p…rank64 · 0.8</text>
+          </g>
+
+          <!-- ══ Column 3 · the core ══ -->
+          <!-- SCAIL2ColoredMask -->
+          <g>
+            <rect class="cnode" x="1000" y="330" width="224" height="88" rx="8"/>
+            <path class="cbar" d="M1000,338 a8,8 0 0 1 8,-8 h208 a8,8 0 0 1 8,8 v14 h-224 z"/>
+            <text class="ctit" x="1012" y="345">Create SCAIL-2 Colored Mask</text>
+            <circle cx="1000" cy="352" r="4" fill="#9E9E9E"/><text class="cprt" x="1010" y="355">driving_track</text>
+            <circle cx="1000" cy="384" r="4" fill="#9E9E9E"/><text class="cprt" x="1010" y="387">ref_track</text>
+            <circle cx="1224" cy="360" r="4" fill="#7EC57E"/><text class="cprt" x="1184" y="363" text-anchor="end">MASK</text>
+            <circle cx="1224" cy="392" r="4" fill="#7EC57E"/><text class="cprt" x="1160" y="395" text-anchor="end">ref MASK</text>
+            <rect class="cwid" x="1008" y="396" width="208" height="15"/>
+            <text class="cwt" x="1014" y="407">sort_by</text><text class="cwv" x="1208" y="407" text-anchor="end">left_to_right</text>
+          </g>
+          <!-- WanSCAILToVideo (hero node) -->
+          <g>
+            <rect class="cnode" x="610" y="418" width="224" height="356" rx="8" stroke="#FF5C4D" stroke-opacity="0.55"/>
+            <path class="cbar" d="M610,426 a8,8 0 0 1 8,-8 h208 a8,8 0 0 1 8,8 v14 h-224 z"/>
+            <text class="ctit" x="622" y="433">WanSCAILToVideo</text>
+            <circle cx="610" cy="450" r="4" fill="#FFA931"/><text class="cprt" x="620" y="453">positive</text>
+            <circle cx="610" cy="482" r="4" fill="#FFA931"/><text class="cprt" x="620" y="485">negative</text>
+            <circle cx="610" cy="514" r="4" fill="#64B5F6"/><text class="cprt" x="620" y="517">pose_video</text>
+            <circle cx="610" cy="546" r="4" fill="#64B5F6"/><text class="cprt" x="620" y="549">reference_image</text>
+            <circle cx="610" cy="578" r="4" fill="#7EC57E"/><text class="cprt" x="620" y="581">pose_video_mask</text>
+            <circle cx="610" cy="610" r="4" fill="#7EC57E"/><text class="cprt" x="620" y="613">reference_image_mask</text>
+            <circle cx="610" cy="642" r="4" fill="#7FD4D4"/><text class="cprt" x="620" y="645">clip_vision_output</text>
+            <circle cx="610" cy="674" r="4" fill="#FF6E6E"/><text class="cprt" x="620" y="677">vae · previous_frames</text>
+            <circle cx="834" cy="450" r="4" fill="#FFA931"/><text class="cprt" x="794" y="453" text-anchor="end">POS</text>
+            <circle cx="834" cy="482" r="4" fill="#FFA931"/><text class="cprt" x="794" y="485" text-anchor="end">NEG</text>
+            <circle cx="834" cy="514" r="4" fill="#FF9CF9"/><text class="cprt" x="784" y="517" text-anchor="end">LATENT</text>
+            <rect class="cwid" x="618" y="692" width="208" height="15"/>
+            <text class="cwt" x="624" y="703">pose_strength</text><text class="cwv" x="818" y="703" text-anchor="end">0.80</text>
+            <rect class="cwid" x="618" y="711" width="208" height="15"/>
+            <text class="cwt" x="624" y="722">replacement_mode</text><text class="cwv" x="818" y="722" text-anchor="end">false</text>
+            <rect class="cwid" x="618" y="730" width="208" height="15"/>
+            <text class="cwt" x="624" y="741">previous_frame_count</text><text class="cwv" x="818" y="741" text-anchor="end">5</text>
+            <rect class="cwid" x="618" y="749" width="208" height="15"/>
+            <text class="cwt" x="624" y="760">length</text><text class="cwv" x="818" y="760" text-anchor="end">81</text>
+          </g>
+
+          <!-- ══ Column 4 · sampling ══ -->
+          <g>
+            <rect class="cnode" x="1010" y="62" width="226" height="60" rx="8"/>
+            <path class="cbar" d="M1010,70 a8,8 0 0 1 8,-8 h210 a8,8 0 0 1 8,8 v14 h-226 z"/>
+            <text class="ctit" x="1022" y="77">ModelSamplingSD3</text>
+            <circle cx="1010" cy="90" r="4" fill="#B39DDB"/><text class="cprt" x="1020" y="93">model</text>
+            <circle cx="1236" cy="98" r="4" fill="#B39DDB"/><text class="cprt" x="1196" y="101" text-anchor="end">MODEL</text>
+            <rect class="cwid" x="1018" y="100" width="210" height="15"/>
+            <text class="cwt" x="1024" y="111">shift</text><text class="cwv" x="1220" y="111" text-anchor="end">5</text>
+          </g>
+          <g>
+            <rect class="cnode" x="1010" y="166" width="226" height="146" rx="8"/>
+            <path class="cbar" d="M1010,174 a8,8 0 0 1 8,-8 h210 a8,8 0 0 1 8,8 v14 h-226 z"/>
+            <text class="ctit" x="1022" y="181">SamplerCustom</text>
+            <circle cx="1010" cy="190" r="4" fill="#B39DDB"/><text class="cprt" x="1020" y="193">model</text>
+            <circle cx="1010" cy="222" r="4" fill="#FFA931"/><text class="cprt" x="1020" y="225">positive</text>
+            <circle cx="1010" cy="254" r="4" fill="#FFA931"/><text class="cprt" x="1020" y="257">negative</text>
+            <circle cx="1010" cy="286" r="4" fill="#FF9CF9"/><text class="cprt" x="1020" y="289">latent_image</text>
+            <circle cx="1236" cy="230" r="4" fill="#FF9CF9"/><text class="cprt" x="1180" y="233" text-anchor="end">LATENT</text>
+            <rect class="cwid" x="1018" y="258" width="210" height="15"/>
+            <text class="cwt" x="1024" y="269">sampler · scheduler</text><text class="cwv" x="1220" y="269" text-anchor="end">euler · simple</text>
+            <rect class="cwid" x="1018" y="277" width="210" height="15"/>
+            <text class="cwt" x="1024" y="288">steps · cfg (distill)</text><text class="cwv" x="1220" y="288" text-anchor="end">6 · 1.0</text>
+          </g>
+          <!-- VAE Decode -->
+          <g>
+            <rect class="cnode" x="1120" y="612" width="224" height="56" rx="8"/>
+            <path class="cbar" d="M1120,620 a8,8 0 0 1 8,-8 h208 a8,8 0 0 1 8,8 v14 h-224 z"/>
+            <text class="ctit" x="1132" y="627">VAE Decode</text>
+            <circle cx="1120" cy="636" r="4" fill="#FF9CF9"/><text class="cprt" x="1130" y="639">samples</text>
+            <circle cx="1120" cy="654" r="4" fill="#FF6E6E"/><text class="cprt" x="1130" y="657">vae</text>
+            <circle cx="1344" cy="644" r="4" fill="#64B5F6"/><text class="cprt" x="1304" y="647" text-anchor="end">IMAGE</text>
+          </g>
+
+          <!-- ══ Column 5 · assembly ══ -->
+          <g>
+            <rect class="cnode" x="1300" y="524" width="224" height="74" rx="8"/>
+            <path class="cbar" d="M1300,532 a8,8 0 0 1 8,-8 h208 a8,8 0 0 1 8,8 v14 h-224 z"/>
+            <text class="ctit" x="1312" y="539">Transfer Color · seam blend</text>
+            <circle cx="1300" cy="556" r="4" fill="#64B5F6"/><text class="cprt" x="1310" y="559">image_target · ref</text>
+            <circle cx="1524" cy="564" r="4" fill="#64B5F6"/><text class="cprt" x="1484" y="567" text-anchor="end">IMAGE</text>
+            <rect class="cwid" x="1308" y="570" width="208" height="15"/>
+            <text class="cwt" x="1314" y="581">method</text><text class="cwv" x="1508" y="581" text-anchor="end">reinhard_lab · per_frame</text>
+          </g>
+          <g>
+            <rect class="cnode" x="1262" y="404" width="226" height="66" rx="8"/>
+            <path class="cbar" d="M1262,412 a8,8 0 0 1 8,-8 h210 a8,8 0 0 1 8,8 v14 h-226 z"/>
+            <text class="ctit" x="1274" y="419">Create Video</text>
+            <circle cx="1262" cy="428" r="4" fill="#8D6FD1"/><text class="cprt" x="1272" y="431">fps · audio (driver)</text>
+            <circle cx="1262" cy="446" r="4" fill="#64B5F6"/><text class="cprt" x="1272" y="449">images</text>
+            <circle cx="1488" cy="436" r="4" fill="#8D6FD1"/><text class="cprt" x="1448" y="439" text-anchor="end">VIDEO</text>
+          </g>
+          <g>
+            <rect class="cnode" x="1262" y="280" width="226" height="58" rx="8" stroke="#FF5C4D" stroke-opacity="0.4"/>
+            <path class="cbar" d="M1262,288 a8,8 0 0 1 8,-8 h210 a8,8 0 0 1 8,8 v14 h-226 z"/>
+            <text class="ctit" x="1274" y="295">Save Video · final output</text>
+            <circle cx="1262" cy="318" r="4" fill="#8D6FD1"/><text class="cprt" x="1272" y="321">video</text>
+            <rect class="cwid" x="1270" y="308" width="210" height="15" opacity="0"/>
+            <text class="cwv" x="1340" y="321">video/SCAIL2</text>
+          </g>
+        </svg>
+        <p class="graph-cap">
+          One segment of <code>scail2_firemario_4seg.json</code>, drawn to node.
+          Simplified for legibility: the size/math plumbing
+          (<code>GetImageSize</code>, <code>ComfyMathExpression</code>,
+          <code>ResizeImageMaskNode</code>) and the distill on/off switch
+          (<code>ComfySwitchNode</code> — 6 steps · cfg 1.0 vs 40 · 5.0) are
+          elided; the production graph chains four segments,
+          <code>previous_frames</code> feeding each next one.
+        </p>
+      </div>
+
+      <div class="recipe-soon card" data-sr style="margin-top:clamp(24px,3.5vh,40px)">
+        <span class="badge">The manifest</span>
+        <h3>Every model on the card, by exact filename</h3>
+        <p style="font-family:var(--mono); font-size:12.5px; line-height:2">
+          <b>Diffusion</b> · wan2.1_14B_SCAIL_2_fp16.safetensors<br>
+          <b>LoRA</b> · wan2.1_SCAIL_2_DPO_lora_bf16 (1.0) · lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16 (0.8)<br>
+          <b>Text encoder</b> · umt5_xxl_fp8_e4m3fn_scaled · <b>Vision</b> · clip_vision_h · <b>VAE</b> · Wan2_1_VAE_bf16<br>
+          <b>Tracking</b> · sam3.1_multiplex_fp16 · <b>Upscale</b> · RealESRGAN_x4plus<br>
+          <b>Reference gen</b> · Flux Kontext Pro (API node) · Nano-Banana 2 (Gemini 3.1 Flash Image)<br>
+          <b>In-place restyle</b> · AnimateDiff V2V + SD1.5 (Dreamshaper 8) + IPAdapter-Plus + DepthAnythingV2
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── THE BUILD + LINKS ────────────────────────────────────────────── -->
+  <section id="build">
+    <div class="wrap">
+      <p class="eyebrow" data-sr>The build</p>
+      <h2 data-sr>One question, answered with renders.</h2>
+
+      <div class="stats">
+        <div class="stat card" data-sr><div class="stat-num">5</div><div class="stat-label">world strategies tested</div></div>
+        <div class="stat card" data-sr><div class="stat-num">2</div><div class="stat-label">characters held</div></div>
+        <div class="stat card" data-sr><div class="stat-num">8</div><div class="stat-label">models &amp; tools</div></div>
+        <div class="stat card" data-sr><div class="stat-num">1</div><div class="stat-label">reliable lever</div></div>
+      </div>
+      <p class="kicker" data-sr>
+        The world-control shootout ran on about 93 Comfy Cloud credits — five
+        full variants of the same 89-frame dance, probe-gated, every verdict
+        checked by eye before the next spend.
+      </p>
+
+      <p class="eyebrow" data-sr style="margin-top:clamp(44px,6vh,72px)">Go deeper</p>
+      <h2 data-sr>The interactive artifacts.</h2>
+      <div class="links">
+        <a class="link-card card" href="https://github.com/jayvee6/comfy-cloud-lab" target="_blank" rel="noopener" data-sr>
+          <span class="link-kind">Source</span>
+          <span class="link-title">comfy-cloud-lab</span>
+          <span class="link-desc">The Comfy Cloud REST harness, workflows, and the retrospective notes this page is built from.</span>
+          <span class="link-go">On GitHub ↗</span>
+        </a>
+      </div>
+
+      <div class="back" data-sr>
+        <a href="/">← Back to Studio Joe</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p class="footer-sub">© 2026 Studio Joe · Neural VFX case study</p>
+  <div class="footer-links">
+    <a class="footer-link" href="/">Home</a>
+    <a class="footer-link" href="/resume.html">Resume</a>
+    <a class="footer-link" href="https://github.com/jayvee6" target="_blank" rel="noopener">GitHub ↗</a>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+  var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var EASE = 'cubic-bezier(0.16, 1, 0.3, 1)';
+
+  // ── Scroll reveal (mirrors resume.html) ────────────────────────────────
+  if (window.gsap) {
+    if (window.ScrollTrigger) gsap.registerPlugin(ScrollTrigger);
+    document.querySelectorAll('[data-sr]').forEach(function (el) {
+      if (REDUCED || !window.ScrollTrigger) { gsap.set(el, { opacity: 1, y: 0 }); return; }
+      gsap.fromTo(el, { opacity: 0, y: 22 },
+        { opacity: 1, y: 0, duration: 0.65, ease: EASE,
+          scrollTrigger: { trigger: el, start: 'top 92%', once: true } });
+    });
+
+    // ── Starfield (darkroom-tuned, low count) ────────────────────────────
+    (function initStarfield() {
+      var container = document.getElementById('gobo');
+      if (!container) return;
+      var COUNT = 60;
+      for (var i = 0; i < COUNT; i++) {
+        var s = document.createElement('span');
+        var dim = Math.random() < 0.65 ? 1 : Math.random() < 0.6 ? 2 : 3;
+        var baseOp = 0.12 + Math.random() * 0.45;
+        Object.assign(s.style, {
+          position: 'absolute', borderRadius: '50%',
+          width: dim + 'px', height: dim + 'px',
+          left: (Math.random() * 100) + '%', top: (Math.random() * 100) + '%',
+          background: 'rgba(255,255,255,1)', opacity: 0,
+          pointerEvents: 'none', willChange: 'opacity'
+        });
+        container.appendChild(s);
+        if (REDUCED) { gsap.set(s, { opacity: baseOp }); continue; }
+        gsap.to(s, { opacity: baseOp, duration: 2 + Math.random() * 3, delay: Math.random() * 6, ease: 'power1.inOut' });
+        gsap.to(s, { opacity: baseOp * 0.12, duration: 1.2 + Math.random() * 4,
+          delay: Math.random() * 10, ease: 'sine.inOut', repeat: -1, yoyo: true });
+      }
+    })();
+  }
+
+  // ── Lazy video: assign src + play only when in view; pause when out. ────
+  // Keeps first paint to the poster/still and the page light. Respects
+  // reduced-motion (no autoplay — exposes native controls instead).
+  var vids = Array.prototype.slice.call(document.querySelectorAll('video[data-src]'));
+  function load(v) {
+    if (v.dataset.loaded) return;
+    v.src = v.dataset.src; v.dataset.loaded = '1';
+  }
+  if (REDUCED) {
+    vids.forEach(function (v) { v.setAttribute('controls', ''); v.setAttribute('preload', 'metadata'); load(v); });
+  } else if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        var v = e.target;
+        if (e.isIntersecting) {
+          load(v);
+          var p = v.play(); if (p && p.catch) p.catch(function () {});
+        } else if (v.dataset.loaded) {
+          v.pause();
+        }
+      });
+    }, { rootMargin: '200px 0px', threshold: 0.15 });
+    vids.forEach(function (v) { io.observe(v); });
+  } else {
+    vids.forEach(function (v) { load(v); var p = v.play(); if (p && p.catch) p.catch(function () {}); });
+  }
+})();
+</script>
+
+</body>
+</html>
