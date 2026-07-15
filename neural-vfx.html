@@ -832,6 +832,34 @@
         a volume. It still can't <em>invent</em> one. Which is exactly where neural
         VFX keeps landing: back on the discipline of building the shot.
       </p>
+
+      <div style="margin-top:clamp(40px,6vh,64px)">
+        <p class="eyebrow" data-sr>The resolution · Build the bones</p>
+        <h2 data-sr>So we built one. The camera moved.</h2>
+        <p class="lede" data-sr>
+          We grey-boxed a scene in Blender — blocks at three depths, a deliberate
+          camera truck — rendered it along that move, and fed <em>that</em> to the
+          control instead of the footage. This time the generated frames tracked the
+          move: foreground slid across, background held, parallax reproduced. Where
+          the re-encoded footage stayed locked (first→last similarity 0.84), the
+          authored volume transported the camera (0.76, matching the render), and a
+          single strength dial turned the effect on and off. About five credits of
+          proof. The volume was the missing lever.
+        </p>
+        <div class="rule" data-sr>
+          <p>You don't have to model a world. You model its <em>bones</em> — the
+          massing and the camera. The neural model paints the rest.</p>
+        </div>
+        <p class="lede" data-sr>
+          One honest catch: at the strength that moves the camera, the grey-box
+          dominates — the world came out as moving <em>blocks</em>, not the temple
+          we prompted. Motion transported; the look didn't. The fix is to split the
+          two jobs — a themed anchor frame carries the look, the volume carries only
+          the motion. But the shape of the answer is already clear, and it's the
+          same shape as everything else here: authored geometry for space, the
+          neural model for surface. Classical VFX bones. Neural skin.
+        </p>
+      </div>
     </div>
   </section>
 
