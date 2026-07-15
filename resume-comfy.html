@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Joey Villarreal — Creative AI &amp; Tools</title>
+  <meta name="description" content="Product-minded engineer for creative AI and professional tools. Ships real-time-graphics tools; runs ComfyUI across Apple Silicon and NVIDIA.">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Helvetica Neue",Arial,sans-serif;
+      --bg:#060608;
+      --bg-g:radial-gradient(ellipse 90% 60% at 50% -10%,#122 0%,#0c1418 30%,#08090e 62%,#060608 100%);
+      --label-1:rgba(255,255,255,.92);--label-2:rgba(255,255,255,.55);--label-3:rgba(255,255,255,.28);
+      --accent:#2DD4BF;--accent-bg:rgba(45,212,191,.12);
+      --fill-2:rgba(255,255,255,.08);--sep:rgba(255,255,255,.09);
+      --glass-bg:rgba(255,255,255,.05);--glass-bdr:rgba(255,255,255,.10);
+    }
+    html{scroll-behavior:smooth;background:var(--bg);min-height:100svh}
+    body{font-family:var(--font);background:var(--bg-g);min-height:100svh;color:var(--label-1);
+      -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+    .grain{position:fixed;inset:0;z-index:9999;pointer-events:none;opacity:.035;mix-blend-mode:overlay;
+      background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+    #gobo{position:fixed;inset:0;z-index:6;pointer-events:none;overflow:hidden}
+
+    header{position:fixed;top:0;left:0;right:0;z-index:1000;height:52px;display:flex;align-items:center;
+      justify-content:space-between;padding:0 clamp(24px,5vw,80px);border-bottom:1px solid var(--sep);
+      background:rgba(0,0,0,.55);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px)}
+    .wordmark{font-size:15px;font-weight:700;letter-spacing:-.02em;color:var(--label-1);text-decoration:none;transition:color .2s}
+    .wordmark:hover{color:var(--accent)}
+    nav{display:flex;align-items:center;gap:4px}
+    nav a{font-size:13px;font-weight:500;color:var(--label-2);text-decoration:none;padding:6px 12px;border-radius:6px;transition:.2s}
+    nav a:hover{color:var(--label-1);background:var(--fill-2)}
+
+    .container{max-width:1100px;margin:0 auto}
+    section{position:relative;padding:110px clamp(24px,5vw,80px);overflow:hidden;z-index:12}
+    .eyebrow{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);
+      margin-bottom:14px;display:flex;align-items:center;gap:8px}
+    .eyebrow::before{content:'';width:18px;height:1px;background:var(--accent);flex-shrink:0}
+    .section-heading{font-size:clamp(2rem,5vw,3.3rem);font-weight:700;letter-spacing:-.025em;line-height:1.05;margin-bottom:48px}
+
+    #hero{min-height:clamp(560px,100svh,880px);display:flex;flex-direction:column;justify-content:center;
+      padding-top:clamp(80px,12vh,150px);padding-bottom:clamp(60px,8vh,110px);z-index:11}
+    .hero-tag{font-size:20px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);
+      margin-bottom:22px;display:flex;align-items:center;gap:10px}
+    .hero-hl{font-size:clamp(3.4rem,10vw,8.5rem);font-weight:700;letter-spacing:-.03em;line-height:.93;margin-bottom:30px}
+    .hero-hl .dot{color:var(--accent)}
+    .hero-bio{font-size:16px;line-height:1.7;color:var(--label-1);max-width:560px;margin-bottom:36px}
+    .hero-bio strong{color:var(--accent);font-weight:600}
+    .ctas{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .btn{display:inline-flex;align-items:center;gap:5px;padding:11px 22px;border-radius:980px;font-size:14px;
+      font-weight:500;text-decoration:none;transition:.2s;letter-spacing:-.01em}
+    .btn-solid{background:var(--accent);color:#04110f;box-shadow:inset 0 1px 0 rgba(255,255,255,.28),0 2px 10px rgba(45,212,191,.34)}
+    .btn-solid:hover{filter:brightness(1.12)}
+    .btn-ghost{background:rgba(255,255,255,.09);color:var(--label-1);border:1px solid rgba(255,255,255,.16);
+      backdrop-filter:blur(12px) saturate(180%);-webkit-backdrop-filter:blur(12px) saturate(180%)}
+    .btn-ghost:hover{background:rgba(255,255,255,.14)}
+
+    .glass{background:rgba(255,255,255,.065);backdrop-filter:blur(12px) saturate(200%);
+      -webkit-backdrop-filter:blur(12px) saturate(200%);border:1px solid rgba(255,255,255,.14);border-radius:18px;
+      box-shadow:inset 0 1.5px 0 rgba(255,255,255,.48),inset 0 -1.5px 0 rgba(0,0,0,.22),0 8px 32px rgba(0,0,0,.38)}
+    .glass:hover{box-shadow:inset 0 1.5px 0 rgba(255,255,255,.62),0 20px 52px rgba(0,0,0,.44)}
+
+    .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+    .e-card{padding:30px 26px;transition:transform .45s cubic-bezier(.34,1.56,.64,1),box-shadow .4s}
+    .e-card:hover{transform:translateY(-3px) scale(1.01)}
+    .e-bar{width:22px;height:2px;background:var(--accent);border-radius:1px;margin-bottom:18px}
+    .e-title{font-size:15px;font-weight:600;letter-spacing:-.01em;margin-bottom:10px}
+    .e-desc{font-size:13px;line-height:1.65;color:var(--label-2)}
+
+    .work-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+    .card{padding:26px;display:flex;flex-direction:column;gap:9px;min-height:180px;text-decoration:none;color:inherit;
+      transition:transform .35s cubic-bezier(.34,1.56,.64,1),box-shadow .35s}
+    .card:hover{transform:translateY(-2px) scale(1.01)}
+    .card-top{display:flex;align-items:center;justify-content:space-between}
+    .card-pill{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);
+      background:var(--accent-bg);padding:3px 9px;border-radius:5px}
+    .card-link{font-size:11px;color:var(--label-3)}
+    .card-title{font-size:15px;font-weight:600;letter-spacing:-.01em;color:var(--label-1)}
+    .card-desc{font-size:13px;line-height:1.6;color:var(--label-2);flex:1}
+
+    .pov{max-width:760px}
+    .pov p{font-size:clamp(1.05rem,2.2vw,1.4rem);line-height:1.55;color:var(--label-1);margin-bottom:22px;font-weight:500;letter-spacing:-.01em}
+    .pov strong{color:var(--accent)}
+    .pov .sig{font-size:14px;color:var(--label-2);font-weight:400}
+
+    .track{display:grid;grid-template-columns:150px 1fr;gap:24px;padding:22px 0;border-top:1px solid var(--sep)}
+    .track:last-child{border-bottom:1px solid var(--sep)}
+    .track .yr{font-size:12px;color:var(--label-3);letter-spacing:.04em;padding-top:2px}
+    .track .t{font-size:14.5px;font-weight:600;color:var(--label-1);margin-bottom:5px}
+    .track .d{font-size:13px;line-height:1.6;color:var(--label-2)}
+
+    footer{padding:44px clamp(24px,5vw,80px);border-top:1px solid var(--sep);position:relative;z-index:12}
+    .footer-inner{max-width:1100px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px}
+    .footer-name{font-size:15px;font-weight:700;letter-spacing:-.01em}
+    .footer-sub{font-size:11px;color:var(--label-3);letter-spacing:.04em;margin-top:4px}
+    .footer-links{display:flex;gap:20px}
+    .footer-link{font-size:12px;font-weight:500;color:var(--label-2);text-decoration:none;transition:color .2s}
+    .footer-link:hover{color:var(--accent)}
+
+    @media(max-width:768px){.grid3{grid-template-columns:1fr}.track{grid-template-columns:1fr;gap:6px}nav a:not(:last-child){display:none}}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  </style>
+</head>
+<body>
+<div class="grain" aria-hidden="true"></div>
+<div id="gobo" aria-hidden="true"></div>
+
+<header>
+  <a class="wordmark" href="/">Studio Joe</a>
+  <nav>
+    <a href="#expertise">Expertise</a>
+    <a href="#work">Work</a>
+    <a href="#pov">Point of view</a>
+    <a href="#track">Track record</a>
+    <a href="/" style="opacity:.5">← Home</a>
+  </nav>
+</header>
+
+<section id="hero">
+  <div class="container">
+    <p class="hero-tag" data-sr>Creative AI &amp; professional tools</p>
+    <h1 class="hero-hl" data-sr>Joey<br>Villarreal<span class="dot">.</span></h1>
+    <p class="hero-bio" data-sr>
+      Product-minded engineer for creative tools. Over a decade at Apple across quality,
+      developer relations, and platform launches — I proposed the <strong>Metal Performance HUD</strong>
+      now shipping in iOS and macOS — now on Adobe's RenderTech team. Off the clock I ship real-time-graphics
+      tools and run <strong>ComfyUI</strong> daily across Apple Silicon and an RTX 5080. I care about the
+      difference between AI that <em>replaces</em> the creator and AI that gives them <strong>control</strong>.
+    </p>
+    <div class="ctas" data-sr>
+      <a class="btn btn-solid" href="https://github.com/jayvee6" target="_blank" rel="noopener">GitHub ↗</a>
+      <a class="btn btn-ghost" href="https://www.linkedin.com/in/joey-v-287ba5394" target="_blank" rel="noopener">LinkedIn ↗</a>
+    </div>
+  </div>
+</section>
+
+<section id="expertise">
+  <div class="container">
+    <p class="eyebrow" data-sr>Where I'm strong</p>
+    <h2 class="section-heading" data-sr>Expertise</h2>
+    <div class="grid3">
+      <div class="e-card glass" data-sr><div class="e-bar"></div><p class="e-title">Node-graph creative AI</p><p class="e-desc">ComfyUI daily — authoring workflows across a Mac and an RTX 5080, local and Comfy Cloud. Diffusion and generative-media pipelines, on-device LLMs (MLX, Foundation Models, Ollama).</p></div>
+      <div class="e-card glass" data-sr><div class="e-bar"></div><p class="e-title">Real-time graphics</p><p class="e-desc">Metal, WebGPU/WGSL, WebGL, real-time FFT. I write shaders and own the pipeline — from a Core Audio process tap to a from-scratch WebGPU 3D renderer.</p></div>
+      <div class="e-card glass" data-sr><div class="e-bar"></div><p class="e-title">Vibe-code &amp; debug</p><p class="e-desc">Prototypes shipped constantly with a disciplined multi-agent Claude Code workflow — specialist agents, parallel review and bug-hunt swarms, reconciled before anything ships. I author Claude skills and MCP servers.</p></div>
+      <div class="e-card glass" data-sr><div class="e-bar"></div><p class="e-title">Tools for professionals</p><p class="e-desc">A decade serving the people who use pro software — WWDC developer labs, Pro-App partnerships that shaped the M1 Pro/Max launch, platform-integrity investigations.</p></div>
+      <div class="e-card glass" data-sr><div class="e-bar"></div><p class="e-title">Performance &amp; GPU</p><p class="e-desc">Proposed the Metal Performance HUD now in iOS/macOS. GPU frame analysis and real-time performance validation across Apple Silicon and NVIDIA.</p></div>
+      <div class="e-card glass" data-sr><div class="e-bar"></div><p class="e-title">Data-driven calls</p><p class="e-desc">Tableau dashboards and data-governance for App Review ops. Comfortable making decisions from both qualitative developer signal and quantitative telemetry.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="work">
+  <div class="container">
+    <p class="eyebrow" data-sr>Shipped, on my own time</p>
+    <h2 class="section-heading" data-sr>Selected work</h2>
+    <div class="work-grid">
+      <a class="card glass" href="https://github.com/jayvee6/StudioJoeMusic" target="_blank" rel="noopener" data-sr>
+        <div class="card-top"><span class="card-pill">macOS · Metal · AI</span><span class="card-link">GitHub ↗</span></div>
+        <p class="card-title">StudioJoeMusic</p>
+        <p class="card-desc">Native macOS music visualizer: SwiftUI/AppKit + Metal shaders on real-time FFT, a Core Audio process tap capturing any app's audio as clean PCM, and an on-device-LLM natural-language playlist generator (Foundation Models + MLX).</p>
+      </a>
+      <a class="card glass" href="https://github.com/jayvee6/musicplayer-viz" target="_blank" rel="noopener" data-sr>
+        <div class="card-top"><span class="card-pill">Web · WebGL · Shaders</span><span class="card-link">GitHub ↗</span></div>
+        <p class="card-title">musicplayer-viz</p>
+        <p class="card-desc">Browser music visualizer — 15+ visualizers from Canvas 2D to raymarched WebGL shaders to post-processed 3D scenes, with full-track Spotify + Apple Music playback.</p>
+      </a>
+      <a class="card glass" href="https://github.com/jayvee6/webgpu-doom" target="_blank" rel="noopener" data-sr>
+        <div class="card-top"><span class="card-pill">WebGPU · WGSL</span><span class="card-link">GitHub ↗</span></div>
+        <p class="card-title">webgpu-doom</p>
+        <p class="card-desc">From-scratch WebGPU renderer for Freedoom: parse the IWAD, build real 3D geometry from map data, render with raw WGSL pipelines. No engine, no WASM port — own the pipeline.</p>
+      </a>
+      <a class="card glass" href="https://emojiarcade.io" target="_blank" rel="noopener" data-sr>
+        <div class="card-top"><span class="card-pill">WebGPU · Native parity</span><span class="card-link">emojiarcade.io ↗</span></div>
+        <p class="card-title">emoji-arcade</p>
+        <p class="card-desc">A WebGPU arcade with a deterministic sim core that runs byte-identical across web (JS) and native (Metal/Swift). Zero dependencies, synthesized audio.</p>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section id="pov">
+  <div class="container pov">
+    <p class="eyebrow" data-sr>What I believe</p>
+    <h2 class="section-heading" data-sr>Point of view</h2>
+    <p data-sr>The interesting problem in creative AI isn't quality — it's <strong>authorship</strong>. A prompt box hides everything. A node graph treats every model, parameter, and step as something the creator can see and own. That's the whole game.</p>
+    <p data-sr>The frontier is making that control <strong>reachable</strong> — lowering the barrier without taking the human out of the loop — and layering agentic help on top of the graph without collapsing it back into a one-button toy.</p>
+    <p class="sig" data-sr>Get that balance wrong in either direction and you lose the exact people the tool is for.</p>
+  </div>
+</section>
+
+<section id="track">
+  <div class="container">
+    <p class="eyebrow" data-sr>A decade-plus</p>
+    <h2 class="section-heading" data-sr>Track record</h2>
+    <div class="track" data-sr><div class="yr">2026 — Present</div><div><p class="t">Adobe — RenderTech Team</p><p class="d">Rendering/graphics technology.</p></div></div>
+    <div class="track" data-sr><div class="yr">2022 — 2026</div><div><p class="t">Software Quality Engineer, Platform · Apple</p><p class="d">Cross-functional testing of major OS features and new hardware across iOS, macOS, visionOS, tvOS, watchOS; built QA tooling.</p></div></div>
+    <div class="track" data-sr><div class="yr">2020 — 2022</div><div><p class="t">Quality Engineer, Apple Arcade · Apple</p><p class="d">Proposed the Metal Performance HUD now in iOS/macOS. GPU/graphics performance analysis for AAA titles.</p></div></div>
+    <div class="track" data-sr><div class="yr">2018 — 2021</div><div><p class="t">Program Manager, Developer Relations — App Review PMO · Apple</p><p class="d">Ran WWDC developer labs; Tableau dashboards + data-governance; Pro-App feedback that shaped the M1 Pro/Max launch.</p></div></div>
+    <div class="track" data-sr><div class="yr">2016 — 2020</div><div><p class="t">Technical Investigator &amp; App Reviewer · App Store</p><p class="d">Reverse-engineering and traffic inspection for platform-integrity work; executive-level reporting.</p></div></div>
+    <div class="track" data-sr><div class="yr">2011 — 2016</div><div><p class="t">Technical Specialist &amp; Genius · Apple Retail</p><p class="d">Expert technical support and hardware repair for pro and business users.</p></div></div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-inner">
+    <div>
+      <p class="footer-name">Joey Villarreal</p>
+      <p class="footer-sub">Creative AI &amp; professional tools &nbsp;·&nbsp; joeyvillarreal@me.com</p>
+    </div>
+    <div class="footer-links">
+      <a class="footer-link" href="https://github.com/jayvee6" target="_blank" rel="noopener">GitHub ↗</a>
+      <a class="footer-link" href="https://www.linkedin.com/in/joey-v-287ba5394" target="_blank" rel="noopener">LinkedIn ↗</a>
+      <a class="footer-link" href="https://studiojoe.dev" target="_blank" rel="noopener">studiojoe.dev ↗</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  'use strict';
+  gsap.registerPlugin(ScrollTrigger);
+  var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var EASE='cubic-bezier(0.16,1,0.3,1)';
+  document.querySelectorAll('[data-sr]').forEach(function(el){
+    if(REDUCED){gsap.set(el,{opacity:1,y:0});return;}
+    gsap.fromTo(el,{opacity:0,y:22},{opacity:1,y:0,duration:.65,ease:EASE,
+      scrollTrigger:{trigger:el,start:'top 92%',once:true}});
+  });
+  (function starfield(){
+    var c=document.getElementById('gobo'),N=70;
+    for(var i=0;i<N;i++){
+      var s=document.createElement('span');
+      var dim=Math.random()<.65?1:Math.random()<.6?2:3;
+      var op=.15+Math.random()*.55;
+      Object.assign(s.style,{position:'absolute',borderRadius:'50%',width:dim+'px',height:dim+'px',
+        left:(Math.random()*100)+'%',top:(Math.random()*100)+'%',background:'#fff',opacity:0,pointerEvents:'none'});
+      c.appendChild(s);
+      if(REDUCED){gsap.set(s,{opacity:op});continue;}
+      gsap.to(s,{opacity:op,duration:2+Math.random()*3,delay:Math.random()*6,ease:'power1.inOut'});
+      gsap.to(s,{opacity:op*.12,duration:1.2+Math.random()*4,delay:Math.random()*10,ease:'sine.inOut',repeat:-1,yoyo:true});
+    }
+  })();
+})();
+</script>
+</body>
+</html>
