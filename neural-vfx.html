@@ -761,6 +761,80 @@
     </div>
   </section>
 
+  <!-- ── SPATIAL CONTROL · UNI3C ──────────────────────────────────────── -->
+  <section id="spatial">
+    <div class="wrap">
+      <p class="eyebrow" data-sr>The next question · Spatial control</p>
+      <h2 data-sr>Win the world, then hold it still.</h2>
+      <p class="lede" data-sr>
+        The reference decides <em>which</em> world. It doesn't decide where the
+        world <em>is</em>. Regenerate a themed environment in chunks and it quietly
+        rearranges itself between them — a mushroom here, then three feet left — and
+        the camera can't be trusted. The reason is the whole difference between this
+        and 3D: generative video has no persistent <strong>volume</strong>. Every
+        frame is sampled, not rendered from a scene, so space drifts because there
+        is no space. So the next experiment, about 7 credits of it: can you anchor
+        the world's geometry to the real footage instead of re-inventing it?
+      </p>
+
+      <div class="rule" data-sr>
+        <p>You can't get consistency from the prior. You bolt a volume back on as a
+        control signal — and the honest question is whether a cheap one works.</p>
+      </div>
+
+      <div class="stage-grid">
+        <div class="stage no-media card" data-sr>
+          <div class="stage-body">
+            <p class="stage-num">H</p>
+            <h3>The hypothesis</h3>
+            <ul>
+              <li>Feed the encoded source clip as a 3D-consistency anchor (Uni3C)</li>
+              <li>So the new world inherits the real camera and parallax</li>
+              <li>Mask the background so only the world regenerates, subject held</li>
+            </ul>
+            <span class="stage-tool"><b>On paper</b>&nbsp;— reintroduce the volume for free.</span>
+          </div>
+        </div>
+
+        <div class="stage no-media card" data-sr>
+          <div class="stage-body">
+            <p class="stage-num">✓</p>
+            <h3>What held</h3>
+            <ul>
+              <li>The Mushroom Kingdom came out <em>temporally stable</em></li>
+              <li>No per-frame boil, no chunk-to-chunk rearrangement</li>
+              <li>A shared latent anchor genuinely helps continuity</li>
+            </ul>
+            <span class="stage-tool"><b>Verdict</b>&nbsp;— a real signal. Continuity, yes.</span>
+          </div>
+        </div>
+
+        <div class="stage no-media card" data-sr>
+          <div class="stage-body">
+            <p class="stage-num">✗</p>
+            <h3>What didn't</h3>
+            <ul>
+              <li>On a source dolly, the output camera stayed locked</li>
+              <li>The subject-preserving mask? Unimplemented in the node itself</li>
+              <li>Encoded RGB is a picture, not a scaffold — no parallax transported</li>
+            </ul>
+            <span class="stage-tool"><b>Verdict</b>&nbsp;— the shortcut fails. Honestly.</span>
+          </div>
+        </div>
+      </div>
+
+      <p class="lede" data-sr style="margin-top:clamp(28px,4vh,44px)">
+        The lesson rhymes with the rest of this post. The reference carried the
+        world's <em>look</em>; its <em>space</em> needs real geometry, not a
+        re-encoded frame. Done right, the anchor is a point-cloud guidance video
+        rendered along the shot's actual camera path — and the subject is held by a
+        separate matte composite, the classical way. Conditioning can <em>hold</em>
+        a volume. It still can't <em>invent</em> one. Which is exactly where neural
+        VFX keeps landing: back on the discipline of building the shot.
+      </p>
+    </div>
+  </section>
+
   <!-- ── THE DECOMPOSITION · CHUN-LI ──────────────────────────────────── -->
   <section id="breakdown">
     <div class="wrap">
