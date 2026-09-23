@@ -15,3 +15,9 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# Media pipeline: built derivatives and R2 credentials stay out of git.
+# Masters live in ~/Documents/Comfy; derivatives are rebuilt via media/build.sh
+# and hosted on Cloudflare R2 (media.studiojoe.dev).
+media/dist/
+media/.env

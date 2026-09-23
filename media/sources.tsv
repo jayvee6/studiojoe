@@ -1,0 +1,26 @@
+# Web derivative build list for studiojoe.dev media.
+# Columns: out_name <TAB> source_path <TAB> scale <TAB> crf <TAB> trim
+#   scale  ffmpeg scale expr; use -2 for the free axis so dims stay even
+#   crf    higher = smaller. 30 is the house default; drop to 26 for thin-line passes
+#   trim   "-" for whole clip, or "START:DURATION" in seconds
+# Sources live outside the repo on purpose. $MC = ~/Documents/Comfy (masters, JDrive),
+# $SV = ./vfx (existing web cuts, used where no better master exists).
+#
+# Regenerate with:  bash media/build.sh
+out_name	source	scale	crf	trim
+frozone-plate.mp4	$MC/colorsxstudios_7650479758731414806.mp4	-2:960	30	-
+frozone-final.mp4	$MC/frozone_FINAL_LORA.mp4	-2:960	30	-
+frozone-plate-loop.mp4	$MC/colorsxstudios_7650479758731414806.mp4	-2:960	30	2:12
+frozone-final-loop.mp4	$MC/frozone_FINAL_LORA.mp4	-2:960	30	2:12
+chunli-plate.mp4	$SV/chunli/chunli-pass-original.mp4	-2:720	30	-
+chunli-pose.mp4	$SV/chunli/chunli-pass-pose.mp4	-2:720	26	-
+chunli-depth.mp4	$SV/chunli/chunli-pass-depth.mp4	-2:720	30	-
+chunli-matte.mp4	$SV/chunli/chunli-pass-mask.mp4	-2:720	30	-
+chunli-final.mp4	$SV/chunli/chunli-pass-final.mp4	-2:720	30	-
+mario-fireball.mp4	$SV/mario-fireball.mp4	-2:512	30	-
+waluigi-recast.mp4	$SV/waluigi-recast.mp4	-2:900	30	-
+western-crossing.mp4	$SV/western-crossing-scail.mp4	-2:960	30	-
+pass-gunslinger.mp4	$SV/pass-gunslinger.mp4	-2:832	30	-
+pass-vaquero.mp4	$SV/pass-vaquero.mp4	-2:832	30	-
+nlf-skeletons.mp4	$SV/nlf-skeletons.mp4	-2:1024	30	-
+face-v2v.mp4	$SV/face-v2v.mp4	-2:1024	30	-

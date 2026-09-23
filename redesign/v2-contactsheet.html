@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en" data-variant="contactsheet">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio Joe — Contact Sheet 01</title>
+<meta name="description" content="Neural VFX on real footage. Contact sheet: every frame, marked up.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --surround:#121211;
+    --sheet:#1A1A18;
+    --cell:#232320;
+    --edge:rgba(255,255,255,.10);
+    --edge-2:rgba(255,255,255,.18);
+    --txt:#D8D6CE;
+    --txt-2:#8B8880;
+    --txt-3:#5E5B55;
+    --pencil:#E8562B;      /* grease pencil */
+    --pencil-2:#F0C24A;    /* yellow china marker */
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--surround);color:var(--txt);
+    font-family:var(--mono);font-size:12px;line-height:1.5;
+    -webkit-font-smoothing:antialiased;font-variant-ligatures:none;
+  }
+  a{color:inherit;text-decoration:none}
+
+  /* ── film edge strip ── */
+  .edge{
+    height:26px;background:
+      repeating-linear-gradient(90deg,
+        transparent 0 12px, rgba(0,0,0,.85) 12px 22px, transparent 22px 34px);
+    border-bottom:1px solid rgba(0,0,0,.6);
+    background-color:#0B0B0A;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 14px;font-size:8.5px;letter-spacing:.3em;color:#4A4842;
+  }
+  .edge.bottom{border-bottom:0;border-top:1px solid rgba(0,0,0,.6);margin-top:0}
+
+  /* ── masthead bar ── */
+  .bar{
+    display:flex;align-items:flex-end;justify-content:space-between;gap:22px;flex-wrap:wrap;
+    padding:26px 30px 20px;border-bottom:1px solid var(--edge);background:var(--sheet);
+  }
+  .bar h1{
+    margin:0;font-size:15px;font-weight:600;letter-spacing:.34em;text-transform:uppercase;
+  }
+  .bar h1 em{display:block;font-style:normal;font-size:9.5px;letter-spacing:.24em;
+    color:var(--txt-3);font-weight:400;margin-top:7px}
+  .bar .meta{display:flex;gap:0 26px;flex-wrap:wrap;font-size:9.5px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--txt-3)}
+  .bar .meta b{color:var(--txt-2);font-weight:500}
+  .bar nav{display:flex;gap:16px;font-size:10px;letter-spacing:.14em;text-transform:uppercase}
+  .bar nav a{color:var(--txt-2);border-bottom:1px solid transparent;padding-bottom:2px}
+  .bar nav a:hover{color:var(--pencil);border-color:var(--pencil)}
+
+  .lede{
+    padding:22px 30px 26px;background:var(--sheet);border-bottom:1px solid var(--edge);
+    font-size:13px;max-width:74ch;color:var(--txt);line-height:1.65;
+  }
+  .lede b{color:#fff;font-weight:600}
+  .lede span{color:var(--txt-2)}
+
+  /* ── the sheet ── */
+  .sheet{background:var(--sheet);padding:24px 22px 30px}
+  .grid{
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));
+    gap:3px;
+  }
+  .cell{
+    position:relative;background:var(--cell);aspect-ratio:9/16;overflow:hidden;
+    outline:1px solid var(--edge);cursor:pointer;
+  }
+  .cell.wide{grid-column:span 2;aspect-ratio:auto}
+  .cell img,.cell video{width:100%;height:100%;object-fit:cover;display:block}
+  .cell video{position:absolute;inset:0;opacity:0;transition:opacity .16s linear}
+  .cell.playing video{opacity:1}
+  .cell.playing{outline-color:var(--edge-2)}
+  /* frame id in the gutter corner */
+  .cell .id{
+    position:absolute;left:0;bottom:0;z-index:3;
+    font-size:8.5px;letter-spacing:.12em;padding:3px 6px;
+    background:rgba(0,0,0,.62);color:var(--txt-2);
+  }
+  .cell .lbl{
+    position:absolute;right:0;top:0;z-index:3;
+    font-size:8.5px;letter-spacing:.12em;padding:3px 6px;text-transform:uppercase;
+    background:rgba(0,0,0,.62);color:var(--txt-2);
+  }
+  .cell:hover .lbl{color:var(--pencil)}
+
+  /* grease-pencil marks */
+  .mark{position:absolute;inset:0;z-index:4;pointer-events:none}
+  .mark svg{width:100%;height:100%;display:block;overflow:visible}
+  .mark path,.mark ellipse,.mark line{
+    fill:none;stroke-linecap:round;stroke-linejoin:round;
+    vector-effect:non-scaling-stroke;
+  }
+  .sel .mark ellipse{stroke:var(--pencil);stroke-width:2.6;opacity:.92}
+  .rej .mark line{stroke:var(--pencil);stroke-width:2.2;opacity:.72}
+  .alt .mark path{stroke:var(--pencil-2);stroke-width:2.2;opacity:.8}
+  .cell .scrawl{
+    position:absolute;z-index:5;pointer-events:none;
+    font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--pencil);text-shadow:0 1px 3px rgba(0,0,0,.8);
+  }
+  .cell .scrawl.tl{top:7px;left:8px}
+  .cell .scrawl.bl{bottom:22px;left:8px}
+  .cell .scrawl.y{color:var(--pencil-2)}
+
+  /* ── selected-frame note card ── */
+  .note{
+    grid-column:span 2;background:transparent;outline:1px dashed var(--pencil);
+    padding:16px 16px 14px;aspect-ratio:auto;display:flex;flex-direction:column;
+    cursor:default;
+  }
+  .note h3{
+    margin:0 0 3px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--pencil);
+  }
+  .note .big{font-size:44px;line-height:1;font-weight:600;color:#fff;margin:10px 0 2px;
+    font-variant-numeric:tabular-nums}
+  .note .big em{font-style:normal;font-size:11px;letter-spacing:.16em;color:var(--txt-3);
+    text-transform:uppercase;margin-left:6px}
+  .note .rows{margin-top:12px;display:flex;flex-direction:column;gap:0}
+  .note .rows div{display:flex;justify-content:space-between;gap:10px;
+    padding:3.5px 0;border-top:1px solid var(--edge);font-size:11px}
+  .note .rows span{color:var(--txt-3)}
+  .note .rows b{font-weight:600;font-variant-numeric:tabular-nums}
+  .note .src{margin-top:10px;font-size:8.5px;color:var(--txt-3);letter-spacing:.08em}
+
+  /* ── roll separators ── */
+  .roll{
+    grid-column:1/-1;
+    display:flex;align-items:center;gap:14px;
+    padding:26px 0 10px;font-size:9.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--txt-3);
+  }
+  .roll::after{content:"";flex:1;height:1px;background:var(--edge)}
+  .roll b{color:var(--txt);font-weight:600;letter-spacing:.2em}
+  .roll .st{color:var(--pencil);border:1px solid currentColor;padding:2px 7px;letter-spacing:.14em}
+  .roll .st.rev{color:var(--pencil-2)}
+  .roll .st.arc{color:var(--txt-3)}
+
+  /* ── index footer ── */
+  .foot{background:var(--sheet);border-top:1px solid var(--edge);padding:28px 30px 34px;
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:26px}
+  .foot h4{margin:0 0 10px;font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--txt-3)}
+  .foot ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:0}
+  .foot li{border-top:1px solid var(--edge)}
+  .foot li a{display:flex;justify-content:space-between;gap:10px;padding:6px 0;font-size:11.5px}
+  .foot li a:hover{color:var(--pencil)}
+  .foot li em{font-style:normal;color:var(--txt-3);font-size:10px}
+  .foot p{margin:0;font-size:11px;color:var(--txt-2);line-height:1.6}
+
+  .colo{padding:16px 30px 40px;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--txt-3);display:flex;gap:22px;flex-wrap:wrap}
+
+  @media (max-width:640px){
+    .grid{grid-template-columns:repeat(auto-fill,minmax(132px,1fr))}
+    .cell.wide,.note{grid-column:span 2}
+    .bar,.lede,.sheet,.foot,.colo{padding-left:16px;padding-right:16px}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="edge"><span>STUDIO JOE</span><span>NEURAL VFX</span><span>2026</span><span>SHEET 01</span></div>
+
+<header class="bar">
+  <h1>Studio Joe<em>Contact Sheet 01 · Recast &amp; Restyle</em></h1>
+  <div class="meta">
+    <span>Rolls <b>06</b></span><span>Frames <b>18</b></span>
+    <span>Delivered <b>02</b></span><span>In review <b>01</b></span>
+  </div>
+  <nav>
+    <a href="#rolls">Sheet</a>
+    <a href="/resume.html">Resume</a>
+    <a href="https://github.com/jayvee6" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://www.linkedin.com/in/joey-v-287ba5394" target="_blank" rel="noopener">LinkedIn</a>
+  </nav>
+</header>
+
+<p class="lede">
+  <b>Every frame here started on a real camera.</b>
+  <span>Motion, mattes and depth are read off the plate; one reference image decides the
+  character. Circled frames shipped. Struck frames did not. Hover anything to run it.</span>
+</p>
+
+<main class="sheet" id="rolls">
+  <div class="grid">
+
+  <!-- ROLL 01 -->
+  <div class="roll"><b>Roll 01</b> Frozone <span class="st">Delivered 02 Aug 2026</span></div>
+    <div class="cell" data-src="/vfx/frozone-plate.mp4">
+      <img src="/vfx/posters/frozone-plate.jpg" alt="COLORS live performance plate">
+      <video muted loop playsinline preload="none"></video>
+      <span class="lbl">Plate</span><span class="id">01-01</span>
+    </div>
+    <div class="cell sel" data-src="/vfx/frozone-final.mp4">
+      <img src="/vfx/posters/frozone-final.jpg" alt="Frozone recast, final">
+      <video muted loop playsinline preload="none"></video>
+      <span class="mark"><svg viewBox="0 0 100 178" preserveAspectRatio="none">
+        <ellipse cx="50" cy="89" rx="43" ry="80"/></svg></span>
+      <span class="scrawl tl">Selected</span>
+      <span class="lbl">Final</span><span class="id">01-02</span>
+    </div>
+
+    <div class="cell note">
+      <h3>↖ Frame 01-02 · TikTok</h3>
+      <div class="big">64K<em>views / 48 h</em></div>
+      <div class="rows">
+        <div><span>Likes</span><b>13,000</b></div>
+        <div><span>Shares</span><b>2,673</b></div>
+        <div><span>Saves</span><b>1,338</b></div>
+        <div><span>Total play</span><b>150 h 39 m</b></div>
+        <div><span>From For You</span><b>92.7%</b></div>
+      </div>
+      <p class="src">TikTok Studio, 4 Aug 2026 · SCAIL-2 + frzn3d LoRA</p>
+    </div>
+
+  <!-- ROLL 02 -->
+  <div class="roll"><b>Roll 02</b> Chun-Li · pass stack <span class="st rev">In review</span></div>
+    <div class="cell" data-src="/vfx/chunli/chunli-pass-original.mp4">
+      <img src="/vfx/chunli/chunli-pass-original.jpg" alt="Plate">
+      <video muted loop playsinline preload="none"></video>
+      <span class="lbl">Plate</span><span class="id">02-01</span></div>
+    <div class="cell" data-src="/vfx/chunli/chunli-pass-pose.mp4">
+      <img src="/vfx/chunli/chunli-pass-pose.jpg" alt="Pose pass">
+      <video muted loop playsinline preload="none"></video>
+      <span class="lbl">Pose</span><span class="id">02-02</span></div>
+    <div class="cell" data-src="/vfx/chunli/chunli-pass-depth.mp4">
+      <img src="/vfx/chunli/chunli-pass-depth.jpg" alt="Depth pass">
+      <video muted loop playsinline preload="none"></video>
+      <span class="lbl">Depth</span><span class="id">02-03</span></div>
+    <div class="cell" data-src="/vfx/chunli/chunli-pass-mask.mp4">
+      <img src="/vfx/chunli/chunli-pass-mask.jpg" alt="Matte pass">
+      <video muted loop playsinline preload="none"></video>
+      <span class="lbl">Matte</span><span class="id">02-04</span></div>
+    <div class="cell alt" data-src="/vfx/chunli/chunli-pass-final.mp4">
+      <img src="/vfx/chunli/chunli-pass-final.jpg" alt="Final composite">
+      <video muted loop playsinline preload="none"></video>
+      <span class="mark"><svg viewBox="0 0 100 178" preserveAspectRatio="none">
+        <path d="M8 158 C 30 172, 70 172, 92 158"/></svg></span>
+      <span class="scrawl tl y">Hold · QC</span>
+      <span class="lbl">Final</span><span class="id">02-05</span></div>
+    <div class="cell" data-src="/vfx/chunli-dance.mp4">
+      <img src="/vfx/chunli-dance.jpg" alt="Chun-Li dance">
+      <video muted loop playsinline preload="none"></video>
+      <span class="lbl">Alt</span><span class="id">02-06</span></div>
+
+  <!-- ROLL 03 -->
+  <div class="roll"><b>Roll 03</b> Mushroom Kingdom · full-scene <span class="st arc">Delivered</span></div>
+    <div class="cell wide" data-src="/vfx/mario-fireball.mp4">
+      <img src="/vfx/mario-fireball.jpg" alt="Fire Mario, Mushroom Kingdom">
+      <video muted loop playsinline preload="none"></video>
+      <span class="lbl">Final · 896×512</span><span class="id">03-01</span></div>
+    <div class="cell" data-src="/vfx/mario-mandance-v5.mp4">
+      <img src="/vfx/mario-mandance-v5.jpg" alt="Mario dance v5">
+      <video muted loop playsinline preload="none"></video>
+      <span class="lbl">v5</span><span class="id">03-02</span></div>
+    <div class="cell" data-src="/vfx/mario-mushroom-hero.mp4">
+      <img src="/vfx/posters/mario-mushroom-hero.jpg" alt="Mushroom Kingdom hero">
+      <video muted loop playsinline preload="none"></video>
+      <span class="lbl">Hero</span><span class="id">03-03</span></div>
+
+  <!-- ROLL 04 -->
+  <div class="roll"><b>Roll 04</b> Waluigi <span class="st arc">Archive</span></div>
+    <div class="cell" data-src="/vfx/waluigi-recast.mp4">
+      <img src="/vfx/waluigi-recast.jpg" alt="Waluigi recast">
+      <video muted loop playsinline preload="none"></video>
+      <span class="scrawl bl">504 fr</span>
+      <span class="lbl">Final</span><span class="id">04-01</span></div>
+    <div class="cell" data-src="/vfx/composite-hero.mp4">
+      <img src="/vfx/posters/composite-hero.jpg" alt="Composite hero">
+      <video muted loop playsinline preload="none"></video>
+      <span class="lbl">Comp</span><span class="id">04-02</span></div>
+
+  <!-- ROLL 05 -->
+  <div class="roll"><b>Roll 05</b> Western · costume tests <span class="st arc">Test</span></div>
+    <div class="cell" data-src="/vfx/western-crossing-scail.mp4">
+      <img src="/vfx/posters/western-crossing-scail.jpg" alt="River crossing">
+      <video muted loop playsinline preload="none"></video>
+      <span class="lbl">Crossing</span><span class="id">05-01</span></div>
+    <div class="cell" data-src="/vfx/pass-gunslinger.mp4">
+      <img src="/vfx/posters/pass-gunslinger.jpg" alt="Gunslinger pass">
+      <video muted loop playsinline preload="none"></video>
+      <span class="lbl">Gunslinger</span><span class="id">05-02</span></div>
+    <div class="cell rej" data-src="/vfx/pass-vaquero.mp4">
+      <img src="/vfx/posters/pass-vaquero.jpg" alt="Vaquero pass, rejected">
+      <video muted loop playsinline preload="none"></video>
+      <span class="mark"><svg viewBox="0 0 100 178" preserveAspectRatio="none">
+        <line x1="10" y1="14" x2="90" y2="164"/><line x1="90" y1="14" x2="10" y2="164"/></svg></span>
+      <span class="scrawl tl">Reads costume</span>
+      <span class="lbl">Vaquero</span><span class="id">05-03</span></div>
+    <div class="cell" data-src="/vfx/western-v5-hero.mp4">
+      <img src="/vfx/posters/western-v5-hero.jpg" alt="Western hero v5">
+      <video muted loop playsinline preload="none"></video>
+      <span class="lbl">Hero v5</span><span class="id">05-04</span></div>
+
+  <!-- ROLL 06 -->
+  <div class="roll"><b>Roll 06</b> R&amp;D · tracking <span class="st arc">R&amp;D</span></div>
+    <div class="cell" data-src="/vfx/nlf-skeletons.mp4">
+      <img src="/vfx/posters/nlf-skeletons.jpg" alt="Skeleton tracking">
+      <video muted loop playsinline preload="none"></video>
+      <span class="lbl">Skeletons</span><span class="id">06-01</span></div>
+    <div class="cell" data-src="/vfx/face-v2v.mp4">
+      <img src="/vfx/posters/face-v2v.jpg" alt="Face video to video">
+      <video muted loop playsinline preload="none"></video>
+      <span class="lbl">Face V2V</span><span class="id">06-02</span></div>
+
+  </div>
+</main>
+
+<footer class="foot">
+  <div>
+    <h4>Toolchain</h4>
+    <p>SCAIL-2 performance transfer · character LoRAs for identity · SAM3 roto ·
+       DepthAnythingV2 · DWPose · Flux Kontext references · SeedVR2 detail restore · FFmpeg finish.</p>
+  </div>
+  <div>
+    <h4>Real-time</h4>
+    <ul>
+      <li><a href="https://webgpu-kart.vercel.app" target="_blank" rel="noopener">WebGPU Kart<em>Play ↗</em></a></li>
+      <li><a href="https://github.com/jayvee6/webgpu-doom" target="_blank" rel="noopener">WebGPU Doom<em>Code ↗</em></a></li>
+      <li><a href="https://musicnerd.studiojoe.dev/" target="_blank" rel="noopener">Music Nerd<em>Open ↗</em></a></li>
+      <li><a href="https://jayvee6.github.io/sj-audio/" target="_blank" rel="noopener">sj-audio<em>Open ↗</em></a></li>
+    </ul>
+  </div>
+  <div>
+    <h4>Contact</h4>
+    <ul>
+      <li><a href="/resume.html">Resume<em>Read ↗</em></a></li>
+      <li><a href="https://github.com/jayvee6" target="_blank" rel="noopener">GitHub<em>↗</em></a></li>
+      <li><a href="https://www.linkedin.com/in/joey-v-287ba5394" target="_blank" rel="noopener">LinkedIn<em>↗</em></a></li>
+    </ul>
+  </div>
+</footer>
+
+<div class="edge bottom"><span>© 2026</span><span>STUDIO JOE</span><span>SHEET 01</span><span>END</span></div>
+
+<script>
+(function(){
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  document.querySelectorAll('.cell[data-src]').forEach(function(c){
+    var v = c.querySelector('video'), src = c.dataset.src, loaded = false;
+    function on(){
+      if(reduce) return;
+      if(!loaded){ v.src = src; loaded = true; }
+      c.classList.add('playing');
+      var p = v.play(); if(p && p.catch) p.catch(function(){});
+    }
+    function off(){
+      c.classList.remove('playing');
+      if(loaded){ v.pause(); try{ v.currentTime = 0; }catch(e){} }
+    }
+    c.addEventListener('mouseenter', on);
+    c.addEventListener('mouseleave', off);
+    c.addEventListener('click', function(){ c.classList.contains('playing') ? off() : on(); });
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>studiojoe.dev — redesign variants</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#101012; --panel:#191A1D; --line:#2C2D32;
+    --txt:#E4E4E8; --txt-2:#9497A0; --txt-3:#63666E; --am:#E8A33D;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--mono);font-size:12px}
+  header{
+    display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+    padding:14px 18px;background:var(--panel);border-bottom:1px solid var(--line);
+    position:sticky;top:0;z-index:10;
+  }
+  header h1{margin:0;font-size:12px;font-weight:600;letter-spacing:.22em;text-transform:uppercase}
+  header h1 span{color:var(--am)}
+  header p{margin:0;color:var(--txt-3);font-size:11px}
+  .ctrl{margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .ctrl label{color:var(--txt-3);font-size:10px;letter-spacing:.12em;text-transform:uppercase}
+  .ctrl button{
+    background:#232429;border:1px solid var(--line);color:var(--txt-2);font-family:var(--mono);
+    font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:6px 11px;cursor:pointer;
+  }
+  .ctrl button:hover{border-color:var(--am);color:var(--am)}
+  .ctrl button[aria-pressed="true"]{border-color:var(--am);color:var(--am);background:#33291A}
+
+  .rack{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);
+    height:calc(100vh - 52px)}
+  .rack.solo{grid-template-columns:1fr}
+  .rack.solo .slot{display:none}
+  .rack.solo .slot.on{display:flex}
+  .slot{display:flex;flex-direction:column;background:var(--bg);min-width:0}
+  .slot .hd{
+    display:flex;align-items:center;gap:10px;padding:8px 11px;background:var(--panel);
+    border-bottom:1px solid var(--line);
+  }
+  .slot .hd b{font-size:11px;font-weight:600;letter-spacing:.1em}
+  .slot .hd .tag{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--txt-3)}
+  .slot .hd a{margin-left:auto;color:var(--am);text-decoration:none;font-size:9.5px;
+    letter-spacing:.1em;text-transform:uppercase}
+  .slot .hd a:hover{text-decoration:underline}
+  .wrap{flex:1;overflow:hidden;position:relative;background:#000}
+  iframe{position:absolute;top:0;left:0;border:0;transform-origin:0 0}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>studiojoe<span>.dev</span> — redesign</h1>
+  <p>Direction: VFX breakdown sheet · 3 variants</p>
+  <div class="ctrl">
+    <label>View</label>
+    <button type="button" data-solo="all" aria-pressed="true">All 3</button>
+    <button type="button" data-solo="0" aria-pressed="false">V1</button>
+    <button type="button" data-solo="1" aria-pressed="false">V2</button>
+    <button type="button" data-solo="2" aria-pressed="false">V3</button>
+  </div>
+</header>
+
+<div class="rack" id="rack">
+  <section class="slot on">
+    <div class="hd"><b>V1 · Shot Log</b><span class="tag">paper · editorial</span>
+      <a href="v1-shotlog.html" target="_blank">Open ↗</a></div>
+    <div class="wrap"><iframe src="v1-shotlog.html" title="V1 Shot Log"></iframe></div>
+  </section>
+  <section class="slot">
+    <div class="hd"><b>V2 · Contact Sheet</b><span class="tag">lightbox · marked up</span>
+      <a href="v2-contactsheet.html" target="_blank">Open ↗</a></div>
+    <div class="wrap"><iframe src="v2-contactsheet.html" title="V2 Contact Sheet"></iframe></div>
+  </section>
+  <section class="slot">
+    <div class="hd"><b>V3 · Compositor</b><span class="tag">wipe · node stack</span>
+      <a href="v3-compositor.html" target="_blank">Open ↗</a></div>
+    <div class="wrap"><iframe src="v3-compositor.html" title="V3 Compositor"></iframe></div>
+  </section>
+</div>
+
+<script>
+(function(){
+  var rack = document.getElementById('rack');
+  var slots = [].slice.call(rack.querySelectorAll('.slot'));
+  var btns  = [].slice.call(document.querySelectorAll('.ctrl button'));
+
+  // Render each variant at a real 1440px desktop width, then scale it to fit its column,
+  // so the side-by-side is an honest comparison of desktop layouts.
+  function fit(){
+    slots.forEach(function(s){
+      var wrap = s.querySelector('.wrap'), f = s.querySelector('iframe');
+      if(!wrap.clientWidth) return;
+      var W = 1440, scale = wrap.clientWidth / W;
+      f.style.width  = W + 'px';
+      f.style.height = (wrap.clientHeight / scale) + 'px';
+      f.style.transform = 'scale(' + scale + ')';
+    });
+  }
+
+  btns.forEach(function(b){
+    b.addEventListener('click', function(){
+      var v = b.dataset.solo;
+      btns.forEach(function(x){ x.setAttribute('aria-pressed', x === b); });
+      if(v === 'all'){
+        rack.classList.remove('solo');
+        slots.forEach(function(s){ s.classList.add('on'); });
+      } else {
+        rack.classList.add('solo');
+        slots.forEach(function(s,i){ s.classList.toggle('on', i === +v); });
+      }
+      requestAnimationFrame(fit);
+    });
+  });
+
+  addEventListener('resize', fit);
+  addEventListener('load', fit);
+  fit();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en" data-variant="compositor">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio Joe — Comp</title>
+<meta name="description" content="Neural VFX on real footage. Drag the wipe: plate on the left, recast on the right.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#1E1E21;
+    --panel:#2A2A2E;
+    --panel-2:#323238;
+    --line:#3C3C43;
+    --line-2:#4A4A53;
+    --txt:#DEDEE4;
+    --txt-2:#9A9AA4;
+    --txt-3:#6B6B75;
+    --amber:#E8A33D;
+    --amber-dim:#8A6426;
+    --green:#5FA463;
+    --red:#D2603F;
+    --sans:"Archivo",system-ui,sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--bg);color:var(--txt);
+    font-family:var(--mono);font-size:12px;line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;text-decoration:none}
+  h1,h2,h3{font-family:var(--sans);margin:0}
+
+  /* ── top bar ── */
+  .top{
+    display:flex;align-items:center;gap:20px;flex-wrap:wrap;
+    padding:0 16px;height:46px;background:var(--panel);border-bottom:1px solid var(--line);
+  }
+  .top .brand{font-family:var(--sans);font-weight:700;font-size:14px;letter-spacing:.06em}
+  .top .brand span{color:var(--amber)}
+  .top .crumb{font-size:10.5px;color:var(--txt-3);letter-spacing:.1em;text-transform:uppercase}
+  .top nav{margin-left:auto;display:flex;gap:2px}
+  .top nav a{
+    font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--txt-2);
+    padding:6px 11px;border:1px solid transparent;
+  }
+  .top nav a:hover{color:var(--amber);border-color:var(--line-2);background:var(--panel-2)}
+
+  /* ── intro strip ── */
+  .intro{
+    padding:26px 20px 22px;border-bottom:1px solid var(--line);background:var(--bg);
+  }
+  .intro h1{
+    font-size:clamp(26px,4.2vw,44px);font-weight:700;letter-spacing:-.02em;line-height:1.05;
+    max-width:19ch;
+  }
+  .intro h1 span{color:var(--amber)}
+  .intro p{
+    margin:12px 0 0;max-width:70ch;font-size:13px;line-height:1.65;color:var(--txt-2);
+  }
+  .intro p b{color:var(--txt);font-weight:500}
+
+  /* ── workspace ── */
+  .ws{
+    display:grid;
+    grid-template-columns:198px minmax(0,1fr) 236px;
+    gap:1px;background:var(--line);
+    border-bottom:1px solid var(--line);
+  }
+  .ws > section{background:var(--bg);min-width:0}
+  .ph{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    padding:8px 11px;background:var(--panel);border-bottom:1px solid var(--line);
+    font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--txt-3);
+  }
+  .ph b{color:var(--txt-2);font-weight:500}
+
+  /* node list */
+  .nodes{padding:8px}
+  .node{
+    display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+    background:var(--panel-2);border:1px solid var(--line-2);color:var(--txt-2);
+    font-family:var(--mono);font-size:11px;padding:7px 9px;margin-bottom:5px;cursor:pointer;
+    position:relative;
+  }
+  .node:hover{border-color:var(--txt-3);color:var(--txt)}
+  .node[aria-pressed="true"]{border-color:var(--amber);color:var(--amber);background:#38301F}
+  .node .dot{width:6px;height:6px;background:currentColor;flex:0 0 auto;border-radius:1px}
+  .node .k{margin-left:auto;font-size:9px;color:var(--txt-3);letter-spacing:.06em}
+  .node[aria-pressed="true"] .k{color:var(--amber-dim)}
+  .wire{height:9px;margin:-4px 0 -1px 12px;border-left:1px solid var(--line-2)}
+
+  /* viewer */
+  .viewer{display:flex;flex-direction:column}
+  .stage{
+    position:relative;flex:1;min-height:380px;background:
+      repeating-conic-gradient(#232326 0% 25%, #1B1B1E 0% 50%) 50%/22px 22px;
+    overflow:hidden;display:flex;align-items:center;justify-content:center;
+    cursor:ew-resize;user-select:none;
+  }
+  .stage .holder{position:relative;height:100%;aspect-ratio:9/16;max-width:100%}
+  .stage.wide .holder{aspect-ratio:16/9;height:auto;width:100%;max-height:100%}
+  .stage video,.stage img{
+    position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block;
+  }
+  .layerB{clip-path:inset(0 0 0 var(--wipe,50%))}
+  .handle{
+    position:absolute;top:0;bottom:0;left:var(--wipe,50%);width:1px;background:var(--amber);
+    z-index:5;pointer-events:none;
+  }
+  .handle::after{
+    content:"";position:absolute;top:50%;left:50%;width:26px;height:26px;
+    transform:translate(-50%,-50%);border:1px solid var(--amber);background:rgba(232,163,61,.14);
+  }
+  .handle .tagA,.handle .tagB{
+    position:absolute;top:12px;font-size:9px;letter-spacing:.16em;text-transform:uppercase;
+    padding:3px 7px;background:rgba(0,0,0,.62);color:var(--txt-2);white-space:nowrap;
+  }
+  .handle .tagA{right:9px}
+  .handle .tagB{left:9px;color:var(--amber)}
+  .stage.single .handle,.stage.single .layerB{display:none}
+  .stage.single .layerA{clip-path:none}
+
+  .transport{
+    display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    padding:8px 12px;background:var(--panel);border-top:1px solid var(--line);
+    font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--txt-3);
+  }
+  .transport button{
+    background:var(--panel-2);border:1px solid var(--line-2);color:var(--txt-2);
+    font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+    padding:5px 11px;cursor:pointer;
+  }
+  .transport button:hover{border-color:var(--amber);color:var(--amber)}
+  .transport .spacer{margin-left:auto}
+  .transport input[type=range]{accent-color:var(--amber);width:130px}
+
+  /* properties */
+  .props{padding:12px}
+  .grp{margin-bottom:16px}
+  .grp h3{
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--txt-3);font-weight:500;margin-bottom:7px;
+  }
+  .kv{display:flex;justify-content:space-between;gap:10px;padding:3.5px 0;
+    border-top:1px solid var(--line);font-size:11px}
+  .kv span{color:var(--txt-3)}
+  .kv b{font-weight:500;font-variant-numeric:tabular-nums}
+  .kv b.am{color:var(--amber)}
+  .badge{
+    display:inline-block;font-size:9px;letter-spacing:.14em;text-transform:uppercase;
+    padding:3px 8px;border:1px solid currentColor;
+  }
+  .badge.d{color:var(--green)}
+  .badge.r{color:var(--amber)}
+  .badge.a{color:var(--txt-3)}
+  .metric{
+    background:var(--panel-2);border:1px solid var(--line-2);padding:11px 12px;margin-bottom:8px;
+  }
+  .metric .v{font-family:var(--sans);font-size:30px;font-weight:700;line-height:1;color:#fff}
+  .metric .l{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--txt-3);margin-top:5px}
+  .note{font-size:10.5px;color:var(--txt-3);line-height:1.6;margin:8px 0 0}
+
+  /* bin */
+  .bin{padding:14px 16px 20px;border-bottom:1px solid var(--line)}
+  .bin .ph{background:transparent;border:0;padding:0 0 10px}
+  .binrow{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+  .clip{
+    flex:0 0 auto;width:104px;cursor:pointer;background:transparent;border:0;padding:0;
+    font-family:var(--mono);
+  }
+  .clip .th{
+    position:relative;width:100%;aspect-ratio:9/16;overflow:hidden;
+    border:1px solid var(--line-2);background:var(--panel);
+  }
+  .clip.w .th{aspect-ratio:16/9}
+  .clip img{width:100%;height:100%;object-fit:cover;display:block}
+  .clip .cap{display:block;text-align:left;font-size:9.5px;color:var(--txt-3);margin-top:5px;
+    letter-spacing:.06em}
+  .clip .cap b{display:block;color:var(--txt-2);font-weight:500;font-size:10px}
+  .clip:hover .th{border-color:var(--txt-3)}
+  .clip[aria-pressed="true"] .th{border-color:var(--amber)}
+  .clip[aria-pressed="true"] .cap b{color:var(--amber)}
+
+  /* lower content */
+  .lower{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1px;background:var(--line)}
+  .lower > div{background:var(--bg);padding:20px 18px 24px}
+  .lower h2{font-size:16px;font-weight:600;letter-spacing:-.01em;margin-bottom:12px}
+  .lower table{border-collapse:collapse;width:100%;font-size:11px}
+  .lower td{padding:5px 8px 5px 0;border-bottom:1px solid var(--line);vertical-align:top}
+  .lower td:first-child{color:var(--amber);white-space:nowrap;width:96px}
+  .lower td.d{color:var(--txt-3)}
+  .lower ul{list-style:none;margin:0;padding:0}
+  .lower li{border-bottom:1px solid var(--line)}
+  .lower li a{display:flex;justify-content:space-between;gap:10px;padding:7px 0;font-size:11.5px}
+  .lower li a:hover{color:var(--amber)}
+  .lower li em{font-style:normal;color:var(--txt-3);font-size:10px}
+
+  footer.f{padding:16px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--txt-3);display:flex;gap:20px;flex-wrap:wrap}
+
+  @media (max-width:940px){
+    .ws{grid-template-columns:1fr}
+    .stage{min-height:300px}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <span class="brand">STUDIO<span>·</span>JOE</span>
+  <span class="crumb">comp / recast / <b id="crumb">FRZ_010</b></span>
+  <nav>
+    <a href="#tools">Toolchain</a>
+    <a href="/resume.html">Resume</a>
+    <a href="https://github.com/jayvee6" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://www.linkedin.com/in/joey-v-287ba5394" target="_blank" rel="noopener">LinkedIn</a>
+  </nav>
+</div>
+
+<section class="intro">
+  <h1>Real footage in. <span>A different performer out.</span></h1>
+  <p><b>Drag the wipe.</b> Left of the line is the untouched camera plate. Right of it is the
+     delivered shot. The motion, the mattes and the depth are all read off that plate, so the
+     geometry of the real scene survives. One reference image decides who the performer becomes.</p>
+</section>
+
+<div class="ws">
+
+  <!-- node stack -->
+  <section>
+    <div class="ph"><span>Node stack</span><b id="nodeCount">2</b></div>
+    <div class="nodes" id="nodes"></div>
+  </section>
+
+  <!-- viewer -->
+  <section class="viewer">
+    <div class="ph"><span>Viewer</span><b id="vwLabel">plate / final</b></div>
+    <div class="stage" id="stage">
+      <div class="holder" id="holder">
+        <video class="layerA" id="vA" muted loop playsinline preload="none"></video>
+        <video class="layerB" id="vB" muted loop playsinline preload="none"></video>
+        <div class="handle" id="handle">
+          <span class="tagA">Plate</span><span class="tagB">Comp</span>
+        </div>
+      </div>
+    </div>
+    <div class="transport">
+      <button id="play" type="button">Pause</button>
+      <button id="full" type="button" hidden>Full shot</button>
+      <span id="tc">00:00:00</span>
+      <span class="spacer"></span>
+      <span>Wipe</span>
+      <input type="range" id="wipe" min="0" max="100" value="50" aria-label="Wipe position">
+    </div>
+  </section>
+
+  <!-- properties -->
+  <section>
+    <div class="ph"><span>Properties</span><b id="propStatus"></b></div>
+    <div class="props" id="props"></div>
+  </section>
+</div>
+
+<!-- bin -->
+<section class="bin">
+  <div class="ph"><span>Bin</span><b>7 shots</b></div>
+  <div class="binrow" id="bin"></div>
+</section>
+
+<div class="lower">
+  <div id="tools">
+    <h2>Toolchain</h2>
+    <table>
+      <tr><td>SCAIL-2</td><td class="d">Performance transfer. Carries the plate's motion onto the new character.</td></tr>
+      <tr><td>LoRA</td><td class="d">Per-character identity, trained from rendered 3D datasets.</td></tr>
+      <tr><td>SAM3</td><td class="d">Subject matte and tracking. Scopes what the recast may touch.</td></tr>
+      <tr><td>DepthAnythingV2</td><td class="d">Per-frame depth. Preserves real scene geometry.</td></tr>
+      <tr><td>DWPose</td><td class="d">Skeleton extraction. Depth takes over on hard turns.</td></tr>
+      <tr><td>Flux Kontext</td><td class="d">Builds the single reference image that sets character and world.</td></tr>
+      <tr><td>SeedVR2</td><td class="d">Detail restore. Hair, lashes, pore, weave. A plain upscale adds none of it.</td></tr>
+      <tr><td>FFmpeg</td><td class="d">Conform, grade and delivery encode.</td></tr>
+    </table>
+  </div>
+  <div>
+    <h2>Real-time</h2>
+    <ul>
+      <li><a href="https://webgpu-kart.vercel.app" target="_blank" rel="noopener">WebGPU Kart<em>6 biomes · 16 tracks ↗</em></a></li>
+      <li><a href="https://github.com/jayvee6/webgpu-doom" target="_blank" rel="noopener">WebGPU Doom<em>own WAD parser ↗</em></a></li>
+      <li><a href="https://github.com/jayvee6" target="_blank" rel="noopener">OutRun<em>segment road ↗</em></a></li>
+      <li><a href="https://github.com/jayvee6" target="_blank" rel="noopener">Emoji Arcade<em>3 cabinets ↗</em></a></li>
+      <li><a href="https://musicnerd.studiojoe.dev/" target="_blank" rel="noopener">Music Nerd<em>audio-reactive ↗</em></a></li>
+      <li><a href="https://jayvee6.github.io/sj-audio/" target="_blank" rel="noopener">sj-audio<em>zero deps ↗</em></a></li>
+    </ul>
+  </div>
+</div>
+
+<footer class="f">
+  <span>© 2026 Studio Joe</span>
+  <a href="/resume.html">Resume</a>
+  <a href="https://github.com/jayvee6" target="_blank" rel="noopener">GitHub</a>
+  <span>Set in Archivo &amp; JetBrains Mono</span>
+</footer>
+
+<script>
+(function(){
+  // Single switch for where media comes from.
+  //   local build : '/media/dist/'            (bash media/build.sh)
+  //   production  : 'https://media.studiojoe.dev/v1/'
+  // The version segment is the cache-buster — bump it in lockstep with
+  // MEDIA_VERSION in media/.env whenever assets are re-encoded.
+  var MEDIA_BASE = '/media/dist/';
+  var P = MEDIA_BASE, PO = MEDIA_BASE + 'posters/';
+
+  var SHOTS = [
+    {
+      id:'FRZ_010', name:'Frozone', wide:false,
+      // Autoplay a 12 s loop (~1.1 MB for the pair) so the wipe moves immediately;
+      // the full 30 s pair is 3.1 MB and loads only when asked.
+      plate:{ label:'Plate', src:P+'frozone-plate-loop.mp4', poster:PO+'frozone-plate-loop.jpg',
+              full:P+'frozone-plate.mp4' },
+      passes:[ { label:'Comp · SCAIL-2', src:P+'frozone-final-loop.mp4',
+                 poster:PO+'frozone-final-loop.jpg', full:P+'frozone-final.mp4', k:'final' } ],
+      res:'1080×1920', fps:25, frames:750, dur:'30.0 s',
+      status:{ t:'Delivered', c:'d' }, date:'02 Aug 2026',
+      method:[['Transfer','SCAIL-2'],['Identity','frzn3d LoRA'],['Detail','SeedVR2 7b'],['Finish','FFmpeg']],
+      dist:{ v:'64K', l:'views in 48 h', rows:[['Likes','13,000'],['Shares','2,673'],['Saves','1,338'],
+             ['Total play','150 h 39 m'],['Avg watch','8.15 s'],['From For You','92.7%']],
+             src:'TikTok Studio, 4 Aug 2026' },
+      note:'A COLORS live performance recast as Frozone. Performance transfer, not a style pass.'
+    },
+    {
+      id:'CHN_004', name:'Chun-Li', wide:false,
+      plate:{ label:'Plate', src:P+'chunli-plate.mp4', poster:PO+'chunli-plate.jpg' },
+      passes:[
+        { label:'Pose · DWPose', src:P+'chunli-pose.mp4', poster:PO+'chunli-pose.jpg', k:'pose' },
+        { label:'Depth · DA-V2', src:P+'chunli-depth.mp4', poster:PO+'chunli-depth.jpg', k:'depth' },
+        { label:'Matte · SAM3', src:P+'chunli-matte.mp4', poster:PO+'chunli-matte.jpg', k:'matte' },
+        { label:'Comp · SCAIL-2', src:P+'chunli-final.mp4', poster:PO+'chunli-final.jpg', k:'final' }
+      ],
+      res:'406×720', fps:24, frames:167, dur:'6.96 s',
+      status:{ t:'In review', c:'r' }, date:'next release',
+      method:[['Transfer','SCAIL-2'],['Roto','SAM3'],['Depth','DepthAnythingV2'],['Pose','DWPose']],
+      note:'Full pass stack. Click any node to wipe it against the plate. Held for a quality review.'
+    },
+    {
+      id:'MRO_002', name:'Fire Mario', wide:true,
+      plate:null,
+      passes:[ { label:'Comp · full scene', src:P+'mario-fireball.mp4', poster:PO+'mario-fireball.jpg', k:'final' } ],
+      res:'896×512', fps:24, frames:293, dur:'12.2 s',
+      status:{ t:'Delivered', c:'d' }, date:'—',
+      method:[['Transfer','SCAIL-2'],['Scope','full scene'],['Format','landscape']],
+      note:'A phone clip moved wholesale into the Mushroom Kingdom. Subject and environment both replaced; the original camera move survives.'
+    },
+    {
+      id:'WAL_001', name:'Waluigi', wide:false, plate:null,
+      passes:[ { label:'Comp', src:P+'waluigi-recast.mp4', poster:PO+'waluigi-recast.jpg', k:'final' } ],
+      res:'506×900', fps:30, frames:504, dur:'16.8 s',
+      status:{ t:'Archive', c:'a' }, date:'—',
+      method:[['Transfer','SCAIL-2'],['Length','504 fr']],
+      note:'Longest continuous recast in the set. Identity holds without a mid-shot re-anchor.'
+    },
+    {
+      id:'WST_005', name:'Western Crossing', wide:false, plate:null,
+      passes:[
+        { label:'Crossing', src:P+'western-crossing.mp4', poster:PO+'western-crossing.jpg', k:'final' },
+        { label:'Gunslinger', src:P+'pass-gunslinger.mp4', poster:PO+'pass-gunslinger.jpg', k:'costume' },
+        { label:'Vaquero', src:P+'pass-vaquero.mp4', poster:PO+'pass-vaquero.jpg', k:'rejected' }
+      ],
+      res:'540×960', fps:16, frames:48, dur:'3.0 s',
+      status:{ t:'Test', c:'a' }, date:'—',
+      method:[['Transfer','SCAIL-2'],['Purpose','costume read']],
+      note:'Costume and silhouette tests. The read has to land as a lawman, not a costume.'
+    },
+    {
+      id:'RND_007', name:'Skeletons', wide:false, plate:null,
+      passes:[ { label:'Track', src:P+'nlf-skeletons.mp4', poster:PO+'nlf-skeletons.jpg', k:'track' } ],
+      res:'576×1024', fps:16, frames:31, dur:'1.94 s',
+      status:{ t:'R&D', c:'a' }, date:'—',
+      method:[['Stage','pose extraction'],['Feeds','grey-box route']],
+      note:'Skeleton extraction feeding the grey-box route, for shots a single pass cannot hold.'
+    },
+    {
+      id:'RND_008', name:'Face V2V', wide:false, plate:null,
+      passes:[ { label:'Face pass', src:P+'face-v2v.mp4', poster:PO+'face-v2v.jpg', k:'face' } ],
+      res:'—', fps:'—', frames:'—', dur:'—',
+      status:{ t:'R&D', c:'a' }, date:'—',
+      method:[['Stage','face transfer']],
+      note:'Face-only video-to-video test.'
+    }
+  ];
+
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var stage=document.getElementById('stage'), holder=document.getElementById('holder'),
+      vA=document.getElementById('vA'), vB=document.getElementById('vB'),
+      handle=document.getElementById('handle'), wipe=document.getElementById('wipe'),
+      nodesEl=document.getElementById('nodes'), propsEl=document.getElementById('props'),
+      binEl=document.getElementById('bin'), playBtn=document.getElementById('play'),
+      fullBtn=document.getElementById('full'),
+      tcEl=document.getElementById('tc'), crumb=document.getElementById('crumb'),
+      nodeCount=document.getElementById('nodeCount'), vwLabel=document.getElementById('vwLabel'),
+      propStatus=document.getElementById('propStatus');
+
+  var cur = SHOTS[0], curPass = 0, showingFull = false;
+
+  function setWipe(pct){
+    pct = Math.max(0, Math.min(100, pct));
+    holder.style.setProperty('--wipe', pct + '%');
+    handle.style.left = pct + '%';
+    wipe.value = pct;
+  }
+
+  function loadShot(shot, passIdx, keepFull){
+    cur = shot; curPass = passIdx || 0;
+    if(!keepFull) showingFull = false;
+    var pass = shot.passes[curPass];
+    var hasPlate = !!shot.plate;
+
+    stage.classList.toggle('wide', !!shot.wide);
+    stage.classList.toggle('single', !hasPlate);
+
+    // A shot may ship a short autoplay loop plus a full-length version.
+    var hasFull = !!pass.full;
+    fullBtn.hidden = !hasFull;
+    fullBtn.textContent = showingFull ? 'Loop' : 'Full shot';
+
+    if(hasPlate){
+      vA.poster = shot.plate.poster;
+      vA.src = (showingFull && shot.plate.full) ? shot.plate.full : shot.plate.src;
+      handle.querySelector('.tagA').textContent = shot.plate.label;
+      handle.querySelector('.tagB').textContent = pass.label.split(' · ')[0];
+    } else {
+      vA.removeAttribute('src'); vA.poster = pass.poster;
+    }
+    vB.poster = pass.poster;
+    vB.src = (showingFull && hasFull) ? pass.full : pass.src;
+
+    if(!reduce){
+      [vA,vB].forEach(function(v){ if(v.src){ var p=v.play(); if(p&&p.catch)p.catch(function(){}); } });
+      playBtn.textContent = 'Pause';
+    }
+    if(!autoWipe || !hasPlate) setWipe(hasPlate ? 50 : 100);
+    if(!hasPlate) stopSweep();
+
+    crumb.textContent = shot.id;
+    vwLabel.textContent = hasPlate ? 'plate / ' + pass.k : pass.k;
+    propStatus.innerHTML = '<span class="badge '+shot.status.c+'">'+shot.status.t+'</span>';
+
+    renderNodes(); renderProps(); syncBin();
+  }
+
+  function renderNodes(){
+    var html = '';
+    if(cur.plate){
+      html += '<button class="node" type="button" disabled aria-pressed="false" style="opacity:.7;cursor:default">'
+            + '<span class="dot"></span>Read · plate<span class="k">src</span></button><div class="wire"></div>';
+    }
+    cur.passes.forEach(function(p,i){
+      html += '<button class="node" type="button" data-i="'+i+'" aria-pressed="'+(i===curPass)+'">'
+            + '<span class="dot"></span>'+p.label+'<span class="k">'+p.k+'</span></button>';
+      if(i < cur.passes.length-1) html += '<div class="wire"></div>';
+    });
+    nodesEl.innerHTML = html;
+    nodeCount.textContent = cur.passes.length + (cur.plate?1:0);
+    nodesEl.querySelectorAll('.node[data-i]').forEach(function(b){
+      b.addEventListener('click', function(){ loadShot(cur, +b.dataset.i); });
+    });
+  }
+
+  function renderProps(){
+    var h = '';
+    h += '<div class="grp"><h3>Shot</h3>'
+      +  kv('ID', cur.id) + kv('Name', cur.name) + kv('Resolution', cur.res)
+      +  kv('Frame rate', cur.fps + (cur.fps==='—'?'':' fps')) + kv('Frames', cur.frames)
+      +  kv('Duration', cur.dur) + kv('Date', cur.date) + '</div>';
+
+    if(cur.dist){
+      h += '<div class="grp"><h3>Distribution</h3>'
+        +  '<div class="metric"><div class="v">'+cur.dist.v+'</div><div class="l">'+cur.dist.l+'</div></div>';
+      cur.dist.rows.forEach(function(r){ h += kv(r[0], r[1], true); });
+      h += '<p class="note">'+cur.dist.src+'</p></div>';
+    }
+
+    h += '<div class="grp"><h3>Method</h3>';
+    cur.method.forEach(function(m){ h += kv(m[0], m[1]); });
+    h += '</div>';
+
+    h += '<div class="grp"><h3>Note</h3><p class="note">'+cur.note+'</p></div>';
+    propsEl.innerHTML = h;
+  }
+  function kv(k,v,am){ return '<div class="kv"><span>'+k+'</span><b'+(am?' class="am"':'')+'>'+v+'</b></div>'; }
+
+  function renderBin(){
+    binEl.innerHTML = SHOTS.map(function(s,i){
+      var p = s.passes[s.passes.length-1];
+      return '<button class="clip'+(s.wide?' w':'')+'" type="button" data-s="'+i+'" aria-pressed="'+(s===cur)+'">'
+           + '<span class="th"><img src="'+p.poster+'" alt="'+s.name+'"></span>'
+           + '<span class="cap"><b>'+s.name+'</b>'+s.id+'</span></button>';
+    }).join('');
+    binEl.querySelectorAll('.clip').forEach(function(b){
+      b.addEventListener('click', function(){ loadShot(SHOTS[+b.dataset.s], 0); });
+    });
+  }
+  function syncBin(){
+    binEl.querySelectorAll('.clip').forEach(function(b){
+      b.setAttribute('aria-pressed', SHOTS[+b.dataset.s] === cur);
+    });
+  }
+
+  // The subject does not sit dead centre, so a fixed 50% line often compares empty
+  // plate background against the recast subject. Sweep the line slowly until the
+  // visitor takes over, so the transformation reads without anyone touching anything.
+  var autoWipe = !reduce, rafId = 0;
+  function sweep(t){
+    if(!autoWipe) return;
+    setWipe(50 + 22 * Math.sin(t / 2600));
+    rafId = requestAnimationFrame(sweep);
+  }
+  function stopSweep(){
+    if(!autoWipe) return;
+    autoWipe = false;
+    cancelAnimationFrame(rafId);
+  }
+  if(autoWipe) rafId = requestAnimationFrame(sweep);
+
+  // wipe dragging
+  var dragging = false;
+  function fromEvent(e){
+    var r = stage.getBoundingClientRect();
+    var x = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
+    setWipe(x / r.width * 100);
+  }
+  stage.addEventListener('mousedown', function(e){ if(!cur.plate) return; stopSweep(); dragging=true; fromEvent(e); });
+  window.addEventListener('mousemove', function(e){ if(dragging) fromEvent(e); });
+  window.addEventListener('mouseup', function(){ dragging=false; });
+  stage.addEventListener('touchstart', function(e){ if(!cur.plate) return; stopSweep(); dragging=true; fromEvent(e); }, {passive:true});
+  stage.addEventListener('touchmove', function(e){ if(dragging) fromEvent(e); }, {passive:true});
+  stage.addEventListener('touchend', function(){ dragging=false; });
+  wipe.addEventListener('input', function(){ stopSweep(); setWipe(+wipe.value); });
+
+  fullBtn.addEventListener('click', function(){
+    showingFull = !showingFull;
+    loadShot(cur, curPass, true);
+  });
+
+  playBtn.addEventListener('click', function(){
+    var paused = vB.paused;
+    [vA,vB].forEach(function(v){ if(!v.src) return; paused ? v.play().catch(function(){}) : v.pause(); });
+    playBtn.textContent = paused ? 'Pause' : 'Play';
+  });
+
+  vB.addEventListener('timeupdate', function(){
+    var t = vB.currentTime || 0, f = Math.floor((t % 1) * (cur.fps === '—' ? 24 : cur.fps));
+    tcEl.textContent = '00:' + String(Math.floor(t/60)).padStart(2,'0') + ':'
+                     + String(Math.floor(t%60)).padStart(2,'0') + ':' + String(f).padStart(2,'0');
+
+    // Both sides must show the SAME frame or the wipe proves nothing.
+    // Plate and comp are identical length/fps, so lock A to B whenever they drift.
+    if(vA.src && vA.readyState > 1 && Math.abs(vA.currentTime - t) > 0.06){
+      try{ vA.currentTime = t; }catch(e){}
+    }
+  });
+
+  renderBin();
+  loadShot(SHOTS[0], 0);
+})();
+</script>
+</body>
+</html>

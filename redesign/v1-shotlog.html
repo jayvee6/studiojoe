@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en" data-variant="shotlog">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio Joe — Shot Log</title>
+<meta name="description" content="Neural VFX and real-time graphics. A working shot log: plates, passes, and delivered work.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#EAE7E0;
+    --paper-2:#E2DED4;
+    --ink:#16150F;
+    --ink-60:#5D594E;
+    --ink-40:#8A8579;
+    --rule:rgba(22,21,15,.22);
+    --rule-soft:rgba(22,21,15,.10);
+    --mark:#C8321E;
+    --ok:#3E6B41;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --serif:"Instrument Serif",Georgia,"Times New Roman",serif;
+    --rail:214px;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);
+    font-family:var(--mono);font-size:13px;line-height:1.55;
+    font-variant-ligatures:none;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* faint paper tooth */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:99;opacity:.5;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='.28'/%3E%3C/svg%3E");
+    mix-blend-mode:multiply;
+  }
+  a{color:inherit}
+
+  /* ─────────── rail ─────────── */
+  .rail{
+    position:fixed;top:0;left:0;width:var(--rail);height:100vh;
+    padding:26px 18px 22px 26px;border-right:1px solid var(--rule);
+    display:flex;flex-direction:column;gap:22px;z-index:20;
+    background:var(--paper);
+  }
+  .rail .mark{font-family:var(--serif);font-size:25px;line-height:1;letter-spacing:.01em}
+  .rail .mark span{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--ink-40);margin-top:7px}
+  .idx{display:flex;flex-direction:column;gap:1px;margin-top:2px}
+  .idx a{
+    display:grid;grid-template-columns:38px 1fr;gap:8px;align-items:baseline;
+    text-decoration:none;padding:4px 0;font-size:11px;color:var(--ink-60);
+    border-top:1px solid var(--rule-soft);transition:color .15s;
+  }
+  .idx a b{font-weight:500;color:var(--ink-40);font-size:10px;letter-spacing:.04em}
+  .idx a:hover{color:var(--ink)}
+  .idx a.on{color:var(--ink)}
+  .idx a.on b{color:var(--mark)}
+  .rail footer{margin-top:auto;font-size:10.5px;color:var(--ink-40);display:flex;flex-direction:column;gap:3px}
+  .rail footer a{text-decoration:none;border-bottom:1px solid var(--rule)}
+  .rail footer a:hover{color:var(--mark);border-color:var(--mark)}
+
+  /* ─────────── page ─────────── */
+  .page{margin-left:var(--rail);padding:0 46px 90px;max-width:1180px}
+
+  .masthead{padding:64px 0 30px;border-bottom:2px solid var(--ink)}
+  .masthead h1{
+    font-family:var(--serif);font-weight:400;font-size:clamp(52px,8.5vw,104px);
+    line-height:.92;letter-spacing:-.015em;margin:0 0 20px;
+  }
+  .masthead h1 i{font-style:italic;color:var(--ink-60)}
+  .mh-meta{display:flex;flex-wrap:wrap;gap:0 30px;font-size:10.5px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--ink-60)}
+  .standfirst{
+    max-width:56ch;margin:26px 0 0;font-size:14.5px;line-height:1.62;color:var(--ink);
+  }
+  .standfirst b{font-weight:600}
+
+  /* ─────────── shot entry ─────────── */
+  .shot{border-bottom:1px solid var(--rule);padding:34px 0 40px}
+  .slate{
+    display:flex;flex-wrap:wrap;align-items:baseline;gap:0 16px;
+    padding-bottom:12px;margin-bottom:20px;border-bottom:1px solid var(--rule-soft);
+  }
+  .slate .no{font-size:11px;letter-spacing:.1em;color:var(--mark);font-weight:600}
+  .slate .ttl{font-family:var(--serif);font-size:33px;line-height:1;letter-spacing:-.005em;margin-right:6px}
+  .slate .spec{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-40)}
+  .slate .status{
+    margin-left:auto;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+    padding:3px 9px;border:1px solid currentColor;white-space:nowrap;
+  }
+  .status.delivered{color:var(--ok)}
+  .status.review{color:var(--mark)}
+  .status.archive{color:var(--ink-40)}
+
+  .shot-body{display:grid;grid-template-columns:1fr 232px;gap:34px;align-items:start}
+  @media (max-width:1000px){.shot-body{grid-template-columns:1fr}}
+
+  /* frames */
+  .strip{display:flex;gap:10px;flex-wrap:wrap}
+  .frame{position:relative;flex:0 0 auto;width:150px}
+  .frame.wide{width:330px}
+  .frame .box{
+    position:relative;background:var(--paper-2);border:1px solid var(--rule);
+    overflow:hidden;aspect-ratio:9/16;
+  }
+  .frame.wide .box{aspect-ratio:16/9}
+  .frame video,.frame img{width:100%;height:100%;object-fit:cover;display:block}
+  .frame video{position:absolute;inset:0;opacity:0;transition:opacity .18s}
+  .frame.playing video{opacity:1}
+  .frame .cap{
+    display:flex;justify-content:space-between;gap:6px;
+    margin-top:5px;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-40);
+  }
+  .frame .cap b{font-weight:600;color:var(--ink-60)}
+  .frame:hover .cap b{color:var(--mark)}
+  .frame .n{
+    position:absolute;top:0;left:0;background:var(--ink);color:var(--paper);
+    font-size:9px;letter-spacing:.08em;padding:2px 5px;z-index:2;
+  }
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:520px}
+  .pair .frame{width:100%}
+
+  /* notes column */
+  .notes h4{
+    margin:0 0 8px;font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--ink-40);font-weight:600;
+  }
+  .notes p{margin:0 0 14px;font-size:12px;line-height:1.6;color:var(--ink-60)}
+  .notes p b{color:var(--ink);font-weight:500}
+  .dl{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;font-size:11.5px;margin:0 0 16px}
+  .dl dt{color:var(--ink-40);white-space:nowrap}
+  .dl dd{margin:0;text-align:right;font-weight:500;font-variant-numeric:tabular-nums}
+  .dl dd.big{color:var(--mark);font-weight:600}
+
+  /* distribution block */
+  .dist{border:1px solid var(--ink);padding:14px 15px 13px;margin-top:4px;background:rgba(255,255,255,.28)}
+  .dist h4{color:var(--ink);margin-bottom:10px}
+  .dist .row{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;padding:3px 0;
+    border-top:1px solid var(--rule-soft)}
+  .dist .row:first-of-type{border-top:0}
+  .dist .row span{color:var(--ink-40)}
+  .dist .row b{font-variant-numeric:tabular-nums;font-weight:600}
+  .dist .hero{
+    display:flex;align-items:baseline;gap:8px;margin-bottom:10px;
+  }
+  .dist .hero .v{font-family:var(--serif);font-size:40px;line-height:.9}
+  .dist .hero .k{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-40)}
+  .src{font-size:9.5px;color:var(--ink-40);margin-top:9px;letter-spacing:.04em}
+
+  /* toolchain */
+  .block{padding:40px 0;border-bottom:1px solid var(--rule)}
+  .block > h2{
+    font-family:var(--serif);font-size:34px;font-weight:400;margin:0 0 4px;letter-spacing:-.005em;
+  }
+  .block > .sub{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-40);margin:0 0 22px}
+  table{border-collapse:collapse;width:100%;font-size:12px}
+  th,td{text-align:left;padding:7px 12px 7px 0;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+  th{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-40);font-weight:600;
+    border-bottom:1px solid var(--rule)}
+  td b{font-weight:600}
+  td.dim{color:var(--ink-60)}
+
+  /* index list */
+  .list a{
+    display:grid;grid-template-columns:26px 1.1fr 2fr auto;gap:16px;align-items:baseline;
+    padding:9px 0;border-bottom:1px solid var(--rule-soft);text-decoration:none;font-size:12.5px;
+  }
+  .list a:hover{background:rgba(255,255,255,.4)}
+  .list a:hover .nm{color:var(--mark)}
+  .list .ix{color:var(--ink-40);font-size:10px}
+  .list .nm{font-weight:600}
+  .list .ds{color:var(--ink-60);font-size:11.5px}
+  .list .go{color:var(--ink-40);font-size:10px;letter-spacing:.1em;text-transform:uppercase}
+
+  .colophon{padding:34px 0 0;font-size:11px;color:var(--ink-40);display:flex;flex-wrap:wrap;gap:6px 26px}
+  .colophon a{border-bottom:1px solid var(--rule);text-decoration:none}
+
+  @media (max-width:820px){
+    :root{--rail:0px}
+    .rail{position:static;width:auto;height:auto;flex-direction:row;align-items:center;
+      gap:16px;border-right:0;border-bottom:1px solid var(--rule);padding:16px 20px;flex-wrap:wrap}
+    .idx{flex-direction:row;flex-wrap:wrap;gap:0 12px;margin:0}
+    .idx a{border-top:0;grid-template-columns:auto;padding:0}
+    .idx a span{display:none}
+    .rail footer{flex-direction:row;gap:12px;margin:0}
+    .page{margin-left:0;padding:0 20px 60px}
+    .pair{grid-template-columns:1fr 1fr}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<aside class="rail">
+  <div class="mark">Studio&nbsp;Joe<span>Shot Log</span></div>
+  <nav class="idx" id="idx">
+    <a href="#sh01"><b>SH_01</b><span>Frozone</span></a>
+    <a href="#sh02"><b>SH_02</b><span>Chun-Li</span></a>
+    <a href="#sh03"><b>SH_03</b><span>Fire Mario</span></a>
+    <a href="#sh04"><b>SH_04</b><span>Waluigi</span></a>
+    <a href="#sh05"><b>SH_05</b><span>Western</span></a>
+    <a href="#sh06"><b>SH_06</b><span>Skeletons</span></a>
+    <a href="#tools"><b>—</b><span>Toolchain</span></a>
+    <a href="#rt"><b>—</b><span>Real-time</span></a>
+  </nav>
+  <footer>
+    <a href="/resume.html">Resume</a>
+    <a href="https://github.com/jayvee6" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://www.linkedin.com/in/joey-v-287ba5394" target="_blank" rel="noopener">LinkedIn</a>
+  </footer>
+</aside>
+
+<div class="page">
+
+  <header class="masthead">
+    <h1>Neural VFX on<br><i>real</i> footage.</h1>
+    <div class="mh-meta">
+      <span>Vol. 1</span><span>2026</span><span>Recast &amp; Restyle</span><span>Real-time Graphics</span>
+    </div>
+    <p class="standfirst">
+      Everything below started as a real camera plate. The motion, the mattes and the depth
+      come off that footage; one reference image decides the character. <b>Nothing here is
+      generated from a text prompt alone.</b> This is the working log, plates included.
+    </p>
+  </header>
+
+  <!-- ══ SH_01 ══ -->
+  <section class="shot" id="sh01">
+    <div class="slate">
+      <span class="no">SH_01</span>
+      <span class="ttl">Frozone</span>
+      <span class="spec">1080×1920 · 25 fps · 750 fr · 30.0 s</span>
+      <span class="status delivered">Delivered 02 Aug 2026</span>
+    </div>
+    <div class="shot-body">
+      <div>
+        <div class="pair">
+          <div class="frame" data-src="/vfx/frozone-plate.mp4">
+            <div class="box"><span class="n">PLATE</span>
+              <img src="/vfx/posters/frozone-plate.jpg" alt="Original COLORS live performance plate">
+              <video muted loop playsinline preload="none"></video>
+            </div>
+            <div class="cap"><b>Plate</b><span>COLORS</span></div>
+          </div>
+          <div class="frame" data-src="/vfx/frozone-final.mp4">
+            <div class="box"><span class="n">FINAL</span>
+              <img src="/vfx/posters/frozone-final.jpg" alt="Frozone recast final render">
+              <video muted loop playsinline preload="none"></video>
+            </div>
+            <div class="cap"><b>Final</b><span>SCAIL-2</span></div>
+          </div>
+        </div>
+        <p class="notes" style="max-width:52ch;margin-top:16px;font-size:12px;color:var(--ink-60)">
+          A COLORS live performance recast as Frozone. Performance transfer, not a style pass:
+          the delivery, the head turns and the hand work are all carried from the plate.
+          Character identity is held by a trained LoRA rather than by prompt wording.
+        </p>
+      </div>
+
+      <div class="notes">
+        <div class="dist">
+          <h4>Distribution · TikTok</h4>
+          <div class="hero"><span class="v">64K</span><span class="k">views<br>in 48 h</span></div>
+          <div class="row"><span>Likes</span><b>13,000</b></div>
+          <div class="row"><span>Shares</span><b>2,673</b></div>
+          <div class="row"><span>Saves</span><b>1,338</b></div>
+          <div class="row"><span>Comments</span><b>128</b></div>
+          <div class="row"><span>Total play</span><b>150 h 39 m</b></div>
+          <div class="row"><span>Avg watch</span><b>8.15 s</b></div>
+          <div class="row"><span>From For You</span><b>92.7%</b></div>
+          <p class="src">Source: TikTok Studio, 4 Aug 2026.</p>
+        </div>
+        <h4 style="margin-top:18px">Method</h4>
+        <dl class="dl">
+          <dt>Transfer</dt><dd>SCAIL-2</dd>
+          <dt>Identity</dt><dd>frzn3d LoRA</dd>
+          <dt>Detail</dt><dd>SeedVR2 7b</dd>
+          <dt>Finish</dt><dd>FFmpeg</dd>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ SH_02 ══ -->
+  <section class="shot" id="sh02">
+    <div class="slate">
+      <span class="no">SH_02</span>
+      <span class="ttl">Chun-Li</span>
+      <span class="spec">406×720 · 24 fps · 167 fr · 6.96 s</span>
+      <span class="status review">In review</span>
+    </div>
+    <div class="shot-body">
+      <div>
+        <div class="strip">
+          <div class="frame" data-src="/vfx/chunli/chunli-pass-original.mp4">
+            <div class="box"><span class="n">01</span>
+              <img src="/vfx/chunli/chunli-pass-original.jpg" alt="Original plate">
+              <video muted loop playsinline preload="none"></video></div>
+            <div class="cap"><b>Plate</b></div>
+          </div>
+          <div class="frame" data-src="/vfx/chunli/chunli-pass-pose.mp4">
+            <div class="box"><span class="n">02</span>
+              <img src="/vfx/chunli/chunli-pass-pose.jpg" alt="Pose estimation pass">
+              <video muted loop playsinline preload="none"></video></div>
+            <div class="cap"><b>Pose</b><span>DWPose</span></div>
+          </div>
+          <div class="frame" data-src="/vfx/chunli/chunli-pass-depth.mp4">
+            <div class="box"><span class="n">03</span>
+              <img src="/vfx/chunli/chunli-pass-depth.jpg" alt="Depth pass">
+              <video muted loop playsinline preload="none"></video></div>
+            <div class="cap"><b>Depth</b><span>DA-V2</span></div>
+          </div>
+          <div class="frame" data-src="/vfx/chunli/chunli-pass-mask.mp4">
+            <div class="box"><span class="n">04</span>
+              <img src="/vfx/chunli/chunli-pass-mask.jpg" alt="Matte pass">
+              <video muted loop playsinline preload="none"></video></div>
+            <div class="cap"><b>Matte</b><span>SAM3</span></div>
+          </div>
+          <div class="frame" data-src="/vfx/chunli/chunli-pass-final.mp4">
+            <div class="box"><span class="n">05</span>
+              <img src="/vfx/chunli/chunli-pass-final.jpg" alt="Final composite">
+              <video muted loop playsinline preload="none"></video></div>
+            <div class="cap"><b>Final</b><span>SCAIL-2</span></div>
+          </div>
+        </div>
+        <p class="notes" style="max-width:52ch;margin-top:16px;font-size:12px;color:var(--ink-60)">
+          The full pass stack, left to right. Hover any frame to run it. Pose and depth are
+          read off the plate, the matte scopes the subject, and only then does the recast run.
+          Held for a quality review before release.
+        </p>
+      </div>
+      <div class="notes">
+        <h4>Passes</h4>
+        <dl class="dl">
+          <dt>Plate</dt><dd>source</dd>
+          <dt>Pose</dt><dd>DWPose</dd>
+          <dt>Depth</dt><dd>DepthAnythingV2</dd>
+          <dt>Matte</dt><dd>SAM3</dd>
+          <dt>Recast</dt><dd>SCAIL-2</dd>
+        </dl>
+        <h4>Open</h4>
+        <p>Detail restore pass not yet run. Queued for SeedVR2 before delivery.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ SH_03 ══ -->
+  <section class="shot" id="sh03">
+    <div class="slate">
+      <span class="no">SH_03</span>
+      <span class="ttl">Fire Mario</span>
+      <span class="spec">896×512 · 24 fps · 293 fr · 12.2 s</span>
+      <span class="status delivered">Delivered</span>
+    </div>
+    <div class="shot-body">
+      <div>
+        <div class="strip">
+          <div class="frame wide" data-src="/vfx/mario-fireball.mp4">
+            <div class="box"><span class="n">FINAL</span>
+              <img src="/vfx/mario-fireball.jpg" alt="Fire Mario in the Mushroom Kingdom">
+              <video muted loop playsinline preload="none"></video></div>
+            <div class="cap"><b>Full-scene restyle</b><span>landscape</span></div>
+          </div>
+        </div>
+        <p class="notes" style="max-width:52ch;margin-top:16px;font-size:12px;color:var(--ink-60)">
+          A phone clip of a dance moved wholesale into the Mushroom Kingdom. Subject and
+          environment are both replaced while the original camera move and body mechanics survive.
+        </p>
+      </div>
+      <div class="notes">
+        <h4>Note</h4>
+        <p>Multi-subject recast. The stock recipe ships a baked-in positive prompt and empty
+        sampler negatives; both must be overridden or a second subject leaks into the shot.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ SH_04 · 05 · 06 ══ -->
+  <section class="shot" id="sh04">
+    <div class="slate">
+      <span class="no">SH_04</span>
+      <span class="ttl">Waluigi</span>
+      <span class="spec">506×900 · 30 fps · 504 fr · 16.8 s</span>
+      <span class="status archive">Archive</span>
+    </div>
+    <div class="shot-body">
+      <div><div class="strip">
+        <div class="frame" data-src="/vfx/waluigi-recast.mp4">
+          <div class="box"><img src="/vfx/waluigi-recast.jpg" alt="Waluigi recast">
+            <video muted loop playsinline preload="none"></video></div>
+          <div class="cap"><b>Final</b><span>16.8 s</span></div></div>
+      </div></div>
+      <div class="notes"><h4>Note</h4>
+        <p>Longest continuous recast in the set. Identity holds across 504 frames without a
+        mid-shot re-anchor.</p></div>
+    </div>
+  </section>
+
+  <section class="shot" id="sh05">
+    <div class="slate">
+      <span class="no">SH_05</span>
+      <span class="ttl">Western Crossing</span>
+      <span class="spec">540×960 · 16 fps · 48 fr · 3.0 s</span>
+      <span class="status archive">Test</span>
+    </div>
+    <div class="shot-body">
+      <div><div class="strip">
+        <div class="frame" data-src="/vfx/western-crossing-scail.mp4">
+          <div class="box"><img src="/vfx/posters/western-crossing-scail.jpg" alt="Western river crossing">
+            <video muted loop playsinline preload="none"></video></div>
+          <div class="cap"><b>Final</b></div></div>
+        <div class="frame" data-src="/vfx/pass-gunslinger.mp4">
+          <div class="box"><img src="/vfx/posters/pass-gunslinger.jpg" alt="Gunslinger costume pass">
+            <video muted loop playsinline preload="none"></video></div>
+          <div class="cap"><b>Costume</b></div></div>
+        <div class="frame" data-src="/vfx/pass-vaquero.mp4">
+          <div class="box"><img src="/vfx/posters/pass-vaquero.jpg" alt="Vaquero costume pass">
+            <video muted loop playsinline preload="none"></video></div>
+          <div class="cap"><b>Variant</b></div></div>
+      </div></div>
+      <div class="notes"><h4>Note</h4>
+        <p>Costume and silhouette tests for an in-progress western piece. The read has to land
+        as a lawman, not a costume.</p></div>
+    </div>
+  </section>
+
+  <section class="shot" id="sh06">
+    <div class="slate">
+      <span class="no">SH_06</span>
+      <span class="ttl">Skeletons</span>
+      <span class="spec">576×1024 · 16 fps · 31 fr · 1.94 s</span>
+      <span class="status archive">R&amp;D</span>
+    </div>
+    <div class="shot-body">
+      <div><div class="strip">
+        <div class="frame" data-src="/vfx/nlf-skeletons.mp4">
+          <div class="box"><img src="/vfx/posters/nlf-skeletons.jpg" alt="Skeleton tracking pass">
+            <video muted loop playsinline preload="none"></video></div>
+          <div class="cap"><b>Track</b></div></div>
+        <div class="frame" data-src="/vfx/face-v2v.mp4">
+          <div class="box"><img src="/vfx/posters/face-v2v.jpg" alt="Face video-to-video pass">
+            <video muted loop playsinline preload="none"></video></div>
+          <div class="cap"><b>Face V2V</b></div></div>
+      </div></div>
+      <div class="notes"><h4>Note</h4>
+        <p>Skeleton extraction feeding the grey-box route, for shots where a single pass cannot
+        hold a hard camera move.</p></div>
+    </div>
+  </section>
+
+  <!-- ══ TOOLCHAIN ══ -->
+  <section class="block" id="tools">
+    <h2>Toolchain</h2>
+    <p class="sub">What each stage actually does</p>
+    <table>
+      <thead><tr><th style="width:150px">Stage</th><th style="width:180px">Tool</th><th>Function</th></tr></thead>
+      <tbody>
+        <tr><td><b>Transfer</b></td><td>SCAIL-2</td><td class="dim">Carries the performance from plate to character. The load-bearing stage.</td></tr>
+        <tr><td><b>Identity</b></td><td>Character LoRA</td><td class="dim">Trained per character from rendered 3D datasets. Holds the face across a full shot.</td></tr>
+        <tr><td><b>Roto</b></td><td>SAM3</td><td class="dim">Subject matte and tracking. Scopes what the recast is allowed to touch.</td></tr>
+        <tr><td><b>Depth</b></td><td>DepthAnythingV2</td><td class="dim">Per-frame depth off the plate. Preserves real scene geometry.</td></tr>
+        <tr><td><b>Pose</b></td><td>DWPose</td><td class="dim">Skeleton extraction. Falls back to depth on hard turns.</td></tr>
+        <tr><td><b>Reference</b></td><td>Flux Kontext</td><td class="dim">Builds the single anchor image that decides the character and world.</td></tr>
+        <tr><td><b>Detail</b></td><td>SeedVR2</td><td class="dim">Restores hair, lashes, pore and weave. A plain upscale adds nothing.</td></tr>
+        <tr><td><b>Finish</b></td><td>FFmpeg</td><td class="dim">Conform, grade, delivery encode.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ══ REAL-TIME ══ -->
+  <section class="block" id="rt">
+    <h2>Real-time</h2>
+    <p class="sub">Engines and graphics work, written from scratch</p>
+    <div class="list">
+      <a href="https://webgpu-kart.vercel.app" target="_blank" rel="noopener">
+        <span class="ix">01</span><span class="nm">WebGPU Kart</span>
+        <span class="ds">Mode-7 kart racer. 6 biomes, 16 tracks, 4 cups.</span><span class="go">Play ↗</span></a>
+      <a href="https://github.com/jayvee6/webgpu-doom" target="_blank" rel="noopener">
+        <span class="ix">02</span><span class="nm">WebGPU Doom</span>
+        <span class="ds">Freedoom from scratch. Own WAD parser, real 3D renderer.</span><span class="go">Code ↗</span></a>
+      <a href="https://github.com/jayvee6" target="_blank" rel="noopener">
+        <span class="ix">03</span><span class="nm">OutRun</span>
+        <span class="ds">Segment-road racer built up from nothing in WebGPU.</span><span class="go">Code ↗</span></a>
+      <a href="https://github.com/jayvee6" target="_blank" rel="noopener">
+        <span class="ix">04</span><span class="nm">Emoji Arcade</span>
+        <span class="ds">Three cabinets on one shared engine and logic core.</span><span class="go">Code ↗</span></a>
+      <a href="https://musicnerd.studiojoe.dev/" target="_blank" rel="noopener">
+        <span class="ix">05</span><span class="nm">Music Nerd</span>
+        <span class="ds">Audio-reactive player and a working click-wheel iPod.</span><span class="go">Open ↗</span></a>
+      <a href="https://jayvee6.github.io/sj-audio/" target="_blank" rel="noopener">
+        <span class="ix">06</span><span class="nm">sj-audio</span>
+        <span class="ds">Cross-browser web-audio capture and analysis. Zero deps.</span><span class="go">Open ↗</span></a>
+    </div>
+  </section>
+
+  <footer class="colophon">
+    <span>© 2026 Studio Joe</span>
+    <a href="/resume.html">Resume</a>
+    <a href="https://github.com/jayvee6" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://www.linkedin.com/in/joey-v-287ba5394" target="_blank" rel="noopener">LinkedIn</a>
+    <span>Set in Instrument Serif and IBM Plex Mono</span>
+  </footer>
+</div>
+
+<script>
+(function(){
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // hover to run a frame
+  document.querySelectorAll('.frame[data-src]').forEach(function(f){
+    var v = f.querySelector('video'), src = f.dataset.src, loaded = false;
+    function on(){
+      if(reduce) return;
+      if(!loaded){ v.src = src; loaded = true; }
+      f.classList.add('playing');
+      var p = v.play(); if(p && p.catch) p.catch(function(){});
+    }
+    function off(){
+      f.classList.remove('playing');
+      if(loaded){ v.pause(); try{ v.currentTime = 0; }catch(e){} }
+    }
+    f.addEventListener('mouseenter', on);
+    f.addEventListener('mouseleave', off);
+    f.addEventListener('focusin', on);
+    f.addEventListener('focusout', off);
+    // touch: tap toggles
+    f.addEventListener('click', function(){
+      f.classList.contains('playing') ? off() : on();
+    });
+  });
+
+  // rail scroll-spy: highlight the last section whose top has crossed the read line
+  var links = [].slice.call(document.querySelectorAll('#idx a'));
+  var targets = links.map(function(a){ return document.querySelector(a.getAttribute('href')); });
+  var ticking = false;
+  function spy(){
+    ticking = false;
+    var line = window.innerHeight * 0.32, best = 0;
+    targets.forEach(function(t,i){
+      if(t && t.getBoundingClientRect().top <= line) best = i;
+    });
+    links.forEach(function(a,j){ a.classList.toggle('on', j === best); });
+  }
+  addEventListener('scroll', function(){
+    if(!ticking){ ticking = true; requestAnimationFrame(spy); }
+  }, { passive:true });
+  addEventListener('resize', spy);
+  spy();
+})();
+</script>
+</body>
+</html>
