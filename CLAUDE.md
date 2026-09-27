@@ -49,3 +49,9 @@ This project is intentionally simple. Do not apply multi-agent patterns, orchest
 2. Read `resume.html`
 3. List issues found: broken markup, accessibility gaps, inline style inconsistencies, JS errors, missing alt text, dead links
 4. Stop. Do not propose rewrites unless asked.
+
+<!-- sj-design:DESIGN.md begin -->
+## Visual design
+
+Before any UI, styling, deck, or motion work, read `DESIGN.md` in this repo (the Studio Joe visual system: tokens, glass, type, motion, copy, slop tells). For anything it doesn't cover, invoke the `sj-design-expert` skill.
+<!-- sj-design:DESIGN.md end -->
