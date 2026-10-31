@@ -91,6 +91,58 @@ groups.structure = async ({ base, browser }) => {
   await narrow.close();
 };
 
+async function waitFor(page, fn, ms) {
+  const end = Date.now() + ms;
+  let v;
+  while (Date.now() < end) { v = await page.evaluate(fn).catch(() => undefined); if (v) return v; await page.waitForTimeout(150); }
+  return v;
+}
+
+groups.wall = async ({ base, browser }) => {
+  const playing = () => window.__wall && window.__wall.playing();
+
+  let page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await page.goto(base + '/index.html');
+  const n = await waitFor(page, () => window.__wall && window.__wall.playing() === 6 && 6, 3000);
+  check('wall: autoplay all six', n === 6, await page.evaluate(playing).catch(() => null));
+
+  await page.$eval('#about', e => e.scrollIntoView());
+  const paused = await waitFor(page, () => window.__wall && window.__wall.playing() === 0 && 'ok', 1500);
+  check('wall: offscreen pause', paused === 'ok', await page.evaluate(playing).catch(() => null));
+  await page.close();
+
+  const rctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
+  page = await rctx.newPage();
+  await page.goto(base + '/index.html');
+  await page.waitForTimeout(3000);
+  const r = await page.evaluate(() => ({ p: window.__wall ? window.__wall.playing() : null,
+    srcs: [...document.querySelectorAll('.tile-video')].filter(v => v.hasAttribute('src')).length }));
+  check('wall: reduced motion keeps posters', r.p === 0 && r.srcs === 0, r);
+  await rctx.close();
+
+  page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.route('**/media/wall/*.mp4', route => route.abort());
+  await page.goto(base + '/index.html');
+  await page.waitForTimeout(2000);
+  const blocked = await page.$$eval('.tile', ts => ts.map(t => {
+    const v = t.querySelector('video'), title = t.querySelector('.tile-title');
+    return !!v.getAttribute('poster') && getComputedStyle(v).visibility !== 'hidden' && title.getBoundingClientRect().height > 0;
+  }));
+  check('wall: video blocked keeps poster + title', blocked.length === 6 && blocked.every(Boolean) && errors.length === 0, { blocked, errors });
+  await page.close();
+
+  page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const errs2 = [];
+  page.on('pageerror', e => errs2.push(e.message));
+  await page.route('https://cdnjs.cloudflare.com/**', route => route.abort());
+  await page.goto(base + '/index.html');
+  const n2 = await waitFor(page, () => window.__wall && window.__wall.playing() === 6 && 6, 3000);
+  check('wall: no gsap dependency', n2 === 6 && errs2.length === 0, { n2, errs2 });
+  await page.close();
+};
+
 withSite(async (ctx) => {
   for (const [name, run] of Object.entries(groups)) {
     if (only && name !== only) continue;
