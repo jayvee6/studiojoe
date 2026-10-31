@@ -144,6 +144,19 @@
       font-weight: 400; line-height: 1.55;
       color: var(--label-2); max-width: 52ch;
     }
+    /* Hero entrance — wall-clock CSS animation so a slow GPU frame can't
+       stall it. `backwards` fill only covers the delay; nothing is held. */
+    @keyframes hero-rise {
+      from { opacity: 0; transform: translateY(var(--rise)); }
+    }
+    .hero-rise {
+      animation: hero-rise var(--dur) cubic-bezier(0.16, 1, 0.3, 1) var(--delay) backwards;
+    }
+    #hh.hero-rise { --rise: 28px; --dur: 0.75s; --delay: 0.10s; }
+    #hd.hero-rise { --rise: 12px; --dur: 0.55s; --delay: 0.38s; }
+    @media (prefers-reduced-motion: reduce) {
+      .hero-rise { animation: none; }
+    }
     .scroll-cue {
       margin-top: clamp(40px, 7vh, 80px);
       font-size: 11px; font-weight: 600; letter-spacing: 0.16em;
@@ -561,8 +574,8 @@
     <div class="hero-scrim" aria-hidden="true"></div>
     <div class="showroom-inner">
       <p class="eyebrow">Studio Joe</p>
-      <h1 id="hh">Real-time graphics, web <span class="accent">and</span> native.</h1>
-      <p class="lede" id="hd">
+      <h1 id="hh" class="hero-rise">Real-time graphics, web <span class="accent">and</span> native.</h1>
+      <p class="lede hero-rise" id="hd">
         A studio that ships its own tools. WebGPU, Canvas, Metal — the eye
         candy here is the proof, and every bit of it is takeable.
       </p>
@@ -772,10 +785,9 @@
   }
 
   // ── Entrance ───────────────────────────────────────────────────────────
-  gsap.set('#hh', { opacity: 0, y: 28 });
-  gsap.set('#hd', { opacity: 0, y: 12 });
-  gsap.to('#hh', { opacity: 1, y: 0, duration: 0.75, ease: EASE, delay: 0.10 });
-  gsap.to('#hd', { opacity: 1, y: 0, duration: 0.55, ease: EASE, delay: 0.38 });
+  // Lives in CSS (.hero-rise), not GSAP: the WebGPU raymarch shares the rAF,
+  // and GSAP's lag-smoothing freezes its clock on >500ms frames, which left
+  // the H1 at opacity 0 on slow GPUs until the hero scrolled away.
 
   // ── Perlin noise (Ken Perlin's improved algorithm) ─────────────────────
   const _pp = (function () {
