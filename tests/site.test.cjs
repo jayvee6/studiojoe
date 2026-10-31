@@ -143,6 +143,39 @@ groups.wall = async ({ base, browser }) => {
   await page.close();
 };
 
+groups.play = async ({ base, browser }) => {
+  const want = { arcade: 'https://emojiarcade.io', musicnerd: 'https://musicnerd.studiojoe.dev/',
+    ripple: 'https://ripplebreath.app', starspeller: 'https://starspeller.app' };
+  let page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await page.goto(base + '/index.html');
+  const cards = await page.$$eval('.play-card', cs => cs.map(c => ({ app: c.dataset.app,
+    links: [...c.querySelectorAll('a')].map(a => [a.getAttribute('href'), a.getAttribute('target')]) })));
+  const linksOk = cards.length === 4 && cards.every(c => c.links.length > 0 && c.links.every(([h, t]) => h === want[c.app] && t === '_blank'));
+  check('play: four card links', linksOk, cards);
+
+  await page.$eval('#play', e => e.scrollIntoView());
+  const r = await waitFor(page, () => window.__fireworks && window.__fireworks.rockets() >= 1 && window.__fireworks.rockets(), 3000);
+  check('play: fireworks auto-launch on screen', r >= 1, r);
+
+  const url = page.url();
+  const before = await page.evaluate(() => window.__fireworks ? window.__fireworks.rockets() : -1);
+  const box = await page.$eval('#fwCanvas', c => { const b = c.getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height * 0.8 }; });
+  await page.mouse.click(box.x, box.y);
+  await page.waitForTimeout(100);
+  const after = await page.evaluate(() => window.__fireworks ? window.__fireworks.rockets() : -1);
+  check('play: tap launches without navigating', before >= 0 && after >= before + 1 && page.url() === url, { before, after });
+  await page.close();
+
+  const rctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
+  page = await rctx.newPage();
+  await page.goto(base + '/index.html');
+  await page.$eval('#play', e => e.scrollIntoView());
+  await page.waitForTimeout(3000);
+  const rr = await page.evaluate(() => window.__fireworks ? window.__fireworks.rockets() : null);
+  check('play: reduced motion launches nothing', rr === 0, rr);
+  await rctx.close();
+};
+
 withSite(async (ctx) => {
   for (const [name, run] of Object.entries(groups)) {
     if (only && name !== only) continue;
