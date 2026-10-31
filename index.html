@@ -135,8 +135,7 @@
     /* ── Play ───────────────────────────────────────────────────────────── */
     .play-grid {
       list-style: none; margin: 0; padding: 0;
-      display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px;
-      align-items: start;
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px;
     }
     .play-card {
       position: relative; overflow: hidden;
@@ -156,11 +155,15 @@
       display: inline-flex; align-items: center; min-height: 44px; margin-top: auto;
       color: var(--accent-2); font-size: 14px; font-weight: 600; text-decoration: none;
     }
-    .play-arcade { grid-column: span 2; }
-    #fwCanvas {
-      display: block; width: 100%; aspect-ratio: 16 / 9; margin-bottom: 8px;
-      border-radius: 10px; background: #000; cursor: crosshair; touch-action: manipulation;
+    .play-thumb {
+      display: block; aspect-ratio: 16 / 10; margin: -6px -6px 8px; overflow: hidden;
+      border-radius: 10px; background: #000; box-shadow: inset 0 0 0 1px var(--glass-bdr);
     }
+    .play-video {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+      transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .play-thumb:hover .play-video { transform: scale(1.03); }
 
     /* ── About ──────────────────────────────────────────────────────────── */
     #about .bio { max-width: 62ch; font-size: clamp(16px, 1.6vw, 19px); line-height: 1.6; color: var(--label-2); }
@@ -182,8 +185,7 @@
     footer a:hover { color: var(--label-1); }
 
     @media (max-width: 1100px) {
-      .play-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      .play-arcade { grid-column: 1 / -1; }
+      .play-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 900px) {
       .wall { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -191,12 +193,11 @@
     @media (max-width: 560px) {
       .wall { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .play-grid { grid-template-columns: minmax(0, 1fr); }
-      .play-arcade { grid-column: auto; }
       header nav a { padding: 0 6px; font-size: 13px; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .tile-video, header nav a { transition: none; }
-      .tile-link:hover .tile-video { transform: none; }
+      .tile-video, .play-video, header nav a { transition: none; }
+      .tile-link:hover .tile-video, .play-thumb:hover .play-video { transform: none; }
     }
   </style>
 </head>
@@ -265,23 +266,34 @@
     <p class="eyebrow">Play</p>
     <h2 id="play-title">Things to play with</h2>
     <ul class="play-grid">
-      <li class="play-card play-arcade" data-app="arcade">
-        <canvas id="fwCanvas" aria-label="Emoji fireworks. Tap to launch a rocket."></canvas>
+      <li class="play-card" data-app="arcade">
+        <a class="play-thumb" href="https://emojiarcade.io" target="_blank" rel="noopener" tabindex="-1" aria-hidden="true">
+          <video class="play-video" muted playsinline loop preload="none" poster="/media/play/emoji-arcade.jpg" data-src="/media/play/emoji-arcade.mp4"></video>
+        </a>
         <h3><a href="https://emojiarcade.io" target="_blank" rel="noopener">Emoji Arcade</a></h3>
-        <p>Three WebGPU games.</p>
+        <p>Four WebGPU games.</p>
         <a class="play-go" href="https://emojiarcade.io" target="_blank" rel="noopener" aria-label="Play Emoji Arcade">Play ↗</a>
       </li>
       <li class="play-card" data-app="musicnerd">
+        <a class="play-thumb" href="https://musicnerd.studiojoe.dev/" target="_blank" rel="noopener" tabindex="-1" aria-hidden="true">
+          <video class="play-video" muted playsinline loop preload="none" poster="/media/play/music-nerd.jpg" data-src="/media/play/music-nerd.mp4"></video>
+        </a>
         <h3><a href="https://musicnerd.studiojoe.dev/" target="_blank" rel="noopener">Music Nerd</a></h3>
         <p>110+ audio-reactive visualizers.</p>
         <a class="play-go" href="https://musicnerd.studiojoe.dev/" target="_blank" rel="noopener" aria-label="Open Music Nerd">Open ↗</a>
       </li>
       <li class="play-card" data-app="ripple">
+        <a class="play-thumb" href="https://ripplebreath.app" target="_blank" rel="noopener" tabindex="-1" aria-hidden="true">
+          <video class="play-video" muted playsinline loop preload="none" poster="/media/play/ripple.jpg" data-src="/media/play/ripple.mp4"></video>
+        </a>
         <h3><a href="https://ripplebreath.app" target="_blank" rel="noopener">Ripple</a></h3>
         <p>Breathing app.</p>
         <a class="play-go" href="https://ripplebreath.app" target="_blank" rel="noopener" aria-label="Open Ripple">Open ↗</a>
       </li>
       <li class="play-card" data-app="starspeller">
+        <a class="play-thumb" href="https://starspeller.app" target="_blank" rel="noopener" tabindex="-1" aria-hidden="true">
+          <video class="play-video" muted playsinline loop preload="none" poster="/media/play/star-speller.jpg" data-src="/media/play/star-speller.mp4"></video>
+        </a>
         <h3><a href="https://starspeller.app" target="_blank" rel="noopener">Star Speller</a></h3>
         <p>Spelling game.</p>
         <a class="play-go" href="https://starspeller.app" target="_blank" rel="noopener" aria-label="Play Star Speller">Play ↗</a>
@@ -312,6 +324,5 @@
 </footer>
 
 <script src="/js/clip-wall.js" defer></script>
-<script src="/js/fireworks-card.js" defer></script>
 </body>
 </html>
