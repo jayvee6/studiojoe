@@ -176,6 +176,35 @@ groups.play = async ({ base, browser }) => {
   await rctx.close();
 };
 
+groups.head = async ({ base, browser }) => {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const bad = [];
+  page.on('response', r => { if (r.status() >= 400) bad.push(r.status() + ' ' + r.url()); });
+  page.on('console', m => { if (m.type() === 'error') bad.push('console: ' + m.text()); });
+  await page.goto(base + '/index.html');
+  await page.waitForTimeout(800);
+  const meta = await page.evaluate(() => {
+    const q = s => document.querySelector(s)?.getAttribute('content') || null;
+    return { title: document.title, desc: q('meta[name=description]'), ogt: q('meta[property="og:title"]'),
+      ogd: q('meta[property="og:description"]'), ogi: q('meta[property="og:image"]'), tw: q('meta[name="twitter:card"]'),
+      icon: document.querySelector('link[rel=icon]')?.getAttribute('href') || null,
+      apple: document.querySelector('link[rel=apple-touch-icon]')?.getAttribute('href') || null };
+  });
+  check('head: title', meta.title === 'Studio Joe', meta.title);
+  check('head: description mentions AI video', /AI video/.test(meta.desc || ''), meta.desc);
+  check('head: og + twitter tags', !!meta.ogt && !!meta.ogd && meta.ogi === 'https://studiojoe.dev/media/og.jpg' && meta.tw === 'summary_large_image', meta);
+  check('head: icon links', meta.icon === '/favicon.svg' && meta.apple === '/apple-touch-icon.png', meta);
+  for (const p of ['/favicon.svg', '/apple-touch-icon.png', '/media/og.jpg']) {
+    const r = await page.request.get(base + p);
+    check('head: serves ' + p, r.status() === 200, r.status());
+  }
+  check('head: no 4xx or console errors on load', bad.length === 0, bad);
+  const og = await page.evaluate(() => new Promise(res => { const i = new Image();
+    i.onload = () => res([i.naturalWidth, i.naturalHeight]); i.onerror = () => res(null); i.src = '/media/og.jpg'; }));
+  check('head: og image 1200x630', og && og[0] === 1200 && og[1] === 630, og);
+  await page.close();
+};
+
 withSite(async (ctx) => {
   for (const [name, run] of Object.entries(groups)) {
     if (only && name !== only) continue;
