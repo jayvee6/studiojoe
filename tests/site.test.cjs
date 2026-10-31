@@ -153,6 +153,15 @@ groups.play = async ({ base, browser }) => {
   const linksOk = cards.length === 4 && cards.every(c => c.links.length > 0 && c.links.every(([h, t]) => h === want[c.app] && t === '_blank'));
   check('play: four card links', linksOk, cards);
 
+  const tops = await page.$$eval('.play-card', cs => cs.map(c => Math.round(c.getBoundingClientRect().top)));
+  check('play: four cards on one row at desktop', tops.length === 4 && tops.every(t => t === tops[0]), tops);
+
+  await page.click('header nav a[href="#play"]');
+  await page.waitForTimeout(600);
+  const cover = await page.evaluate(() => ({ eyebrow: document.querySelector('#play .eyebrow').getBoundingClientRect().top,
+    header: document.querySelector('header').getBoundingClientRect().bottom }));
+  check('play: nav jump clears the sticky header', cover.eyebrow >= cover.header, cover);
+
   await page.$eval('#play', e => e.scrollIntoView());
   const r = await waitFor(page, () => window.__fireworks && window.__fireworks.rockets() >= 1 && window.__fireworks.rockets(), 3000);
   check('play: fireworks auto-launch on screen', r >= 1, r);
