@@ -57,7 +57,7 @@
 
     header {
       position: fixed; top: 0; left: 0; right: 0;
-      z-index: 1000; height: 52px;
+      z-index: 1000; min-height: 52px;
       display: flex; align-items: center; justify-content: space-between;
       padding: 0 clamp(24px, 5vw, 80px);
       border-bottom: 1px solid var(--sep);
@@ -65,6 +65,7 @@
       backdrop-filter: saturate(180%) blur(20px);
       -webkit-backdrop-filter: saturate(180%) blur(20px);
     }
+    .wordmark, nav a, .footer-link { display: inline-flex; align-items: center; min-height: 44px; }
     .wordmark {
       font-size: 15px; font-weight: 700;
       letter-spacing: -0.02em; color: var(--label-1);
@@ -202,11 +203,11 @@
 
 <header>
   <a class="wordmark" href="/">Studio Joe</a>
-  <nav>
-    <a href="/savers.html" class="current">Savers</a>
-    <a href="/resume.html">Resume</a>
-    <a href="https://www.linkedin.com/in/joey-v-287ba5394" target="_blank" rel="noopener">LinkedIn</a>
-    <a href="https://github.com/jayvee6" target="_blank" rel="noopener">GitHub</a>
+  <nav aria-label="Primary">
+    <a href="/#watch">Watch</a>
+    <a href="/#play">Play</a>
+    <a href="/#about">About</a>
+    <a href="https://www.tiktok.com/@studio_joe" target="_blank" rel="noopener">@studio_joe ↗</a>
   </nav>
 </header>
 
@@ -314,8 +315,8 @@
 <footer>
   <p class="footer-sub">© 2026 Studio Joe</p>
   <div class="footer-links">
-    <a class="footer-link" href="/">Home</a>
-    <a class="footer-link" href="/resume.html">Resume</a>
+    <a class="footer-link" href="mailto:jvilla@studiojoe.dev">jvilla@studiojoe.dev</a>
+    <a class="footer-link" href="https://www.tiktok.com/@studio_joe" target="_blank" rel="noopener">@studio_joe ↗</a>
     <a class="footer-link" href="https://github.com/jayvee6" target="_blank" rel="noopener">GitHub ↗</a>
   </div>
 </footer>

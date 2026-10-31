@@ -205,6 +205,38 @@ groups.head = async ({ base, browser }) => {
   await page.close();
 };
 
+groups.pages = async ({ base, browser }) => {
+  const fs = require('fs'), path = require('path');
+  const root = path.resolve(__dirname, '..');
+  const pages = [...fs.readdirSync(root).filter(f => f.endsWith('.html')).map(f => '/' + f),
+    ...fs.readdirSync(path.join(root, 'savers')).filter(f => f.endsWith('.html')).map(f => '/savers/' + f)];
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+
+  await page.goto(base + '/index.html');
+  const homeNav = await page.$$eval('header nav a', as => as.map(a => [a.textContent.trim(), a.getAttribute('href')]));
+  await page.goto(base + '/savers.html');
+  const saversNav = await page.$$eval('header nav a', as => as.map(a => [a.textContent.trim(), a.getAttribute('href')]));
+  const norm = nav => nav.map(([t, h]) => [t, h.replace(/^\/?(index\.html)?#/, '#')]);
+  const want = norm(homeNav).map(([t, h]) => [t, h.startsWith('#') ? '/' + h : h]);
+  check('pages: savers header matches homepage', JSON.stringify(saversNav) === JSON.stringify(want), { saversNav, want });
+  const sFoot = await page.$eval('footer', f => [...f.querySelectorAll('a')].map(a => a.getAttribute('href')));
+  check('pages: savers footer matches homepage', sFoot.includes('mailto:jvilla@studiojoe.dev') && sFoot.includes('https://www.tiktok.com/@studio_joe'), sFoot);
+
+  const offenders = [];
+  for (const p of pages) {
+    if (p === '/resume.html') continue;
+    await page.goto(base + p);
+    const bad = await page.$$eval('a', as => as.map(a => a.getAttribute('href') || '').filter(h => /linkedin|resume/i.test(h)));
+    if (bad.length) offenders.push([p, bad]);
+  }
+  check('pages: no linkedin or resume links anywhere', offenders.length === 0, offenders);
+
+  const r = await page.goto(base + '/resume.html');
+  const robots = await page.$eval('meta[name=robots]', m => m.content).catch(() => null);
+  check('pages: resume unlisted (200 + noindex)', r.status() === 200 && /noindex/.test(robots || ''), { status: r.status(), robots });
+  await page.close();
+};
+
 withSite(async (ctx) => {
   for (const [name, run] of Object.entries(groups)) {
     if (only && name !== only) continue;
