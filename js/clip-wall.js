@@ -1,14 +1,14 @@
-// Clip wall: muted loops play only while their tile is on screen and the tab
+// Clip wall + Play previews: muted loops play only while they are on screen and the tab
 // is visible. Under prefers-reduced-motion no video source is ever attached,
 // so the poster stays. A play() that fails (blocked, slow, 404) leaves the
 // poster showing; nothing else depends on it.
 (function () {
   'use strict';
-  const videos = [...document.querySelectorAll('.tile-video[data-src]')];
+  const videos = [...document.querySelectorAll('.tile-video[data-src], .play-video[data-src]')];
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const visible = new Set();
 
-  window.__wall = { playing: () => videos.filter(v => !v.paused).length };
+  window.__wall = { playing: (sel = '.tile-video') => videos.filter(v => v.matches(sel) && !v.paused).length };
   if (reduced || !videos.length) return;
 
   function start(v) {

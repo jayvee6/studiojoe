@@ -162,27 +162,55 @@ groups.play = async ({ base, browser }) => {
     header: document.querySelector('header').getBoundingClientRect().bottom }));
   check('play: nav jump clears the sticky header', cover.eyebrow >= cover.header, cover);
 
-  await page.$eval('#play', e => e.scrollIntoView());
-  const r = await waitFor(page, () => window.__fireworks && window.__fireworks.rockets() >= 1 && window.__fireworks.rockets(), 3000);
-  check('play: fireworks auto-launch on screen', r >= 1, r);
+  const slug = { arcade: 'emoji-arcade', musicnerd: 'music-nerd', ripple: 'ripple', starspeller: 'star-speller' };
+  const prev = await page.$$eval('.play-card', cs => cs.map(c => { const v = c.querySelector('a.play-thumb video.play-video');
+    return { app: c.dataset.app, href: v && v.closest('a').getAttribute('href'), poster: v && v.getAttribute('poster'), src: v && v.dataset.src,
+      muted: v && v.muted, loop: v && v.loop, inline: v && v.hasAttribute('playsinline'), preload: v && v.getAttribute('preload') }; }));
+  check('play: every card has a preview of its own link', prev.length === 4 && prev.every(c => c.href === want[c.app]
+    && c.poster === `/media/play/${slug[c.app]}.jpg` && c.src === `/media/play/${slug[c.app]}.mp4`
+    && c.muted && c.loop && c.inline && c.preload === 'none'), prev);
 
-  const url = page.url();
-  const before = await page.evaluate(() => window.__fireworks ? window.__fireworks.rockets() : -1);
-  const box = await page.$eval('#fwCanvas', c => { const b = c.getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height * 0.8 }; });
-  await page.mouse.click(box.x, box.y);
-  await page.waitForTimeout(100);
-  const after = await page.evaluate(() => window.__fireworks ? window.__fireworks.rockets() : -1);
-  check('play: tap launches without navigating', before >= 0 && after >= before + 1 && page.url() === url, { before, after });
+  const thumbs = await page.$$eval('.play-thumb', ts => ts.map(t => { const b = t.getBoundingClientRect(); return Math.round(b.width / b.height * 100); }));
+  check('play: previews are 16:10', thumbs.length === 4 && thumbs.every(r => r === 160), thumbs);
+
+  const arcadeCopy = await page.$eval('[data-app=arcade] p', p => p.textContent.trim());
+  check('play: arcade copy counts four games', arcadeCopy === 'Four WebGPU games.', arcadeCopy);
+
+  await page.$eval('#play', e => e.scrollIntoView());
+  const n = await waitFor(page, () => window.__wall && window.__wall.playing('.play-video') === 4 && 4, 4000);
+  check('play: previews autoplay on screen', n === 4, n);
+  await page.$eval('header', e => window.scrollTo(0, 0));
+  const off = await waitFor(page, () => window.__wall && window.__wall.playing('.play-video') === 0 ? 'ok' : null, 2000);
+  check('play: previews pause off screen', off === 'ok', off);
+  check('play: fireworks removed', await page.evaluate(() => !document.querySelector('#fwCanvas') && !window.__fireworks));
   await page.close();
 
   const rctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
   page = await rctx.newPage();
   await page.goto(base + '/index.html');
   await page.$eval('#play', e => e.scrollIntoView());
-  await page.waitForTimeout(3000);
-  const rr = await page.evaluate(() => window.__fireworks ? window.__fireworks.rockets() : null);
-  check('play: reduced motion launches nothing', rr === 0, rr);
+  await page.waitForTimeout(2000);
+  const rr = await page.$$eval('.play-video', vs => ({ p: vs.filter(v => !v.paused).length, srcs: vs.filter(v => v.getAttribute('src')).length, n: vs.length }));
+  check('play: reduced motion keeps posters', rr.n === 4 && rr.p === 0 && rr.srcs === 0, rr);
   await rctx.close();
+
+  page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const errs = [];
+  page.on('pageerror', e => errs.push(e.message));
+  await page.route('**/media/play/*.mp4', route => route.abort());
+  await page.goto(base + '/index.html');
+  await page.$eval('#play', e => e.scrollIntoView());
+  await page.waitForTimeout(1500);
+  const kept = await page.$$eval('.play-card', cs => cs.map(c => { const v = c.querySelector('video');
+    return !!v && !!v.getAttribute('poster') && c.querySelector('h3').getBoundingClientRect().height > 0; }));
+  check('play: blocked video keeps poster + title', kept.length === 4 && kept.every(Boolean) && errs.length === 0, { kept, errs });
+  await page.close();
+
+  page = await browser.newPage({ viewport: { width: 820, height: 1000 } });
+  await page.goto(base + '/index.html');
+  const t2 = await page.$$eval('.play-card', cs => cs.map(c => Math.round(c.getBoundingClientRect().top)));
+  check('play: 2x2 at tablet width', t2.length === 4 && t2[0] === t2[1] && t2[2] === t2[3] && t2[2] > t2[0], t2);
+  await page.close();
 };
 
 groups.head = async ({ base, browser }) => {
