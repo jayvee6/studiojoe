@@ -229,6 +229,8 @@ groups.pages = async ({ base, browser }) => {
   const want = norm(homeNav).map(([t, h]) => [t, h.startsWith('#') ? '/' + h : h]);
   check('pages: savers header matches homepage', JSON.stringify(saversNav) === JSON.stringify(want), { saversNav, want });
   const sFoot = await page.$eval('footer', f => [...f.querySelectorAll('a')].map(a => a.getAttribute('href')));
+  const saversAll = await page.$$eval('a', as => as.map(a => a.getAttribute('href') || ''));
+  check('pages: savers links no private repo', !saversAll.some(h => /studiojoe-savers-web/.test(h)), saversAll);
   check('pages: savers footer matches homepage', sFoot.includes('mailto:jvilla@studiojoe.dev') && sFoot.includes('https://www.tiktok.com/@studio_joe'), sFoot);
 
   const offenders = [];
